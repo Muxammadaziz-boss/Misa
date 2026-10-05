@@ -1,13 +1,13 @@
-sounddevice==0.4.6
+sounddevice==0.4.6; sys_platform == "win32"
 soundfile==0.12.1
 edge-tts==7.2.7
-pycaw==20230407
+pycaw==20230407; sys_platform == "win32"
 customtkinter==5.2.1
 SpeechRecognition==3.10.0
 audioop-lts; python_version >= "3.13"
 pyautogui==0.9.54
 psutil==5.9.6
-keyboard==0.13.5
+keyboard==0.13.5; sys_platform == "win32"
 python-dotenv==1.0.0
 pygame
 requests==2.31.0

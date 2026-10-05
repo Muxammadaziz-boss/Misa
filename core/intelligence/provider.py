@@ -155,11 +155,12 @@ class ProviderManager:
             )
 
         return AIResponse(
-            provider="local",
-            model="misa-offline-core",
-            type="answer",
-            content=fallback_text,
-            success=True,
-            metadata={"last_error": last_error, "offline_fallback": True}
+            provider="none",
+            model="none",
+            type="error",
+            content=fallback_text if (is_auth_error or is_quota) else "Barcha AI provayderlar bilan bog'lanishda vaqtinchalik xatolik yuz berdi. Iltimos, keyinroq qayta urinib ko'ring.",
+            success=False,
+            error_code="AI_PROVIDER_UNAVAILABLE",
+            metadata={"last_error": last_error, "offline_fallback": True, "fallback_content": fallback_text}
         )
 

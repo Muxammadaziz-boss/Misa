@@ -15,6 +15,7 @@ from datetime import datetime
 from aiohttp import web
 from typing import Optional, Tuple, Any, Dict, List, Set
 import requests
+import re
 import socket
 import time
 import urllib.parse
@@ -810,6 +811,7 @@ async def handle_ai_test_key(request):
         except Exception as ce:
             logger.warning(f"config.json ga API kalitni saqlashda xatolik: {ce}")
 
+        active_model = model_list[0] if model_list else "gemini-2.0-flash"
         try:
             from core.v8.ai_key_manager import get_ai_key_manager
             mgr = get_ai_key_manager()
@@ -819,7 +821,6 @@ async def handle_ai_test_key(request):
         except Exception:
             pass
 
-        active_model = model_list[0] if model_list else "gemini-3.1-flash-lite"
         return web.json_response({
             "ok": True,
             "valid": True,
