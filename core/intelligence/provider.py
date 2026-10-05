@@ -3,6 +3,7 @@
 # Provider Abstraction & Deterministic Fallback Mechanism
 
 import abc
+import re
 import logging
 from typing import List, Optional, Dict, Any
 from core.intelligence.types import AIRequest, AIResponse
@@ -59,13 +60,18 @@ class ProviderManager:
             logger.warning("Hech qanday AI provayder sozlanmagan (API kalitlar mavjud emas). Mahalliy offline rejim ishga tushadi.")
             query_str = getattr(request, "message", None) or getattr(request, "query", "") or ""
             query_lower = str(query_str).lower().strip()
+            query_words = set(re.findall(r"\b\w+\b", query_lower))
+            req_user = getattr(request, "user_name", None) or getattr(request, "user", None) or (request.metadata.get("user_name") if hasattr(request, "metadata") and isinstance(request.metadata, dict) else None) or "Foydalanuvchi"
 
-            if any(w in query_lower for w in ["salom", "qodir", "nima", "qila ol", "kim", "yordam", "imkon"]):
+            # 1. Foydalanuvchi o'zi haqida so'raganda
+            if any(p in query_lower for p in ["men kimman", "men kimmam", "men kim", "ismim nima", "mening ismim", "otim nima", "men haqimda"]):
+                resp_text = f"Siz — **{req_user}**siz. Misa AI tizimida shaxsiy profilingiz faol holatda."
+            elif any(p in query_lower for p in ["sen kimsan", "misa kimsan", "o'zing haqingda", "nimalar qila olasan", "imkoniyating"]) or any(w in query_words for w in ["salom", "assalom", "assalomu"]):
                 resp_text = (
                     "Assalomu alaykum! Men Misa — sizning shaxsiy sun'iy intellekt yordamchingizman.\n\n"
-                    "Men quyidagi asosiy vazifalarni bajara olaman:\n"
+                    "Men quyidagi asosiy vazifalarni mustaqil bajara olaman:\n"
                     "• 💻 Kompyuterni boshqarish (dasturlarni ochish, oynalar va skrinshot)\n"
-                    "• 📊 Tizim holati (CPU, RAM va real vaqtdagi harorat monitoringi)\n"
+                    "• 📊 Tizim holati (CPU, RAM va real vaqtdagi parametrlar)\n"
                     "• ⏰ Vazifalar va eslatmalarni rejalashtirish\n"
                     "• 🎵 Musiqa va videolarni boshqarish\n\n"
                     "💡 Kengaytirilgan chuqur muloqot va erkin suhbat uchun Sozlamalar bo'limidan Google Gemini API kalitini kiritishingiz mumkin."
@@ -107,9 +113,32 @@ class ProviderManager:
         
         query_str = getattr(request, "message", None) or getattr(request, "query", "") or ""
         query_lower = str(query_str).lower().strip()
-        is_quota = "429" in str(last_error) or "quota" in str(last_error).lower() or "resource_exhausted" in str(last_error).lower()
+        query_words = set(re.findall(r"\b\w+\b", query_lower))
+        req_user = getattr(request, "user_name", None) or getattr(request, "user", None) or "Foydalanuvchi"
 
-        if any(w in query_lower for w in ["salom", "qodir", "nima", "qila ol", "kim", "yordam", "imkon", "assalom", "qale"]):
+        is_quota = "429" in str(last_error) or "quota" in str(last_error).lower() or "resource_exhausted" in str(last_error).lower()
+        is_auth_error = any(k in str(last_error).lower() for k in ["403", "permission_denied", "leaked", "unregistered_callers", "api_key_invalid"])
+
+        # 1. Foydalanuvchi o'zi haqida so'raganda
+        if any(p in query_lower for p in ["men kimman", "men kimmam", "men kim", "ismim nima", "mening ismim", "otim nima", "men haqimda"]):
+            fallback_text = f"Siz — **{req_user}**siz. Misa AI tizimida shaxsiy profilingiz faol holatda."
+        elif is_auth_error:
+            fallback_text = (
+                "⚠️ **Google Gemini API kaliti xatoligi (403 Permission Denied / Leaked Key)**\n\n"
+                "Tizimga ulangan API kaliti Google xavfsizlik filtri tomonidan bekor qilingan (ochiq tarmoqqa sizib chiqqan deb topilgan).\n\n"
+                "**Yechim:**\n"
+                "1. [Google AI Studio](https://aistudio.google.com/app/apikey) sahifasidan bepul yangi shaxsiy API kalit oling.\n"
+                "2. Yuqori o'ng burchakdagi **Profil / Hisob sozlamalari** bo'limiga kirib, yangi kalitni kiriting.\n\n"
+                "💻 Hozirda barcha mahalliy kompyuter buyruqlari, dasturlarni ochish va tizim ma'lumotlari to'liq ishlamoqda!"
+            )
+        elif is_quota:
+            fallback_text = (
+                "⚠️ Sun'iy intellekt (Gemini) so'rovlar limiti vaqtincha to'ldi (429 Quota Exceeded).\n\n"
+                "Tizim avtomatik zaxira kalitlarga o'tmoqda yoki administrator yangi kalit yuklashini kutishingiz mumkin. "
+                "Shuningdek, o'zingizning shaxsiy Google Gemini API kalitingizni Hisob bo'limiga kiritishingiz mumkin.\n\n"
+                "Men kompyuteringizdagi barcha mahalliy buyruqlarni bajarishga tayyorman!"
+            )
+        elif any(p in query_lower for p in ["sen kimsan", "misa kimsan", "o'zing haqingda", "nimalar qila olasan", "imkoniyat"]) or any(w in query_words for w in ["salom", "assalom", "assalomu"]):
             fallback_text = (
                 "Assalomu alaykum! Men Misa — sizning shaxsiy sun'iy intellekt yordamchingizman.\n\n"
                 "Men quyidagi vazifalarni mustaqil bajara olaman:\n"
@@ -118,13 +147,6 @@ class ProviderManager:
                 "• 🎵 Ovoz va media boshqaruvi\n"
                 "• 📱 Telegram bot orqali masofaviy boshqaruv\n\n"
                 "💡 Kengaytirilgan tahlil va suhbatlar uchun Hisob sozlamalaridan Gemini API kalitini kiritishingiz mumkin."
-            )
-        elif is_quota:
-            fallback_text = (
-                "⚠️ Sun'iy intellekt (Gemini) so'rovlar limiti vaqtincha to'ldi (429 Quota Exceeded).\n\n"
-                "Tizim avtomatik zaxira kalitlarga o'tmoqda yoki administrator yangi kalit yuklashini kutishingiz mumkin. "
-                "Shuningdek, o'zingizning shaxsiy Google Gemini API kalitingizni Hisob bo'limiga kiritishingiz mumkin.\n\n"
-                "Men kompyuteringizdagi barcha mahalliy buyruqlarni bajarishga tayyorman!"
             )
         else:
             fallback_text = (

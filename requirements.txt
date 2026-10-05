@@ -4,6 +4,7 @@ edge-tts==7.2.7
 pycaw==20230407
 customtkinter==5.2.1
 SpeechRecognition==3.10.0
+audioop-lts; python_version >= "3.13"
 pyautogui==0.9.54
 psutil==5.9.6
 keyboard==0.13.5
@@ -13,8 +14,12 @@ requests==2.31.0
 Pillow
 numpy
 packaging
-torch
-torchaudio
-omegaconf
 aiohttp>=3.9.0
 cryptography>=41.0.0
+
+# Ixtiyoriy: Mahalliy Silero TTS uchun (og'ir ~2.5GB):
+# torch
+# torchaudio
+# omegaconf
+# Ixtiyoriy: Mahalliy Semantik Vektor xotira uchun:
+# chromadb

@@ -260,14 +260,14 @@ def _gemini_yuborish(matn, system_prompt=None, user_id=None):
     """Google Gemini API orqali so'rov — Google Search Grounding va Thinking Mode bilan"""
     prompt = system_prompt or SYSTEM_PROMPT
     GEMINI_MODELS = [
-        "gemini-3.1-flash-lite",
-        "gemini-flash-lite-latest",
-        "gemini-3.8-flash",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-1.5-flash",
         "gemini-flash-latest",
-        "gemini-3.5-flash-lite",
-        "gemini-3.7-flash",
+        "gemini-1.5-pro",
         "gemini-pro-latest",
     ]
+
     
     suhbat_tarixi_gemini.append({"role": "user", "parts": [{"text": matn}]})
     while len(suhbat_tarixi_gemini) > MAX_TARIX:

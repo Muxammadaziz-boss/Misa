@@ -118,16 +118,20 @@ fn find_bundled_backend_binary() -> Option<(PathBuf, PathBuf)> {
         candidates.push((p.join("MisaAI").join("runtime").join("v8.0.0").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("runtime").join("v8.0.0").join("backend")));
     }
 
-    // 4. Loyiha reliz katalogi fallback (agar .exe alohida ko'chirilgan bo'lsa)
-    for root_str in &[
-        r"D:\Ishchi stoli\Misa\yordamchi_9.0.0\release\v9.0.0\backend",
-        r"D:\Ishchi stoli\Misa\yordamchi_9.0.0\release\v8.0.0\backend",
-        r"D:\Misa\yordamchi_9.0.0\release\v9.0.0\backend",
-        r"D:\Misa\yordamchi_8.0.0\release\v8.0.0\backend",
-        r"D:\Ishchi stoli\Misa\yordamchi_8.0.0\release\v8.0.0\backend",
-    ] {
-        let bdir = PathBuf::from(root_str);
-        candidates.push((bdir.join("misa_backend.exe"), bdir));
+    // 4. Dinamik reliz katalogi tekshiruvi (har qanday disk va papka uchun portativ)
+    if let Ok(exe_path) = std::env::current_exe() {
+        let mut curr = exe_path.as_path();
+        while let Some(parent) = curr.parent() {
+            let rel9 = parent.join("release").join("v9.0.0").join("backend");
+            if rel9.exists() {
+                candidates.push((rel9.join("misa_backend.exe"), rel9));
+            }
+            let rel8 = parent.join("release").join("v8.0.0").join("backend");
+            if rel8.exists() {
+                candidates.push((rel8.join("misa_backend.exe"), rel8));
+            }
+            curr = parent;
+        }
     }
 
     for (exe, work_dir) in candidates {
@@ -240,15 +244,21 @@ pub fn ensure_backend_running(state: &SupervisorState) {
     // 3. Variant A: Standalone bundled backend (misa_backend.exe)
     if let Some((backend_bin, work_dir)) = find_bundled_backend_binary() {
         println!("[MISA] Standalone bundled backend ishga tushirilmoqda: {:?}", backend_bin);
+        let sup_url = std::env::var("SUPABASE_URL")
+            .unwrap_or_else(|_| "https://vdcssmzguxfknqkfxbed.supabase.co".to_string());
+        let sup_key = std::env::var("SUPABASE_PUBLISHABLE_KEY")
+            .or_else(|_| std::env::var("SUPABASE_ANON_KEY"))
+            .unwrap_or_else(|_| "sb_publishable_Mwowz4aOLM4njc3OyX7VNQ_GxpxuTr8".to_string());
+
         let mut cmd = Command::new(&backend_bin);
         cmd.current_dir(&work_dir)
             .env("MISA_API_HOST", "127.0.0.1")
             .env("MISA_API_PORT", "18420")
             .env("PORT", "18420")
             .env("ENVIRONMENT", "desktop")
-            .env("SUPABASE_URL", "https://vdcssmzguxfknqkfxbed.supabase.co")
-            .env("SUPABASE_ANON_KEY", "sb_publishable_Mwowz4aOLM4njc3OyX7VNQ_GxpxuTr8")
-            .env("SUPABASE_PUBLISHABLE_KEY", "sb_publishable_Mwowz4aOLM4njc3OyX7VNQ_GxpxuTr8");
+            .env("SUPABASE_URL", &sup_url)
+            .env("SUPABASE_ANON_KEY", &sup_key)
+            .env("SUPABASE_PUBLISHABLE_KEY", &sup_key);
 
         #[cfg(target_os = "windows")]
         cmd.creation_flags(creation_flags);

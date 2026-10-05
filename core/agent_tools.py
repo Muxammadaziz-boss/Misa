@@ -364,7 +364,7 @@ def _system_control(action: str, value: str = "") -> dict:
         "open_telegram": lambda: webbrowser.open("telegram:"),
         "open_chrome": lambda: webbrowser.open("https://google.com"),
         "open_discord": lambda: webbrowser.open("discord:"),
-        "open_vscode": lambda: subprocess.Popen(["code"], shell=True),
+        "open_vscode": lambda: subprocess.Popen(["code"], shell=False),
         "open_explorer": lambda: subprocess.Popen(["explorer"], shell=False),
         "open_cmd": lambda: subprocess.Popen(
             ["cmd"], creationflags=subprocess.CREATE_NEW_CONSOLE
@@ -2570,12 +2570,19 @@ def _notification(
             notification.notify(title=title, message=message, timeout=duration)
             return {"message": f"Eslatma yuborildi: {title}"}
         except ImportError:
-            import subprocess
-
-            escaped_title = title.replace("'", "''").replace("\n", " ")
-            escaped_msg = message.replace("'", "''").replace("\n", " ")
-            ps = f"[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null; $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02); $template.GetElementsByTagName('text')[0].AppendChild($template.CreateTextNode('{escaped_title}')); $template.GetElementsByTagName('text')[1].AppendChild($template.CreateTextNode('{escaped_msg}')); [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Misa AI').Show([Windows.UI.Notifications.ToastNotification]::new($template))"
-            subprocess.run(["powershell", "-Command", ps], capture_output=True)
+            import base64
+            b64_title = base64.b64encode(str(title).encode("utf-8")).decode("ascii")
+            b64_msg = base64.b64encode(str(message).encode("utf-8")).decode("ascii")
+            ps = (
+                "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null; "
+                "$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02); "
+                f"$tText = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{b64_title}')); "
+                f"$mText = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{b64_msg}')); "
+                "$template.GetElementsByTagName('text')[0].AppendChild($template.CreateTextNode($tText)); "
+                "$template.GetElementsByTagName('text')[1].AppendChild($template.CreateTextNode($mText)); "
+                "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Misa AI').Show([Windows.UI.Notifications.ToastNotification]::new($template))"
+            )
+            subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps], capture_output=True)
             return {"message": f"Eslatma yuborildi: {title}"}
     except Exception as e:
         return {"error": str(e)}

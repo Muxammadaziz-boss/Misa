@@ -29,6 +29,19 @@ if (!fs.existsSync(releaseVersionDir)) {
   fs.mkdirSync(releaseVersionDir, { recursive: true });
 }
 
+// Security: never ship .env in release folder
+const envReleaseFile = path.join(releaseVersionDir, ".env");
+if (fs.existsSync(envReleaseFile)) {
+  try { fs.unlinkSync(envReleaseFile); } catch {}
+}
+const legacyCands = ["misa-7.exe", "Misa.exe"];
+for (const leg of legacyCands) {
+  const p = path.join(releaseVersionDir, leg);
+  if (fs.existsSync(p)) {
+    try { fs.unlinkSync(p); } catch {}
+  }
+}
+
 // 3. Locate built binaries
 const tauriReleaseDir = path.resolve(__dirname, "../src-tauri/target/release");
 const tauriBundleDir = path.join(tauriReleaseDir, "bundle");

@@ -387,7 +387,7 @@ class CommandDispatcher:
         """Maxsus buyruq handlerini ro'yxatdan o'tkazish"""
         self._custom_handlers[intent] = handler
 
-    def dispatch_local(self, text: str) -> Tuple[bool, str]:
+    def dispatch_local(self, text: str, user_name: Optional[str] = None) -> Tuple[bool, str]:
         """
         Matn mahalliy tizim buyrug'i ekanligini tekshirish va bajarish.
         Agar mahalliy buyruq yoki tizim so'rovi bo'lsa: (True, "natija xabari")
@@ -398,6 +398,42 @@ class CommandDispatcher:
             return True, "Bo'sh so'rov kiritildi."
 
         has_question = is_question_phrase(clean_text)
+
+        # -------------------------------------------------------------
+        # 0. Foydalanuvchi va Misa identifikatsiyasi (Identity queries)
+        # -------------------------------------------------------------
+        clean_no_punct = re.sub(r"[?!.,;:_`*~#]+", "", clean_text).strip()
+        user_display = (user_name or "").strip()
+        if not user_display or user_display.lower() in ["user", "foydalanuvchi", "none"]:
+            try:
+                from config import get_config
+                cfg_user = get_config("user_name")
+                if cfg_user:
+                    user_display = str(cfg_user).strip()
+            except Exception:
+                pass
+        if not user_display or user_display.lower() in ["user", "foydalanuvchi", "none"]:
+            user_display = "Foydalanuvchi"
+
+        if clean_no_punct in [
+            "men kimman", "men kimmam", "men kim", "men haqimda ayt", "men haqimda",
+            "ismim nima", "mening ismim nima", "otim nima", "mening otim nima", "ismimni ayt"
+        ] or re.match(r"^(?:men\s+kimman|mening\s+ismim\s+nima|ismim\s+nima)\??$", clean_text):
+            return True, f"Siz — **{user_display}**siz. Misa AI tizimida shaxsiy profilingiz faol holatda."
+
+        if clean_no_punct in [
+            "sen kimsan", "sen kim", "kimsan", "o'zing haqingda ayt", "ozing haqingda ayt",
+            "misa kimsan", "misa nima", "sen nimasan", "o'zingni tanishtir", "ozingni tanishtir"
+        ] or re.match(r"^(?:sen\s+kimsan|misa\s+kimsan|kimsan)\??$", clean_text):
+            return True, (
+                "Men **Misa AI** — sizning shaxsiy sun'iy intellekt va avtonom kompyuter yordamchingizman.\n\n"
+                "Men quyidagi asosiy vazifalarni bajara olaman:\n"
+                "• 💻 Dasturlarni ochish va boshqarish (Telegram, Chrome, VS Code, Discord va b.)\n"
+                "• 📊 Tizim parametrlarini tahlil qilish (CPU, GPU, RAM, Disk, batareya, vaqt va sana)\n"
+                "• 🎵 Ovoz va musiqa boshqaruvi\n"
+                "• ⏰ Vazifalar va eslatmalarni rejalashtirish\n"
+                "• 📱 Telegram orqali masofaviy boshqaruv"
+            )
 
         # -------------------------------------------------------------
         # 1. Vaqt va sana so'rovlari
@@ -604,8 +640,11 @@ class CommandDispatcher:
                     try:
                         if path and os.path.exists(path) and hasattr(os, "startfile"):
                             os.startfile(path)
+                        elif hasattr(os, "startfile"):
+                            os.startfile("tg:")
                         else:
-                            os.system("start tg:")
+                            import subprocess
+                            subprocess.Popen(["cmd", "/c", "start", "tg:"], shell=False)
                         return True, f"✅ {title} ochilmoqda."
                     except Exception as e:
                         return True, f"Telegramni ochishda xatolik: {e}"
@@ -634,7 +673,8 @@ class CommandDispatcher:
                     except Exception:
                         pass
                 try:
-                    os.system("code")
+                    import subprocess
+                    subprocess.Popen(["code"], shell=False)
                     return True, "✅ VS Code ochilmoqda."
                 except Exception:
                     return True, "❌ Kompyuteringizda VS Code topilmadi."
@@ -649,7 +689,11 @@ class CommandDispatcher:
                     except Exception:
                         pass
                 try:
-                    os.system("start discord:")
+                    if hasattr(os, "startfile"):
+                        os.startfile("discord:")
+                    else:
+                        import subprocess
+                        subprocess.Popen(["cmd", "/c", "start", "discord:"], shell=False)
                     return True, "✅ Discord ochilmoqda."
                 except Exception:
                     return True, "❌ Kompyuteringizda Discord topilmadi."

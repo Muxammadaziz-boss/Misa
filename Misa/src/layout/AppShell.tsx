@@ -552,7 +552,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                   fontSize: "12px",
                   fontWeight: 600,
                   color: "#F5F0FF",
-                  maxWidth: "85px",
+                  maxWidth: "160px",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",

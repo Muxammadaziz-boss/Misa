@@ -1,5 +1,12 @@
 # 🚀 Misa AI Versiyalar Arxiv (Releases Archive)
 
+### [v9.0.1] — 05/10/2026
+- **Desktop Ilova**: `v9.0.1/Misa-AI-v9.0.1.exe`
+- **Windows MSI**: `v9.0.1/Misa-AI-v9.0.1.msi`
+- **NSIS Setup**: `v9.0.1/Misa-AI-Setup-v9.0.1.exe`
+- **Manifest**: `v9.0.1/version_manifest.json`
+- **Backend**: Python API Server (`http://127.0.0.1:18420`)
+
 ### [v9.0.0] — 29/09/2026
 - **Desktop Ilova**: `v9.0.0/Misa-AI-v9.0.0.exe`
 - **Windows MSI**: `v9.0.0/Misa-AI-v9.0.0.msi`

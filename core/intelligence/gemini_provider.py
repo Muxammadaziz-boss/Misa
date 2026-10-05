@@ -63,12 +63,11 @@ class GeminiProvider(AIProvider):
     """Google Gemini rasmiy REST API provayderi"""
 
     DEFAULT_MODELS = [
-        "gemini-3.1-flash-lite",
-        "gemini-flash-lite-latest",
-        "gemini-3.8-flash",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-1.5-flash",
         "gemini-flash-latest",
-        "gemini-3.5-flash-lite",
-        "gemini-3.7-flash",
+        "gemini-1.5-pro",
         "gemini-pro-latest",
     ]
 
@@ -181,6 +180,11 @@ class GeminiProvider(AIProvider):
                     json=request_body,
                     timeout=15
                 )
+
+                if response.status_code == 403:
+                    last_error = f"HTTP 403 Permission Denied: {response.text[:200]}"
+                    logger.warning(f"Gemini API kaliti bloklangan yoki yaroqsiz (403): {last_error}")
+                    break
 
                 if response.status_code == 429:
                     logger.warning(f"Gemini {model} kvotasi tugadi (429), keyingi modelga o'tilmoqda...")

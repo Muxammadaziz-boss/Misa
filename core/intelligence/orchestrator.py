@@ -119,7 +119,7 @@ class IntelligenceOrchestrator:
         # 1. Tezkor Mahalliy Buyruqlar tekshiruvi (agar dispatcher mavjud bo'lsa)
         if self.command_dispatcher:
             try:
-                handled, local_msg = self.command_dispatcher.dispatch_local(clean_message)
+                handled, local_msg = self.command_dispatcher.dispatch_local(clean_message, user_name=user_name)
                 if handled and local_msg:
                     latency = round((time.time() - start_time) * 1000, 2)
                     logger.info(f"[IntelligenceOrchestrator] Tezkor mahalliy dispatcher bajardi ({latency}ms)")

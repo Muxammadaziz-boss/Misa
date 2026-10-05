@@ -425,7 +425,7 @@ def execute_command_pipeline(text: str, user: str, ovoz: str, mode: str = "ask",
     # 1. Tezkor Mahalliy Buyruqlar Dispatcheri (command_dispatcher)
     if dispatcher:
         try:
-            handled, res_msg = dispatcher.dispatch_local(clean_text)
+            handled, res_msg = dispatcher.dispatch_local(clean_text, user_name=user)
             if handled and res_msg:
                 logger.info(f"CommandDispatcher bajardi: '{clean_text}' -> {res_msg}")
                 return res_msg
