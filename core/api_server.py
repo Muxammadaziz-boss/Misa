@@ -77,6 +77,15 @@ _voice_state = "idle"  # idle | listening | thinking | speaking
 _main_loop = None
 
 
+def get_app_version() -> str:
+    """Tizim versiyasini xavfsiz olish."""
+    try:
+        from core.v8.device import get_current_app_version
+        return get_current_app_version()
+    except Exception:
+        return "9.0.1"
+
+
 def load_runtime_dotenv() -> None:
     """Runtime ishga tushganda .env va Misa/.env fayllaridan konfiguratsiyani yuklash."""
     try:
@@ -1020,7 +1029,18 @@ def speak_out_loud(text: str) -> bool:
                 return
             fn = os.path.join(tempfile.gettempdir(), f"misa_sa_{uuid.uuid4().hex}.mp3")
             try:
-                asyncio.run(edge_tts.Communicate(clean_text, voice).save(fn))
+                speed_mult = 1.0
+                try:
+                    from config import get_config
+                    cfg_speed = get_config("audio.tts_speed")
+                    if cfg_speed is not None:
+                        speed_mult = float(cfg_speed)
+                except Exception:
+                    speed_mult = 1.0
+                speed_pct = int((speed_mult - 1.0) * 100)
+                sign = "+" if speed_pct >= 0 else ""
+                rate_str = f"{sign}{speed_pct}%"
+                asyncio.run(edge_tts.Communicate(clean_text, voice, rate=rate_str).save(fn))
                 played = False
                 alias = f"sa_{uuid.uuid4().hex[:8]}"
                 try:
@@ -2264,7 +2284,7 @@ async def handle_account_get(request):
         "bio": bio,
         "language": language,
         "voice_type": voice_type or user_cfg.get("voice_type", "ayol"),
-        "tts_speed": float(audio_cfg.get("tts_speed", 2.0)),
+        "tts_speed": float(audio_cfg.get("tts_speed", 1.0)),
         "tts_engine": audio_cfg.get("tts_engine", "edge_tts"),
         "auto_speak": audio_cfg.get("auto_speak", True),
         "vad_enabled": audio_cfg.get("vad_enabled", True),
@@ -2279,11 +2299,11 @@ async def handle_account_get(request):
         "has_gemini_key": has_gemini,
         "api_key_masked": masked_key,
         "ai_status": "ready" if has_gemini else "missing_key",
-        "version": "9.0.0",
+        "version": get_app_version(),
 
         "app_info": {
             "name": "Misa AI",
-            "version": "9.0.0",
+            "version": get_app_version(),
             "codename": "Quiet Intelligence",
             "engine": "Tauri 2.0 (Native Rust) + Python 3.11+",
             "architecture": "Windows x64 Native Desktop",
@@ -2536,7 +2556,7 @@ async def handle_account_update(request):
     saved_user = new_name or get_current_user_name()
     saved_avatar = cfg["user"].get("avatar", "emerald")
     saved_voice = new_voice or get_current_voice_type()
-    saved_speed = cfg["audio"].get("tts_speed", 2.0)
+    saved_speed = cfg["audio"].get("tts_speed", 1.0)
     saved_theme = cfg["gui"].get("theme", "dark")
 
     await broadcast_ws("account_updated", {
@@ -2635,6 +2655,17 @@ async def handle_remote_devices(request):
             or (local_ident.local_ip if is_local and local_ident else "127.0.0.1")
         )
         state_val = "online" if (is_local or d.status == "online") else d.status
+        agent_ver = (
+            local_ident.agent_version
+            if (is_local and local_ident and local_ident.agent_version)
+            else (d.agent_version or (local_ident.agent_version if local_ident else "9.0.1"))
+        )
+        if is_local and local_ident and d.agent_version != local_ident.agent_version:
+            d.agent_version = local_ident.agent_version
+            try:
+                adm.save()
+            except Exception:
+                pass
         devices.append({
             "device_id": d.device_id,
             "name": d.name,
@@ -2643,7 +2674,7 @@ async def handle_remote_devices(request):
             "mac_address": mac_str,
             "local_ip": ip_str,
             "state": state_val,
-            "agent_version": d.agent_version or "9.0.0",
+            "agent_version": agent_ver,
             "is_paired": bool(tg_paired or legacy_paired),
             "telegram_user_id": tg_uid_str or (link.telegram_user_id if link else None),
         })
@@ -3716,7 +3747,7 @@ async def handle_devices_sync(request):
         dev_name = str(item.get("name") or item.get("hostname") or "Kompyuter").strip()
         hostname = str(item.get("hostname") or dev_name).strip()
         platform_str = str(item.get("platform") or "windows").strip().lower()
-        agent_ver = str(item.get("agent_version") or "9.0.0").strip()
+        agent_ver = str(item.get("agent_version") or get_app_version()).strip()
         status_str = str(item.get("status") or "online").strip().lower()
         meta = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
 
@@ -5229,7 +5260,7 @@ async def handle_device_heartbeat(request):
     except Exception:
         body = {}
 
-    agent_version = str(body.get("agent_version", "9.0.0"))
+    agent_version = str(body.get("agent_version", get_app_version()))
     state_str = str(body.get("state", "online")).lower()
     metrics = body.get("metrics", {})
 
@@ -5791,7 +5822,7 @@ async def handle_ws(request):
         "data": {
             "status": "online",
             "voice_state": _voice_state,
-            "version": "9.0.0"
+            "version": get_app_version()
         },
         "timestamp": datetime.now().isoformat()
     }))

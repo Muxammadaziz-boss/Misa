@@ -173,16 +173,28 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     });
 
     const unsubTranscript = backendService.onTranscript((data) => {
+      const cleanText = (data.text || "").trim();
+      if (!cleanText) return;
       const senderNorm = data.sender === "user" ? "user" : "misa";
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `tr_${Date.now()}_${Math.random()}`,
-          sender: senderNorm,
-          text: data.text,
-          timestamp: formatNow(),
-        },
-      ]);
+      setMessages((prev) => {
+        const lastMsg = prev[prev.length - 1];
+        if (
+          lastMsg &&
+          lastMsg.sender === senderNorm &&
+          lastMsg.text.trim().toLowerCase() === cleanText.toLowerCase()
+        ) {
+          return prev;
+        }
+        return [
+          ...prev,
+          {
+            id: `tr_${Date.now()}_${Math.random()}`,
+            sender: senderNorm,
+            text: cleanText,
+            timestamp: formatNow(),
+          },
+        ];
+      });
     });
 
     return () => {

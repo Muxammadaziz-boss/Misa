@@ -125,6 +125,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const silenceTimerRef = useRef<any>(null);
   const isStoppingRef = useRef<boolean>(false);
   const isListeningRef = useRef<boolean>(false);
+  const isSecretaryModeRef = useRef<boolean>(true);
 
   useEffect(() => {
     const clockInterval = setInterval(() => {
@@ -194,6 +195,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     // ── App Startup Audio & System Health Briefing ──
     const runStartupBriefing = async () => {
       if (sessionStorage.getItem("misa_v9_startup_briefing_done")) {
+        setTimeout(() => {
+          startSecretaryListening();
+        }, 600);
         return;
       }
       sessionStorage.setItem("misa_v9_startup_briefing_done", "true");
@@ -234,6 +238,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
       // Speak announcement aloud
       await playSpeechAudio(textToSpeak);
+      setTimeout(() => {
+        startSecretaryListening();
+      }, 500);
     };
 
     runStartupBriefing();
@@ -329,6 +336,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
     if (!cleanText) return;
 
+    // Nutq so'zlanayotganda mikrofondan o'z ovozini eshitib olmasligi uchun tinglashni vaqtinchalik to'xtatamiz
+    if (recognitionRef.current && isListeningRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch {}
+      stopAudioMonitor();
+      isListeningRef.current = false;
+    }
+
     setVoiceState("speaking");
     setOrbState("speaking");
 
@@ -340,6 +356,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           setVoiceState("idle");
           setOrbState("idle");
           resolve();
+          // Misa gapirib bo'lgach, kotiba kabi avtomatik yana eshitishga o'tadi
+          if (isSecretaryModeRef.current && !isStoppingRef.current) {
+            setTimeout(() => {
+              startSecretaryListening();
+            }, 350);
+          }
         }
       };
 
@@ -420,13 +442,33 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     };
   };
 
-  const executeMisaQuery = async (text: string, speakReply = true) => {
+  const resumeSecretaryListening = () => {
+    if (isSecretaryModeRef.current && !isStoppingRef.current) {
+      setTimeout(() => {
+        startSecretaryListening();
+      }, 350);
+    }
+  };
+
+  const executeMisaQuery = async (text: string, speakReply = true, isVoiceInput = false) => {
     const clean = text.trim();
-    if (!clean) return;
+    if (!clean) {
+      if (isVoiceInput) resumeSecretaryListening();
+      return;
+    }
 
     const invocation = parseMisaInvocation(clean);
 
-    // If user only called Misa by name ("Misa", "Salom Misa"):
+    // KOTIBA REJIMI:
+    // Agar ovoz orqali eshitilsa va gap ichida "Misa" (yoki "Mikasa") bo'lmasa,
+    // xuddi kompaniya kotibi kabi jim eshitib turadi va javob bermaydi (begona suhbatlarga xalal bermaydi).
+    if (isVoiceInput && !invocation.hasMisa) {
+      setUserTranscript("");
+      resumeSecretaryListening();
+      return;
+    }
+
+    // Foydalanuvchi faqat Misa deb chaqirsa ("Misa", "Salom Misa"):
     if (invocation.isCallingOnly) {
       const greetingResponse = "Labbay Ustoz! Sizni tinglayapman, marhamat buyuring.";
       setUserTranscript(clean);
@@ -434,10 +476,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       setIsProcessing(false);
       if (speakReply) {
         await playSpeechAudio(greetingResponse);
-        // Automatically start listening for their next command after speaking
-        setTimeout(() => {
-          handleToggleVoice();
-        }, 300);
+      } else {
+        resumeSecretaryListening();
       }
       return;
     }
@@ -466,7 +506,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     setOrbState("thinking");
 
     try {
-      const res = await backendService.sendMessage(fullQuery);
+      // Backendga { speak: false } yuboriladi, shunda backend o'zi alohida gapirib 2 marta takrorlanmaydi
+      const res = await backendService.sendMessage(fullQuery, { speak: false });
       const replyText = res.reply || "Buyruq bajarildi.";
       setAssistantResponse(replyText);
       setIsProcessing(false);
@@ -476,6 +517,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       } else {
         setVoiceState("idle");
         setOrbState("idle");
+        if (isVoiceInput) {
+          resumeSecretaryListening();
+        }
       }
     } catch {
       const errReply = "Kechirasiz, Misa serveri bilan bog'lanishda xatolik yuz berdi.";
@@ -485,40 +529,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       setOrbState("error");
       if (speakReply) {
         await playSpeechAudio(errReply);
+      } else if (isVoiceInput) {
+        resumeSecretaryListening();
       }
     }
   };
 
-  const handleToggleVoice = async () => {
-    setMicError(null);
-
-    if (isListeningRef.current || (voiceState as string) === "listening") {
-      isStoppingRef.current = true;
-      isListeningRef.current = false;
-      if (silenceTimerRef.current) {
-        clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = null;
-      }
-      stopAudioMonitor();
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop();
-        } catch {}
-      }
-      await backendService.stopVoice();
-
-      const captured = activeTranscriptRef.current.trim();
-      activeTranscriptRef.current = "";
-      if (captured) {
-        executeMisaQuery(captured, true);
-      } else {
-        setVoiceState("idle");
-        setOrbState("idle");
-      }
+  const startSecretaryListening = async () => {
+    if (isListeningRef.current || (voiceState as string) === "speaking" || isProcessing) {
       return;
     }
-
     isStoppingRef.current = false;
+    isSecretaryModeRef.current = true;
     isListeningRef.current = true;
     activeTranscriptRef.current = "";
 
@@ -533,6 +555,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       }
 
       try {
+        if (recognitionRef.current) {
+          try {
+            recognitionRef.current.abort();
+          } catch {}
+        }
         const recognition = new SpeechRecognition();
         recognitionRef.current = recognition;
         recognition.lang = "uz-UZ";
@@ -542,8 +569,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         setVoiceState("listening");
         setOrbState("listening");
-        setUserTranscript("");
-        setAssistantResponse("");
 
         let finalizedText = "";
 
@@ -561,12 +586,22 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           activeTranscriptRef.current = currentTotal;
           setUserTranscript(currentTotal);
 
-          // Reset silence timer on any speech detected (2.2 seconds of silence finishes input)
+          // Reset silence timer on any speech detected
           if (silenceTimerRef.current) {
             clearTimeout(silenceTimerRef.current);
           }
           silenceTimerRef.current = setTimeout(() => {
-            if (activeTranscriptRef.current.trim()) {
+            const captured = activeTranscriptRef.current.trim();
+            if (captured) {
+              const inv = parseMisaInvocation(captured);
+              if (!inv.hasMisa) {
+                // Xonadagi begona suhbat, Misa chaqirilmagan -> jim e'tiborsiz qoldiriladi
+                activeTranscriptRef.current = "";
+                setUserTranscript("");
+                return;
+              }
+              // Misa chaqirildi!
+              activeTranscriptRef.current = "";
               if (recognitionRef.current) {
                 try {
                   recognitionRef.current.stop();
@@ -574,11 +609,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               }
               stopAudioMonitor();
               isListeningRef.current = false;
-              const toExecute = activeTranscriptRef.current.trim();
-              activeTranscriptRef.current = "";
-              executeMisaQuery(toExecute, true);
+              executeMisaQuery(captured, true, true);
             }
-          }, 2200);
+          }, 1800);
         };
 
         recognition.onerror = (event: any) => {
@@ -589,10 +622,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             setVoiceState("error");
             setOrbState("error");
           } else if (event.error === "no-speech") {
-            // Natural pause, keep listening
+            // Xonadagi tabiiy jimlik - kotiba tinglashda davom etadi
           } else {
-            console.warn("Speech recognition warning:", event.error);
-            backendService.startVoice().catch(() => {});
+            console.warn("Speech recognition notice:", event.error);
           }
         };
 
@@ -602,19 +634,26 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             return;
           }
           const gathered = activeTranscriptRef.current.trim();
+          activeTranscriptRef.current = "";
           if (gathered) {
-            isListeningRef.current = false;
-            stopAudioMonitor();
-            activeTranscriptRef.current = "";
-            executeMisaQuery(gathered, true);
-          } else if (isListeningRef.current) {
+            const inv = parseMisaInvocation(gathered);
+            if (inv.hasMisa) {
+              isListeningRef.current = false;
+              stopAudioMonitor();
+              executeMisaQuery(gathered, true, true);
+              return;
+            }
+          }
+          // Doimiy kotiba tinglash tsikli: uzilish bo'lsa darhol qayta ulanadi
+          if (isSecretaryModeRef.current && !isStoppingRef.current) {
             try {
               recognition.start();
             } catch {
-              isListeningRef.current = false;
-              stopAudioMonitor();
-              setVoiceState("idle");
-              setOrbState("idle");
+              setTimeout(() => {
+                if (isSecretaryModeRef.current && !isStoppingRef.current) {
+                  startSecretaryListening();
+                }
+              }, 400);
             }
           } else {
             isListeningRef.current = false;
@@ -627,11 +666,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       } catch (e) {
         isListeningRef.current = false;
         stopAudioMonitor();
-        console.error("Speech recognition start failed:", e);
+        console.error("Kotiba tinglash xatosi:", e);
       }
     }
 
-    // Backend fallback if client Web Speech API is not available
+    // Web Speech API mavjud bo'lmasa backend fon xizmatiga ulanish
     setUserTranscript("");
     setAssistantResponse("");
     setVoiceState("listening");
@@ -639,12 +678,42 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     await backendService.startVoice();
   };
 
+  const handleToggleVoice = async () => {
+    setMicError(null);
+
+    if (isListeningRef.current || (voiceState as string) === "listening") {
+      isStoppingRef.current = true;
+      isSecretaryModeRef.current = false;
+      isListeningRef.current = false;
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
+      stopAudioMonitor();
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {}
+      }
+      await backendService.stopVoice();
+      activeTranscriptRef.current = "";
+      setVoiceState("idle");
+      setOrbState("idle");
+      return;
+    }
+
+    // Foydalanuvchi aperturaga yoki mikrofonga bosib Kotiba rejimini faollashtirdi
+    isStoppingRef.current = false;
+    isSecretaryModeRef.current = true;
+    startSecretaryListening();
+  };
+
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!queryText.trim() && attachedFiles.length === 0) return;
     const text = queryText.trim() || "Biriktirilgan faylni tahlil qil";
     setQueryText("");
-    executeMisaQuery(text, false);
+    executeMisaQuery(text, false, false);
   };
 
   const handleSuggestionClick = (item: (typeof QUICK_SUGGESTIONS)[0]) => {
@@ -652,7 +721,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       handleToggleVoice();
       return;
     }
-    executeMisaQuery(item.query, false);
+    executeMisaQuery(item.query, false, false);
   };
 
   const handleFileAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -693,7 +762,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       case "listening":
         return userTranscript
           ? `Tinglanmoqda: "${userTranscript}"`
-          : 'Misa sizni tinglamoqda... "Misa..." deb chaqiring yoki gapiring';
+          : 'Kotiba rejimi faol — Misa eshitmoqda... Chaqirish uchun "Misa..." deb gapiring';
       case "thinking":
         return "So'rovingiz tahlil qilinmoqda...";
       case "planning":
@@ -715,7 +784,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         );
       case "idle":
       default:
-        return 'Misa bilan gaplashish uchun "Misa..." deb boshlang yoki markazga bosing';
+        return 'Kotiba rejimi pauzada. Boshlash uchun markaziy aperturaga bosing';
     }
   };
 

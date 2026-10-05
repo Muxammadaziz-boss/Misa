@@ -1893,7 +1893,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
             }}
           />
           <span style={{ fontSize: "12.5px", color: "var(--text-secondary)" }}>
-            Misa AI Desktop v9.0.0 — Ultra Glass Edition
+            Misa AI Desktop — Ultra Glass Edition
           </span>
         </div>
 

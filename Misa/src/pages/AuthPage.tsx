@@ -479,7 +479,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
         <div data-tauri-drag-region style={{ display: "flex", alignItems: "center", gap: "9px", cursor: "default" }}>
           <SparklesIcon size={16} color="#C04CFD" />
           <span style={{ fontSize: "12.5px", fontWeight: 700, color: "#E2E8F0", letterSpacing: "0.04em", fontFamily: "var(--font-display)" }}>
-            MISA AI v9.0.0
+            MISA AI
           </span>
         </div>
         <div data-tauri-drag-region style={{ flex: 1, height: "100%", cursor: "default" }} />
@@ -1597,7 +1597,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
             <ShieldIcon size={14} color="#4EDEA3" />
             <span style={{ color: "#4EDEA3", fontWeight: 500 }}>Secured by Supabase Auth</span>
           </div>
-          <span style={{ color: "#E8B3FF", fontWeight: 600 }}>v9.0.0 Ultra Glass</span>
+          <span style={{ color: "#94A3B8" }}>Ultra Glass Edition</span>
         </div>
       </div>
     </div>
