@@ -11,7 +11,9 @@ $bConn = Get-NetTCPConnection -LocalPort 18420 -ErrorAction SilentlyContinue
 if (-not $bConn) {
     Write-Host "[1/3] Backend xizmati ishga tushirilmoqda (127.0.0.1:18420)..." -ForegroundColor Yellow
     $rootDir = (Resolve-Path "..").Path
+    $parentDir = Split-Path $rootDir -Parent
     $pyCandidates = @(
+        (Join-Path $parentDir ".venv\Scripts\python.exe"),
         (Join-Path $rootDir ".venv\Scripts\python.exe"),
         (Join-Path $rootDir "python\python.exe"),
         (Join-Path $rootDir "runtime\python.exe"),
@@ -19,11 +21,12 @@ if (-not $bConn) {
     )
     $chosenPy = "python"
     foreach ($py in $pyCandidates) {
-        if ($py -eq "python" -or (Test-Path $py)) {
+        if ($py -ne "python" -and (Test-Path $py)) {
             $chosenPy = $py
             break
         }
     }
+    Write-Host "[1/3] Python interpreter: $chosenPy" -ForegroundColor Cyan
     Start-Process -FilePath $chosenPy -ArgumentList "core\api_server.py" -WorkingDirectory $rootDir -WindowStyle Hidden
     Start-Sleep -Seconds 2
     Write-Host "[1/3] Backend muvaffaqiyatli ishga tushirildi (Port 18420)." -ForegroundColor Green
@@ -42,12 +45,15 @@ if (-not $conn) {
 }
 
 # 3. Launch native desktop or web window
-Write-Host "[3/3] Misa AI 9.0 Desktop oynasi ochilmoqda..." -ForegroundColor Cyan
+Write-Host "[3/3] Misa AI Desktop oynasi ochilmoqda..." -ForegroundColor Cyan
 
-$nativeExe = "..\release\v9.0.0\Misa-AI-v9.0.0.exe"
+$nativeExe = "..\release\v9.0.1\Misa-AI-v9.0.1.exe"
+if (-not (Test-Path $nativeExe)) {
+    $nativeExe = "..\release\v9.0.0\Misa-AI-v9.0.0.exe"
+}
 if (Test-Path $nativeExe) {
     Start-Process $nativeExe
-    Write-Host "Misa AI 9.0 Native Desktop oynasi ochildi!" -ForegroundColor Green
+    Write-Host "Misa AI Native Desktop oynasi ochildi!" -ForegroundColor Green
     exit 0
 }
 

@@ -413,7 +413,20 @@ class CommandDispatcher:
             except Exception:
                 pass
         if not user_display or user_display.lower() in ["user", "foydalanuvchi", "none"]:
-            user_display = "Foydalanuvchi"
+            user_display = "Ustoz"
+
+        # -------------------------------------------------------------
+        # 0.1. Misa chaqiruv so'zi (Wake-word / Call prefix: "Misa ...")
+        # -------------------------------------------------------------
+        misa_call_match = re.match(r"^(?:(?:salom|assalomu\s+alaykum|hey|ey|o['']?y)\s+)?(?:misa|mikasa)(?:[,\s:!.]+|$)", clean_text)
+        if misa_call_match:
+            sub_command = clean_text[misa_call_match.end():].strip()
+            if not sub_command or len(sub_command) < 2:
+                return True, f"Labbay, {user_display}! Sizni tinglayapman, marhamat buyuring."
+            # Misa so'zini olib tashlab, qolgan buyruqni tahlil qilish
+            clean_text = sub_command
+            clean_no_punct = re.sub(r"[?!.,;:_`*~#]+", "", clean_text).strip()
+            has_question = is_question_phrase(clean_text)
 
         if clean_no_punct in [
             "men kimman", "men kimmam", "men kim", "men haqimda ayt", "men haqimda",
@@ -438,11 +451,18 @@ class CommandDispatcher:
         # -------------------------------------------------------------
         # 1. Vaqt va sana so'rovlari
         # -------------------------------------------------------------
-        if clean_text in ["vaqt", "soat", "vaqt necha", "soat necha", "vaqtni ayt", "hozir soat necha"]:
+        if clean_no_punct in [
+            "vaqt", "soat", "vaqt necha", "soat necha", "vaqt nechi", "soat nechi",
+            "soat nechchi", "vaqt nechchi", "vaqtni ayt", "soatni ayt", "hozir soat necha",
+            "hozir soat nechi", "hozirgi vaqt", "hozir vaqt nechi", "hozir soat nechchi"
+        ] or re.search(r"^(?:hozir\s+)?(?:soat|vaqt)\s*(?:necha|nechi|nechchi|qancha)?\??$", clean_no_punct):
             now = datetime.datetime.now()
             return True, f"Hozirgi vaqt: {now.strftime('%H:%M')}"
 
-        if clean_text in ["sana", "bugungi sana", "bugun qaysi kun", "qaysi sana", "bugun sana necha"]:
+        if clean_no_punct in [
+            "sana", "bugungi sana", "bugun qaysi kun", "qaysi sana", "bugun sana necha",
+            "bugun sana nechi", "bugungi kun"
+        ] or re.search(r"^(?:bugun(?:gi)?\s+)?(?:sana|kun)\s*(?:necha|nechi|qaysi)?\??$", clean_no_punct):
             now = datetime.datetime.now()
             oylar = [
                 "yanvar", "fevral", "mart", "aprel", "may", "iyun",

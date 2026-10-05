@@ -104,6 +104,7 @@ fn find_bundled_backend_binary() -> Option<(PathBuf, PathBuf)> {
     // 2. Joriy ishchi katalog
     if let Ok(cwd) = std::env::current_dir() {
         candidates.push((cwd.join("backend").join("misa_backend.exe"), cwd.join("backend")));
+        candidates.push((cwd.join("release").join("v9.0.1").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.0.1").join("backend")));
         candidates.push((cwd.join("release").join("v9.0.0").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.0.0").join("backend")));
         candidates.push((cwd.join("release").join("v8.0.0").join("backend").join("misa_backend.exe"), cwd.join("release").join("v8.0.0").join("backend")));
         candidates.push((cwd.join("Misa").join("src-tauri").join("backend").join("misa_backend.exe"), cwd.join("Misa").join("src-tauri").join("backend")));
@@ -113,6 +114,7 @@ fn find_bundled_backend_binary() -> Option<(PathBuf, PathBuf)> {
     // 3. LocalAppData runtime katalogi (%LOCALAPPDATA%\MisaAI\...)
     if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
         let p = PathBuf::from(local_app_data);
+        candidates.push((p.join("MisaAI").join("runtime").join("v9.0.1").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("runtime").join("v9.0.1").join("backend")));
         candidates.push((p.join("MisaAI").join("runtime").join("v9.0.0").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("runtime").join("v9.0.0").join("backend")));
         candidates.push((p.join("MisaAI").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("backend")));
         candidates.push((p.join("MisaAI").join("runtime").join("v8.0.0").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("runtime").join("v8.0.0").join("backend")));
@@ -122,6 +124,10 @@ fn find_bundled_backend_binary() -> Option<(PathBuf, PathBuf)> {
     if let Ok(exe_path) = std::env::current_exe() {
         let mut curr = exe_path.as_path();
         while let Some(parent) = curr.parent() {
+            let rel91 = parent.join("release").join("v9.0.1").join("backend");
+            if rel91.exists() {
+                candidates.push((rel91.join("misa_backend.exe"), rel91));
+            }
             let rel9 = parent.join("release").join("v9.0.0").join("backend");
             if rel9.exists() {
                 candidates.push((rel9.join("misa_backend.exe"), rel9));

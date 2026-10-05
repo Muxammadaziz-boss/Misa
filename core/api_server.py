@@ -284,7 +284,7 @@ async def handle_status(request):
     return web.json_response({
         "status": "online",
         "app": "MISA AI",
-        "version": "9.0.0",
+        "version": "9.0.1",
         "user": user,
         "ai_available": ai_ok,
         "voice_state": _voice_state,

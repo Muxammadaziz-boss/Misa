@@ -8,7 +8,7 @@ echo.
 cd /d "%~dp0"
 
 echo [1/3] Backend xizmati tekshirilmoqda (127.0.0.1:18420)...
-powershell -NoProfile -Command "$conn = Test-NetConnection -ComputerName 127.0.0.1 -Port 18420 -WarningAction SilentlyContinue -InformationLevel Quiet; if (-not $conn) { Write-Host 'Backend ishga tushirilmoqda...' -ForegroundColor Yellow; $root = (Resolve-Path '..').Path; $pyCandidates = @((Join-Path $root '.venv\Scripts\python.exe'), (Join-Path $root 'python\python.exe'), (Join-Path $root 'runtime\python.exe'), 'python'); $chosenPy = 'python'; foreach ($py in $pyCandidates) { if ($py -eq 'python' -or (Test-Path $py)) { $chosenPy = $py; break; } } Start-Process -FilePath $chosenPy -ArgumentList 'core\api_server.py' -WorkingDirectory $root -WindowStyle Hidden; Start-Sleep -Seconds 2; Write-Host 'Backend muvaffaqiyatli ishga tushirildi (Port 18420).' -ForegroundColor Green; } else { Write-Host 'Backend allaqachon faol (Port 18420).' -ForegroundColor Green; }"
+powershell -NoProfile -Command "$conn = Test-NetConnection -ComputerName 127.0.0.1 -Port 18420 -WarningAction SilentlyContinue -InformationLevel Quiet; if (-not $conn) { Write-Host 'Backend ishga tushirilmoqda...' -ForegroundColor Yellow; $root = (Resolve-Path '..').Path; $parentRoot = (Split-Path $root -Parent); $pyCandidates = @((Join-Path $parentRoot '.venv\Scripts\python.exe'), (Join-Path $root '.venv\Scripts\python.exe'), (Join-Path $root 'python\python.exe'), (Join-Path $root 'runtime\python.exe'), 'python'); $chosenPy = 'python'; foreach ($py in $pyCandidates) { if ($py -ne 'python' -and (Test-Path $py)) { $chosenPy = $py; break; } } Write-Host \"Python tanlandi: $chosenPy\" -ForegroundColor Cyan; Start-Process -FilePath $chosenPy -ArgumentList 'core\api_server.py' -WorkingDirectory $root -WindowStyle Hidden; Start-Sleep -Seconds 2; Write-Host 'Backend muvaffaqiyatli ishga tushirildi (Port 18420).' -ForegroundColor Green; } else { Write-Host 'Backend allaqachon faol (Port 18420).' -ForegroundColor Green; }"
 
 echo.
 echo [2/3] Frontend serveri tekshirilmoqda (Port 1420)...
@@ -17,10 +17,13 @@ powershell -NoProfile -Command "$conn = Test-NetConnection -ComputerName 127.0.0
 echo.
 echo [3/3] Misa AI 9.0 Desktop oynasi ochilmoqda...
 
-set NATIVE_EXE="..\release\v9.0.0\Misa-AI-v9.0.0.exe"
+set NATIVE_EXE="..\release\v9.0.1\Misa-AI-v9.0.1.exe"
+if not exist %NATIVE_EXE% (
+    set NATIVE_EXE="..\release\v9.0.0\Misa-AI-v9.0.0.exe"
+)
 if exist %NATIVE_EXE% (
     start "" %NATIVE_EXE%
-    echo Misa AI 9.0 Native Desktop oynasi ochildi!
+    echo Misa AI Native Desktop oynasi ochildi!
     exit /b 0
 )
 
