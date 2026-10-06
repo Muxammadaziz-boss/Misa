@@ -24,6 +24,7 @@ interface AppShellProps {
   onOpenCommandPalette?: () => void;
   userName?: string;
   avatarStyle?: string;
+  avatarUrl?: string;
 }
 
 const PRIMARY_NAV_ITEMS = [
@@ -47,8 +48,9 @@ export const AppShell: React.FC<AppShellProps> = ({
   activePath,
   onNavigate,
   onOpenCommandPalette,
-  userName = "Ustoz",
-  avatarStyle = "cosmic",
+  userName = "Foydalanuvchi",
+  avatarStyle = "violet",
+  avatarUrl,
 }) => {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
@@ -561,7 +563,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                 {userName}
               </span>
               <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-                <Avatar name={userName} size="sm" styleId={avatarStyle} />
+                <Avatar name={userName} size="sm" styleId={avatarStyle} avatarUrl={avatarUrl} />
                 <span
                   style={{
                     position: "absolute",

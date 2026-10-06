@@ -516,12 +516,22 @@ class AgentMemory:
         return default
 
     def _save_json(self, path: str, data):
-        """JSON faylga xavfsiz va atomik saqlash (tempfile orqali)"""
+        """JSON faylga xavfsiz va atomik saqlash (Windows-safe fallback bilan)"""
+        temp_path = f"{path}.tmp"
         try:
-            temp_path = f"{path}.tmp"
             with open(temp_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
-            os.replace(temp_path, path)
+            try:
+                os.replace(temp_path, path)
+            except OSError:
+                # Windows fallback: agar os.replace vaqtincha bloklangan bo'lsa
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                try:
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+                except Exception:
+                    pass
         except Exception as e:
             logger.error(f"JSON saqlash xatolik ({path}): {e}")
 

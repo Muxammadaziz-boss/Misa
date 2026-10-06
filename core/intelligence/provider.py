@@ -34,12 +34,28 @@ class AIProvider(abc.ABC):
 class ProviderManager:
     """AI provayderlarini boshqarish va deterministik fallback mexanizmi"""
 
-    def __init__(self, providers: Optional[List[AIProvider]] = None):
-        self._providers: List[AIProvider] = providers or []
+    def __init__(self, providers: Optional[List[AIProvider]] = None, router=None):
+        self._custom_providers = providers is not None
+        self._router = router
+        if providers is not None:
+            self._providers: List[AIProvider] = list(providers)
+        else:
+            try:
+                from core.providers import get_provider_system
+                ps = get_provider_system()
+                self._providers = list(ps._providers.values())
+                self._router = ps.router
+            except Exception:
+                self._providers = []
 
     def register_provider(self, provider: AIProvider):
         """Yangi provayder ro'yxatdan o'tkazish"""
         self._providers.append(provider)
+        if self._router and hasattr(self._router, "register_provider") and hasattr(provider, "name"):
+            try:
+                self._router.register_provider(provider)
+            except Exception:
+                pass
 
     def get_available_providers(self) -> List[str]:
         """Faol va kalitlari sozlangan provayderlar ro'yxati"""
@@ -51,9 +67,17 @@ class ProviderManager:
 
     def generate_with_fallback(self, request: AIRequest) -> AIResponse:
         """
-        Deterministik zanjir orqali javob olish:
-        Provayder 1 (Gemini) -> xatolik? -> Provayder 2 (OpenRouter) -> xatolik? -> AI_PROVIDER_UNAVAILABLE
+        Deterministik zanjir yoki Intellektual Router orqali javob olish:
+        Groq -> Cerebras -> Gemini -> OpenRouter -> NVIDIA NIM -> Offline Assistant
         """
+        if self._router and not self._custom_providers and self.is_any_available():
+            try:
+                routed_resp = self._router.route_and_generate(request)
+                if routed_resp and routed_resp.success:
+                    return routed_resp
+            except Exception as e:
+                logger.warning(f"[ProviderManager] Router orqali chaqirishda xatolik: {e}, an'anaviy oqimga o'tilmoqda...")
+
         available_providers = [p for p in self._providers if p.is_available()]
         
         if not available_providers:

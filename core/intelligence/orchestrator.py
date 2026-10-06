@@ -50,11 +50,9 @@ class IntelligenceOrchestrator:
         self.tool_registry = tool_registry
         self.command_dispatcher = command_dispatcher
 
-        # Provayder menejeri
+        # Provayder menejeri (ko'p provayderli intellektual router bilan)
         if provider_manager is None:
-            gemini = GeminiProvider()
-            openrouter = OpenRouterProvider()
-            self.provider_manager = ProviderManager([gemini, openrouter])
+            self.provider_manager = ProviderManager()
         else:
             self.provider_manager = provider_manager
 

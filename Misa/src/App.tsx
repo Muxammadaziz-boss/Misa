@@ -477,6 +477,7 @@ function App() {
       onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
       userName={userName}
       avatarStyle={avatarStyle}
+      avatarUrl={currentUser?.avatar_url}
     >
       <ErrorBoundary key={activePath} onReset={() => handleNavigate("/")}>
         <Suspense

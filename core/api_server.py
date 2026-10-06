@@ -848,7 +848,7 @@ async def handle_ai_test_key(request):
 
 
 async def handle_ai_config_get(request):
-    """GET /api/ai/config - AI kalitlari va modellarining holatini olish (Sinxronizatsiya uchun)"""
+    """GET /api/ai/config - AI kalitlari, modellar va ko'p provayderli tizim holatini olish"""
     user_id, user, session, err = resolve_auth_identity(request, required=_is_production_mode())
     if err:
         return err
@@ -857,11 +857,19 @@ async def handle_ai_config_get(request):
     mgr = get_ai_key_manager()
     summary = mgr.get_status_summary()
 
+    multi_prov = {}
+    try:
+        from core.providers import get_provider_system
+        multi_prov = get_provider_system().get_status_summary()
+    except Exception as e:
+        logger.debug(f"Multi-provider summary olishda xatolik: {e}")
+
     response_data = {
         "ok": True,
         "config": summary,
         "user_id": user_id,
-        "has_user_key": bool(mgr.get_active_gemini_key(user_id=user_id) if user_id else False)
+        "has_user_key": bool(mgr.get_active_gemini_key(user_id=user_id) if user_id else False),
+        "multi_provider": multi_prov,
     }
 
     # Autentifikatsiyalangan foydalanuvchilar yoki desktop uchun faol kalitni (baza/serverdan) ulashish
@@ -876,7 +884,7 @@ async def handle_ai_config_get(request):
 
 
 async def handle_ai_config_set(request):
-    """POST /api/ai/config - AI kaliti yoki model sozlamalarini yangilash"""
+    """POST /api/ai/config - AI kaliti yoki model sozlamalarini yangilash (Groq, Cerebras, Gemini, OpenRouter, NVIDIA)"""
     user_id, user, session, err = resolve_auth_identity(request, required=True)
     if err:
         return err
@@ -886,7 +894,16 @@ async def handle_ai_config_set(request):
     except Exception:
         return web.json_response({"ok": False, "error": "Noto'g'ri JSON formati"}, status=400)
 
-    gemini_key = str(body.get("gemini_api_key") or body.get("api_key") or "").strip()
+    input_key = str(
+        body.get("api_key")
+        or body.get("gemini_api_key")
+        or body.get("groq_api_key")
+        or body.get("cerebras_api_key")
+        or body.get("openrouter_api_key")
+        or body.get("nvidia_api_key")
+        or body.get("key")
+        or ""
+    ).strip()
     provider = str(body.get("provider") or "gemini").strip().lower()
     save_as_system = bool(body.get("is_system", False))
     preferred_model = str(body.get("preferred_model") or "").strip()
@@ -894,15 +911,15 @@ async def handle_ai_config_set(request):
     from core.v8.ai_key_manager import get_ai_key_manager
     mgr = get_ai_key_manager()
 
-    if gemini_key:
+    if input_key:
         if save_as_system:
             if _is_production_mode() and (not session or session.role not in ("admin", "service_role")):
                 return web.json_response({"ok": False, "error": "Tizim kalitini faqat administrator o'zgartira oladi"}, status=403)
-            mgr.register_system_key(provider, gemini_key, prepend=True)
+            mgr.register_system_key(provider, input_key, prepend=True)
         else:
-            mgr.set_user_key(user_id, provider, gemini_key)
+            mgr.set_user_key(user_id, provider, input_key)
             if user and hasattr(user, "metadata") and isinstance(user.metadata, dict):
-                user.metadata["gemini_api_key"] = gemini_key
+                user.metadata[f"{provider}_api_key"] = input_key
                 try:
                     from core.v8 import AccountDeviceManager
                     AccountDeviceManager.get_default_instance().save()
@@ -910,13 +927,48 @@ async def handle_ai_config_set(request):
                     pass
 
     if preferred_model:
-        mgr.set_preferred_model(preferred_model)
+        mgr.set_preferred_model(preferred_model, provider=provider)
 
     return web.json_response({
         "ok": True,
-        "message": "AI konfiguratsiyasi muvaffaqiyatli saqlandi",
+        "message": f"{provider.upper()} konfiguratsiyasi muvaffaqiyatli saqlandi",
         "config": mgr.get_status_summary()
     })
+
+
+async def handle_ai_providers_get(request):
+    """GET /api/ai/providers - Barcha LLM provayderlari, ularning salomatligi, kechikishi va modellari"""
+    try:
+        from core.providers import get_provider_system
+        summary = get_provider_system().get_status_summary()
+        return web.json_response({"ok": True, "data": summary})
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_ai_providers_toggle(request):
+    """POST /api/ai/providers/toggle - Provayderni yoqish yoki o'chirish"""
+    try:
+        body = await request.json()
+        provider = str(body.get("provider", "")).strip().lower()
+        enabled = bool(body.get("enabled", True))
+        from core.providers import get_provider_system
+        ps = get_provider_system()
+        ps.config_manager.set_provider_enabled(provider, enabled)
+        return web.json_response({"ok": True, "provider": provider, "enabled": enabled})
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=400)
+
+
+async def handle_ai_providers_discover(request):
+    """POST /api/ai/providers/discover - Provayderlardan yangi modellarni avtomatik kashf etish"""
+    try:
+        from core.providers import get_provider_system
+        ps = get_provider_system()
+        discovered = ps.discover_all_models()
+        return web.json_response({"ok": True, "discovered_models": discovered})
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 
 async def handle_ai_sync(request):
@@ -2250,9 +2302,15 @@ async def handle_account_get(request):
     sess_mgr = SessionManager.get_default_instance()
     account_summary = adm.get_user_account_summary(user_id, tg_identity_mgr=tg_mgr, session_mgr=sess_mgr)
 
-    name = user_name or user_cfg.get("name") or mem_profile.get("ism", "Ustoz")
-    avatar = user_cfg.get("avatar") or mem_profile.get("avatar", "emerald")
-    role = user_cfg.get("role") or mem_profile.get("kasb", "Dasturchi / Muhandis")
+    auth_email = getattr(user, "email", "") if user else ""
+    auth_display_name = (getattr(user, "display_name", "") or getattr(user, "username", "")) if user else ""
+    auth_avatar_url = getattr(user, "avatar_url", "") if user else ""
+
+    name = user_cfg.get("name") or auth_display_name or user_name or mem_profile.get("ism", "Foydalanuvchi")
+    email = user_cfg.get("email") or auth_email or ""
+    avatar = user_cfg.get("avatar") or mem_profile.get("avatar", "violet")
+    avatar_url = user_cfg.get("avatar_url") or auth_avatar_url or ""
+    role = user_cfg.get("role") or mem_profile.get("kasb", "Dasturchi / Foydalanuvchi")
     phone = user_cfg.get("phone") or mem_profile.get("telefon", "")
     bio = user_cfg.get("bio") or mem_profile.get("bio", "Misa AI shaxsiy sun'iy intellekt yordamchisi")
     language = user_cfg.get("language") or mem_profile.get("til", "uz")
@@ -2278,7 +2336,9 @@ async def handle_account_get(request):
         "telegram_linked": account_summary["telegram_linked"],
         "telegram_identity": account_summary["telegram_identity"],
         "name": name,
+        "email": email,
         "avatar": avatar,
+        "avatar_url": avatar_url,
         "role": role,
         "phone": phone,
         "bio": bio,
@@ -2381,7 +2441,9 @@ async def handle_account_update(request):
 
     # 1. User & Profil
     new_name = body.get("name", "").strip() if "name" in body and body["name"] is not None else None
+    new_email = body.get("email", "").strip() if "email" in body and body["email"] is not None else None
     new_avatar = body.get("avatar", "").strip() if "avatar" in body and body["avatar"] is not None else None
+    new_avatar_url = body.get("avatar_url", "").strip() if "avatar_url" in body and body["avatar_url"] is not None else None
     new_role = body.get("role", "").strip() if "role" in body and body["role"] is not None else None
     new_phone = body.get("phone", "").strip() if "phone" in body and body["phone"] is not None else None
     new_bio = body.get("bio", "").strip() if "bio" in body and body["bio"] is not None else None
@@ -2400,6 +2462,9 @@ async def handle_account_update(request):
             except Exception:
                 pass
 
+    if new_email:
+        cfg["user"]["email"] = new_email
+
     if new_avatar:
         cfg["user"]["avatar"] = new_avatar
         if mem:
@@ -2407,6 +2472,26 @@ async def handle_account_update(request):
                 mem.set_profile("avatar", new_avatar)
             except Exception:
                 pass
+
+    if new_avatar_url is not None:
+        cfg["user"]["avatar_url"] = new_avatar_url
+
+    if user_id:
+        try:
+            from core.v8 import AccountDeviceManager
+            adm = AccountDeviceManager.get_default_instance()
+            u = adm.get_user(user_id)
+            if u:
+                if new_name:
+                    u.display_name = new_name
+                if new_email:
+                    u.email = new_email
+                if new_avatar_url:
+                    u.avatar_url = new_avatar_url
+                u.updated_at = time.time()
+                adm.save_state()
+        except Exception:
+            pass
 
     if new_role is not None:
         cfg["user"]["role"] = new_role
@@ -2557,11 +2642,15 @@ async def handle_account_update(request):
     saved_avatar = cfg["user"].get("avatar", "emerald")
     saved_voice = new_voice or get_current_voice_type()
     saved_speed = cfg["audio"].get("tts_speed", 1.0)
-    saved_theme = cfg["gui"].get("theme", "dark")
+    saved_email = cfg["user"].get("email", "")
+    saved_avatar_url = cfg["user"].get("avatar_url", "")
+    saved_theme = cfg.get("gui", {}).get("theme", "dark")
 
     await broadcast_ws("account_updated", {
         "name": saved_user,
+        "email": saved_email,
         "avatar": saved_avatar,
+        "avatar_url": saved_avatar_url,
         "voice_type": saved_voice,
         "tts_speed": saved_speed,
         "theme": saved_theme
@@ -2571,7 +2660,9 @@ async def handle_account_update(request):
         "ok": True,
         "message": "Sozlamalar muvaffaqiyatli saqlandi",
         "name": saved_user,
+        "email": saved_email,
         "avatar": saved_avatar,
+        "avatar_url": saved_avatar_url,
         "voice_type": saved_voice,
         "tts_speed": saved_speed,
         "theme": saved_theme
@@ -6070,6 +6161,9 @@ def create_app():
     app.router.add_post("/api/images/generate", handle_images_generate)
     app.router.add_get("/api/ai/config", handle_ai_config_get)
     app.router.add_post("/api/ai/config", handle_ai_config_set)
+    app.router.add_get("/api/ai/providers", handle_ai_providers_get)
+    app.router.add_post("/api/ai/providers/toggle", handle_ai_providers_toggle)
+    app.router.add_post("/api/ai/providers/discover", handle_ai_providers_discover)
     app.router.add_post("/api/ai/sync", handle_ai_sync)
     app.router.add_post("/api/ai/test-key", handle_ai_test_key)
     app.router.add_post("/api/account/test-api-key", handle_ai_test_key)

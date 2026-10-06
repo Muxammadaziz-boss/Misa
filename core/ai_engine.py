@@ -487,7 +487,13 @@ def _json_ajratish(matn):
 
 
 def ai_mavjudmi():
-    """AI tizimi ishga tayyor ekanligini tekshirish"""
+    """AI tizimi ishga tayyor ekanligini tekshirish (ko'p provayderli tizim bilan)"""
+    try:
+        from core.providers import get_provider_system
+        if get_provider_system().is_any_available():
+            return True
+    except Exception:
+        pass
     return bool(get_gemini_api_key()) or bool(OPENROUTER_API_KEY)
 
 
@@ -722,7 +728,32 @@ def agent_ai_call(prompt: str, system_prompt: str, history: list = None) -> str:
     Returns:
         AI javobi (raw text)
     """
-    # Gemini orqali urinish
+    # 1. Multi-Provider Router orqali urinish (Groq Llama 3.3 70B, Cerebras, Gemini, OpenRouter)
+    try:
+        from core.providers import get_provider_system
+        from core.intelligence.types import AIRequest
+        ps = get_provider_system()
+        if ps.is_any_available():
+            conv = []
+            if history:
+                for msg in history[-10:]:
+                    role = msg.get("role", "user")
+                    c = msg.get("content", "")
+                    if c:
+                        conv.append({"role": role, "content": c})
+            req = AIRequest(
+                message=prompt,
+                system_context={"prompt": system_prompt},
+                conversation=conv,
+                metadata={"requires_tool": True, "task": "tool_calling"}
+            )
+            resp = ps.generate(req)
+            if resp and resp.success and (resp.raw_text or resp.content):
+                return resp.raw_text or resp.content
+    except Exception as e:
+        logging.warning(f"Agent Multi-Provider chaqirishda xatolik: {e}")
+
+    # Gemini orqali an'anaviy urinish
     try:
         result = _agent_gemini_call(prompt, system_prompt, history)
         if result:

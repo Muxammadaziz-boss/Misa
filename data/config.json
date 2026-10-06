@@ -23,7 +23,7 @@
     "color_scheme": "green",
     "compact_mode": true,
     "window_size": "1100x800",
-    "compact_window_size": "1072x700+26+26",
+    "compact_window_size": "1168x700+26+26",
     "font_family": "Segoe UI",
     "font_size": 12,
     "color": "green",
@@ -81,5 +81,42 @@
     "local_storage_only": true,
     "telemetry_disabled": true,
     "save_conversations": true
+  },
+  "providers": {
+    "groq": {
+      "enabled": true,
+      "priority": 95,
+      "timeout": 15.0,
+      "base_url": "https://api.groq.com/openai/v1",
+      "default_model": "llama-3.3-70b-versatile"
+    },
+    "cerebras": {
+      "enabled": true,
+      "priority": 92,
+      "timeout": 15.0,
+      "base_url": "https://api.cerebras.ai/v1",
+      "default_model": "llama-3.3-70b"
+    },
+    "gemini": {
+      "enabled": true,
+      "priority": 94,
+      "timeout": 15.0,
+      "base_url": "https://generativelanguage.googleapis.com/v1beta",
+      "default_model": "gemini-2.0-flash"
+    },
+    "openrouter": {
+      "enabled": true,
+      "priority": 80,
+      "timeout": 20.0,
+      "base_url": "https://openrouter.ai/api/v1",
+      "default_model": "meta-llama/llama-3.3-70b-instruct:free"
+    },
+    "nvidia": {
+      "enabled": true,
+      "priority": 74,
+      "timeout": 20.0,
+      "base_url": "https://integrate.api.nvidia.com/v1",
+      "default_model": "meta/llama-3.3-70b-instruct"
+    }
   }
 }
