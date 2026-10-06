@@ -110,8 +110,19 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   );
   const [rememberChats, setRememberChats] = useState<boolean>(true);
   const [autoSuggestions, setAutoSuggestions] = useState<boolean>(true);
+  const [activeKeyProvider, setActiveKeyProvider] = useState<"gemini" | "groq" | "cerebras" | "openrouter" | "nvidia">("gemini");
   const [geminiApiKey, setGeminiApiKey] = useState<string>("");
-  const [apiKeyMasked, setApiKeyMasked] = useState<string>("");
+  const [groqApiKey, setGroqApiKey] = useState<string>("");
+  const [cerebrasApiKey, setCerebrasApiKey] = useState<string>("");
+  const [openrouterApiKey, setOpenrouterApiKey] = useState<string>("");
+  const [nvidiaApiKey, setNvidiaApiKey] = useState<string>("");
+  const [aiKeysStatus, setAiKeysStatus] = useState<Record<string, { configured: boolean; masked: string }>>({
+    gemini: { configured: false, masked: "" },
+    groq: { configured: false, masked: "" },
+    cerebras: { configured: false, masked: "" },
+    openrouter: { configured: false, masked: "" },
+    nvidia: { configured: false, masked: "" },
+  });
   const [testingKey, setTestingKey] = useState<boolean>(false);
   const [testingVoiceId, setTestingVoiceId] = useState<string | null>(null);
 
@@ -188,7 +199,14 @@ export const AccountPage: React.FC<AccountPageProps> = ({
           if (typeof data.vad_enabled === "boolean") setVadEnabled(data.vad_enabled);
           if (data.ai_model) setAiModel(data.ai_model);
           if (typeof data.thinking_enabled === "boolean") setThinkingEnabled(data.thinking_enabled);
-          if (data.api_key_masked) setApiKeyMasked(data.api_key_masked);
+          if (data.ai_keys) {
+            setAiKeysStatus(data.ai_keys);
+          } else if (data.api_key_masked) {
+            setAiKeysStatus((prev) => ({
+              ...prev,
+              gemini: { configured: true, masked: data.api_key_masked },
+            }));
+          }
         }
       })
       .catch(() => {});
@@ -264,6 +282,10 @@ export const AccountPage: React.FC<AccountPageProps> = ({
         ai_model: aiModel,
         thinking_enabled: thinkingEnabled,
         ...(geminiApiKey.trim() ? { gemini_api_key: geminiApiKey.trim() } : {}),
+        ...(groqApiKey.trim() ? { groq_api_key: groqApiKey.trim() } : {}),
+        ...(cerebrasApiKey.trim() ? { cerebras_api_key: cerebrasApiKey.trim() } : {}),
+        ...(openrouterApiKey.trim() ? { openrouter_api_key: openrouterApiKey.trim() } : {}),
+        ...(nvidiaApiKey.trim() ? { nvidia_api_key: nvidiaApiKey.trim() } : {}),
         settings: {
           language: responseLang,
           tone: toneStyle,
@@ -277,10 +299,29 @@ export const AccountPage: React.FC<AccountPageProps> = ({
             data: { gemini_api_key: geminiApiKey.trim() },
           });
         } catch {}
-        setApiKeyMasked(
-          geminiApiKey.trim().slice(0, 8) + "..." + geminiApiKey.trim().slice(-4)
-        );
+        const masked = geminiApiKey.trim().slice(0, 8) + "..." + geminiApiKey.trim().slice(-4);
+        setAiKeysStatus((prev) => ({ ...prev, gemini: { configured: true, masked } }));
         setGeminiApiKey("");
+      }
+      if (groqApiKey.trim()) {
+        const masked = groqApiKey.trim().slice(0, 7) + "..." + groqApiKey.trim().slice(-4);
+        setAiKeysStatus((prev) => ({ ...prev, groq: { configured: true, masked } }));
+        setGroqApiKey("");
+      }
+      if (cerebrasApiKey.trim()) {
+        const masked = cerebrasApiKey.trim().slice(0, 6) + "..." + cerebrasApiKey.trim().slice(-4);
+        setAiKeysStatus((prev) => ({ ...prev, cerebras: { configured: true, masked } }));
+        setCerebrasApiKey("");
+      }
+      if (openrouterApiKey.trim()) {
+        const masked = openrouterApiKey.trim().slice(0, 9) + "..." + openrouterApiKey.trim().slice(-4);
+        setAiKeysStatus((prev) => ({ ...prev, openrouter: { configured: true, masked } }));
+        setOpenrouterApiKey("");
+      }
+      if (nvidiaApiKey.trim()) {
+        const masked = nvidiaApiKey.trim().slice(0, 7) + "..." + nvidiaApiKey.trim().slice(-4);
+        setAiKeysStatus((prev) => ({ ...prev, nvidia: { configured: true, masked } }));
+        setNvidiaApiKey("");
       }
 
       if (onProfileChange) {
@@ -317,12 +358,36 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     }
   };
 
-  // Gemini API kalit tekshirish
-  const handleTestGeminiKey = async () => {
+  // API kalitni jonli tekshirish (Gemini, Groq, Cerebras, OpenRouter, NVIDIA)
+  const handleTestCurrentApiKey = async (provider: "gemini" | "groq" | "cerebras" | "openrouter" | "nvidia") => {
     setTestingKey(true);
+    let keyToTest = "";
+    if (provider === "gemini") keyToTest = geminiApiKey.trim();
+    else if (provider === "groq") keyToTest = groqApiKey.trim();
+    else if (provider === "cerebras") keyToTest = cerebrasApiKey.trim();
+    else if (provider === "openrouter") keyToTest = openrouterApiKey.trim();
+    else if (provider === "nvidia") keyToTest = nvidiaApiKey.trim();
+
     try {
-      const res = await backendService.testApiKey(geminiApiKey.trim() || undefined);
-      showToast(res.message || (res.ok ? "API kalit faol ✓" : "API kalitda xatolik"));
+      const res = await backendService.testApiKey(keyToTest || undefined, provider);
+      if (res.ok) {
+        showToast(res.message || `${provider.toUpperCase()} API kaliti faol ✓`);
+        if (keyToTest) {
+          const masked = keyToTest.slice(0, 6) + "..." + keyToTest.slice(-4);
+          setAiKeysStatus((prev) => ({
+            ...prev,
+            [provider]: { configured: true, masked },
+          }));
+          if (provider === "gemini") {
+            setGeminiApiKey("");
+          } else if (provider === "groq") setGroqApiKey("");
+          else if (provider === "cerebras") setCerebrasApiKey("");
+          else if (provider === "openrouter") setOpenrouterApiKey("");
+          else if (provider === "nvidia") setNvidiaApiKey("");
+        }
+      } else {
+        showToast(res.error || res.message || "API kalitda xatolik yuz berdi");
+      }
     } catch {
       showToast("API kalitni tekshirishda xatolik");
     } finally {
@@ -1099,16 +1164,62 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                 </div>
               </div>
 
-              {/* AI Modeli Tanlash */}
+              {/* AI Modeli Tanlash — 7 ta asosiy model */}
               <div>
                 <label style={{ display: "block", fontSize: "12px", color: "var(--text-secondary)", marginBottom: "8px" }}>
                   Boshqaruvchi AI Modeli
                 </label>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: "10px" }}>
                   {[
-                    { id: "gemini", label: "Google Gemini 1.5", badge: "Tavsiya", desc: "Tezkor va keng kontekst" },
-                    { id: "openrouter", label: "OpenRouter Cloud", badge: "Universal", desc: "GPT-4o va Claude modellari" },
-                    { id: "local", label: "Mahalliy Agent", badge: "Oflayn", desc: "Shaxsiy kompyuter buyruqlari" },
+                    {
+                      id: "auto",
+                      label: "Intellektual Router",
+                      badge: "Tavsiya",
+                      desc: "Tezlik, sifat va kvotaga qarab eng maqbul modelni avtomatik tanlaydi",
+                      icon: "🧭",
+                    },
+                    {
+                      id: "groq",
+                      label: "Groq Cloud (LPU)",
+                      badge: "~300 tok/s",
+                      desc: "Llama 3.3 70B — Ultra chaqmoq tezlik, 30 RPM bepul",
+                      icon: "⚡",
+                    },
+                    {
+                      id: "cerebras",
+                      label: "Cerebras AI (CS-3)",
+                      badge: "Wafer-Scale",
+                      desc: "Llama 3.3 70B — Dunyodagi eng tezkor AI mikrosxemasi",
+                      icon: "🧠",
+                    },
+                    {
+                      id: "gemini",
+                      label: "Google Gemini",
+                      badge: "1M Kontekst",
+                      desc: "Gemini 2.0 Flash / 1.5 Pro — Katta kontekst va multimodal tahlil",
+                      icon: "✨",
+                    },
+                    {
+                      id: "openrouter",
+                      label: "OpenRouter Cloud",
+                      badge: "Ko'p Modelli",
+                      desc: "GPT-4o, Claude 3.5 Sonnet, DeepSeek R1 modellari",
+                      icon: "🌐",
+                    },
+                    {
+                      id: "nvidia",
+                      label: "NVIDIA NIM",
+                      badge: "Enterprise",
+                      desc: "Llama 3.3 70B Versatile — Yuqori darajadagi barqarorlik",
+                      icon: "🟢",
+                    },
+                    {
+                      id: "local",
+                      label: "Mahalliy Agent",
+                      badge: "Oflayn",
+                      desc: "Kompyuter buyruqlari, fayllar boshqaruvi va oflayn rejim",
+                      icon: "💻",
+                    },
                   ].map((m) => {
                     const active = aiModel === m.id;
                     return (
@@ -1119,69 +1230,236 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                         style={{
                           padding: "12px",
                           borderRadius: "14px",
-                          background: active ? "rgba(147, 3, 197, 0.25)" : "rgba(2, 6, 14, 0.45)",
+                          background: active ? "rgba(147, 3, 197, 0.28)" : "rgba(2, 6, 14, 0.45)",
                           border: active ? "1.5px solid #C04CFD" : "1px solid rgba(255, 255, 255, 0.08)",
                           textAlign: "left",
                           cursor: "pointer",
+                          transition: "all 0.2s ease",
+                          boxShadow: active ? "0 4px 16px rgba(192, 76, 253, 0.2)" : "none",
                         }}
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-                          <span style={{ fontSize: "12.5px", fontWeight: 700, color: "#FFFFFF" }}>{m.label}</span>
-                          <span style={{ fontSize: "10px", padding: "1px 6px", borderRadius: "6px", background: "rgba(192,76,253,0.2)", color: "#E8B3FF" }}>{m.badge}</span>
+                          <span style={{ fontSize: "12.5px", fontWeight: 700, color: "#FFFFFF" }}>
+                            {m.icon} {m.label}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              padding: "1px 6px",
+                              borderRadius: "6px",
+                              background: active ? "rgba(192,76,253,0.3)" : "rgba(255,255,255,0.06)",
+                              color: active ? "#F5D0FE" : "var(--text-secondary)",
+                              fontWeight: 600,
+                            }}
+                          >
+                            {m.badge}
+                          </span>
                         </div>
-                        <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>{m.desc}</div>
+                        <div style={{ fontSize: "11px", color: "var(--text-secondary)", lineHeight: 1.4 }}>{m.desc}</div>
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Gemini API Kalit */}
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                  <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                    Gemini AI API Kaliti {apiKeyMasked ? `(Ulangan: ${apiKeyMasked})` : ""}
-                  </label>
+              {/* AI Provayderlar API Kalitlari Boshqaruvi */}
+              <div
+                style={{
+                  padding: "16px",
+                  borderRadius: "16px",
+                  background: "rgba(2, 6, 14, 0.45)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "12px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                  <div>
+                    <div style={{ fontSize: "13px", fontWeight: 700, color: "#FFFFFF" }}>
+                      AI Provayderlari va Shaxsiy API Kalitlar
+                    </div>
+                    <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                      Groq, Cerebras, Gemini, OpenRouter va NVIDIA API kalitlarini sozlash
+                    </div>
+                  </div>
+                  {/* Holat indikatori */}
                   <span
                     style={{
                       fontSize: "11px",
-                      padding: "2px 8px",
+                      padding: "3px 10px",
                       borderRadius: "12px",
-                      background: apiKeyMasked ? "rgba(16, 185, 129, 0.15)" : "rgba(234, 179, 8, 0.15)",
-                      color: apiKeyMasked ? "#34D399" : "#FBBF24",
+                      background: aiKeysStatus[activeKeyProvider]?.configured
+                        ? "rgba(16, 185, 129, 0.15)"
+                        : "rgba(234, 179, 8, 0.15)",
+                      color: aiKeysStatus[activeKeyProvider]?.configured ? "#34D399" : "#FBBF24",
                       fontWeight: 600,
+                      border: aiKeysStatus[activeKeyProvider]?.configured
+                        ? "1px solid rgba(16, 185, 129, 0.3)"
+                        : "1px solid rgba(234, 179, 8, 0.3)",
                     }}
                   >
-                    {apiKeyMasked ? "● Kalit faol" : "○ Standart rejim"}
+                    {aiKeysStatus[activeKeyProvider]?.configured
+                      ? `● Faol: ${aiKeysStatus[activeKeyProvider].masked}`
+                      : "○ Zaxira / Kiritilmagan"}
                   </span>
                 </div>
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <input
-                    type="password"
-                    value={geminiApiKey}
-                    onChange={(e) => setGeminiApiKey(e.target.value)}
-                    placeholder={apiKeyMasked ? "Yangi shaxsiy kalit kiritish (ixtiyoriy)" : "AIzaSy... yangi kalit kiritish"}
-                    className="misa-glass-input"
-                    style={{ flex: 1, padding: "9px 14px", borderRadius: "12px", fontSize: "12.5px" }}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleTestGeminiKey}
-                    disabled={testingKey}
-                    style={{
-                      padding: "9px 16px",
-                      borderRadius: "12px",
-                      background: "rgba(147, 3, 197, 0.2)",
-                      border: "1px solid rgba(192, 76, 253, 0.35)",
-                      color: "#E8B3FF",
-                      fontSize: "12px",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {testingKey ? "Tekshirilmoqda..." : "Tekshirish"}
-                  </button>
+
+                {/* Provayder Tanlash Tablari */}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(5, 1fr)",
+                    gap: "6px",
+                    background: "rgba(2, 6, 14, 0.6)",
+                    padding: "4px",
+                    borderRadius: "12px",
+                    border: "1px solid rgba(255, 255, 255, 0.05)",
+                  }}
+                >
+                  {[
+                    { id: "gemini" as const, label: "Gemini", icon: "✨" },
+                    { id: "groq" as const, label: "Groq", icon: "⚡" },
+                    { id: "cerebras" as const, label: "Cerebras", icon: "🧠" },
+                    { id: "openrouter" as const, label: "OpenRouter", icon: "🌐" },
+                    { id: "nvidia" as const, label: "NVIDIA", icon: "🟢" },
+                  ].map((p) => {
+                    const isSelected = activeKeyProvider === p.id;
+                    const isConfigured = aiKeysStatus[p.id]?.configured;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setActiveKeyProvider(p.id)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: "5px",
+                          padding: "7px 6px",
+                          borderRadius: "8px",
+                          background: isSelected ? "rgba(147, 3, 197, 0.45)" : "transparent",
+                          border: isSelected ? "1px solid #C04CFD" : "1px solid transparent",
+                          color: isSelected ? "#FFFFFF" : isConfigured ? "#34D399" : "var(--text-secondary)",
+                          fontSize: "11.5px",
+                          fontWeight: isSelected ? 700 : 500,
+                          cursor: "pointer",
+                          transition: "all 0.15s ease",
+                        }}
+                      >
+                        <span>{p.icon}</span>
+                        <span>{p.label}</span>
+                        {isConfigured && (
+                          <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#34D399" }} />
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
+
+                {/* Faol Provayder Maydoni */}
+                {(() => {
+                  const info = {
+                    gemini: {
+                      title: "Google Gemini AI (2.0 Flash / 1.5 Pro)",
+                      hint: "Rasmiy bepul API kalit: aistudio.google.com/app/apikey",
+                      url: "https://aistudio.google.com/app/apikey",
+                      val: geminiApiKey,
+                      setVal: setGeminiApiKey,
+                      placeholder: aiKeysStatus.gemini?.configured
+                        ? `Ulangan: ${aiKeysStatus.gemini.masked} (Yangi kalit kiritish mumkin)`
+                        : "AIzaSy... Google Gemini kalitini kiriting",
+                    },
+                    groq: {
+                      title: "Groq Cloud LPU (Llama 3.3 70B — 300 tok/sek)",
+                      hint: "Bepul 30 RPM API kalit: console.groq.com/keys",
+                      url: "https://console.groq.com/keys",
+                      val: groqApiKey,
+                      setVal: setGroqApiKey,
+                      placeholder: aiKeysStatus.groq?.configured
+                        ? `Ulangan: ${aiKeysStatus.groq.masked} (Yangi kalit kiritish mumkin)`
+                        : "gsk_... Groq API kalitini kiriting",
+                    },
+                    cerebras: {
+                      title: "Cerebras AI Wafer-Scale (Llama 3.3 70B)",
+                      hint: "Dunyodagi eng tez AI mikrosxemasi: cloud.cerebras.ai",
+                      url: "https://cloud.cerebras.ai",
+                      val: cerebrasApiKey,
+                      setVal: setCerebrasApiKey,
+                      placeholder: aiKeysStatus.cerebras?.configured
+                        ? `Ulangan: ${aiKeysStatus.cerebras.masked} (Yangi kalit kiritish mumkin)`
+                        : "csk-... Cerebras API kalitini kiriting",
+                    },
+                    openrouter: {
+                      title: "OpenRouter Cloud (GPT-4o, Claude 3.5, DeepSeek)",
+                      hint: "Yagona API kalit barcha modellar uchun: openrouter.ai/keys",
+                      url: "https://openrouter.ai/keys",
+                      val: openrouterApiKey,
+                      setVal: setOpenrouterApiKey,
+                      placeholder: aiKeysStatus.openrouter?.configured
+                        ? `Ulangan: ${aiKeysStatus.openrouter.masked} (Yangi kalit kiritish mumkin)`
+                        : "sk-or-v1-... OpenRouter kalitini kiriting",
+                    },
+                    nvidia: {
+                      title: "NVIDIA NIM (Llama 3.3 70B Enterprise)",
+                      hint: "1000 bepul so'rov krediti: build.nvidia.com",
+                      url: "https://build.nvidia.com",
+                      val: nvidiaApiKey,
+                      setVal: setNvidiaApiKey,
+                      placeholder: aiKeysStatus.nvidia?.configured
+                        ? `Ulangan: ${aiKeysStatus.nvidia.masked} (Yangi kalit kiritish mumkin)`
+                        : "nvapi-... NVIDIA NIM kalitini kiriting",
+                    },
+                  }[activeKeyProvider];
+
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11.5px" }}>
+                        <span style={{ color: "#E8B3FF", fontWeight: 600 }}>{info.title}</span>
+                        <a
+                          href={info.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ color: "#38BDF8", textDecoration: "none", fontSize: "11px" }}
+                        >
+                          Kalit olish ↗
+                        </a>
+                      </div>
+
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <input
+                          type="password"
+                          value={info.val}
+                          onChange={(e) => info.setVal(e.target.value)}
+                          placeholder={info.placeholder}
+                          className="misa-glass-input"
+                          style={{ flex: 1, padding: "9px 14px", borderRadius: "12px", fontSize: "12.5px" }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleTestCurrentApiKey(activeKeyProvider)}
+                          disabled={testingKey}
+                          style={{
+                            padding: "9px 16px",
+                            borderRadius: "12px",
+                            background: "rgba(147, 3, 197, 0.25)",
+                            border: "1px solid rgba(192, 76, 253, 0.4)",
+                            color: "#E8B3FF",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {testingKey ? "Tekshirilmoqda..." : "Tekshirish"}
+                        </button>
+                      </div>
+                      <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                        💡 {info.hint}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Murojaat uslubi va Fikrlovchi rejim */}

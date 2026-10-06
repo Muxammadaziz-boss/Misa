@@ -346,7 +346,48 @@ pub fn ensure_backend_running(state: &SupervisorState) {
     if is_ready {
         println!("[MISA] Backend 127.0.0.1:18420 da muvaffaqiyatli tayyor bo'ldi (READY) ✓");
     } else {
-        println!("[MISA] Ogohlantirish: Backend health check vaqt chegarasiga yetdi (Timeout)");
+        println!("[MISA] Bundled backend tayyor bo'lmadi yoki to'xtadi. Python fallback ishga tushirilmoqda...");
+        if let Some(base_dir) = resolve_dev_base_dir() {
+            let py_exe = find_dev_python_executable(&base_dir).unwrap_or_else(|| PathBuf::from("python"));
+            println!("[MISA] Python backend boshlanmoqda: {:?} core/api_server.py", py_exe);
+            let mut cmd = Command::new(&py_exe);
+            cmd.arg("core/api_server.py")
+                .current_dir(&base_dir)
+                .env("MISA_API_HOST", "127.0.0.1")
+                .env("MISA_API_PORT", "18420")
+                .env("PORT", "18420");
+
+            #[cfg(target_os = "windows")]
+            cmd.creation_flags(creation_flags);
+
+            match cmd.spawn() {
+                Ok(c) => {
+                    let pid = c.id();
+                    println!("[MISA] Python backend boshlandi (PID: {})", pid);
+                    if let Ok(mut lock) = state.backend_child.lock() {
+                        *lock = Some(c);
+                    }
+                    if let Ok(mut pid_lock) = state.backend_pid.lock() {
+                        *pid_lock = Some(pid);
+                    }
+                    if let Ok(mut managed_lock) = state.is_managed.lock() {
+                        *managed_lock = true;
+                    }
+                    for delay in [300, 500, 800, 1200, 1500, 2000] {
+                        if check_http_health("127.0.0.1:18420", "/api/health") {
+                            is_ready = true;
+                            println!("[MISA] Python backend muvaffaqiyatli tayyor bo'ldi (READY) ✓");
+                            break;
+                        }
+                        std::thread::sleep(Duration::from_millis(delay));
+                    }
+                }
+                Err(e) => println!("[MISA] Python fallback xatoligi: {}", e),
+            }
+        }
+        if !is_ready {
+            println!("[MISA] Ogohlantirish: Backend health check vaqt chegarasiga yetdi (Timeout)");
+        }
     }
 
     if let Ok(mut spawning) = state.is_spawning.lock() {

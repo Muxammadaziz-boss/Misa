@@ -202,13 +202,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       }
       sessionStorage.setItem("misa_v9_startup_briefing_done", "true");
 
-      await new Promise((r) => setTimeout(r, 700));
-
+      // Backend ishga tushishi uchun qayta tekshiruv (retry loop, jami ~4 soniya)
       let currentStat: BackendStatus = { status: "connecting" };
-      try {
-        currentStat = await backendService.checkStatus();
-      } catch {
-        currentStat = { status: "offline" };
+      for (let attempt = 0; attempt < 6; attempt++) {
+        try {
+          currentStat = await backendService.checkStatus();
+          if (currentStat.status === "online") break;
+        } catch {
+          currentStat = { status: "offline" };
+        }
+        await new Promise((r) => setTimeout(r, 650));
       }
 
       let account = null;
@@ -226,7 +229,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           textToSpeak = `Assalomu alaykum Ustoz! Misa tizimi muvaffaqiyatli ishga tushdi, serverga ulandi. Barcha modullar faol va tayyor. Meni chaqirish uchun "Misa..." deb gapirishingiz mumkin.`;
         } else {
           severity = "warning";
-          textToSpeak = `Assalomu alaykum Ustoz! Serverga ulandim, lekin menda xatolik bor: Gemini sun'iy intellekt kaliti kiritilmagan. Sozlamalar bo'limidan API kalitini kiritishingizni so'rayman.`;
+          textToSpeak = `Assalomu alaykum Ustoz! Serverga ulandim, lekin menda xatolik bor: AI kaliti kiritilmagan. Sozlamalar bo'limidan API kalitini kiritishingizni so'rayman.`;
         }
       } else {
         severity = "error";
@@ -236,8 +239,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       setStartupBriefing(textToSpeak);
       setBriefingSeverity(severity);
 
-      // Speak announcement aloud
-      await playSpeechAudio(textToSpeak);
+      // Faqat server online bo'lsa yoki haqiqiy milliy ovoz bo'lsagina ovozda ijro etamiz
+      if (currentStat.status === "online") {
+        await playSpeechAudio(textToSpeak);
+      }
       setTimeout(() => {
         startSecretaryListening();
       }, 500);
@@ -399,19 +404,22 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           );
           if (uzVoice) {
             utterance.voice = uzVoice;
-          }
+            utterance.onend = finish;
+            utterance.onerror = finish;
 
-          utterance.onend = finish;
-          utterance.onerror = finish;
+            const safetyTimer = setTimeout(finish, Math.max(2000, (cleanText.length / 10) * 1000));
+            utterance.onend = () => {
+              clearTimeout(safetyTimer);
+              finish();
+            };
 
-          const safetyTimer = setTimeout(finish, Math.max(2000, (cleanText.length / 10) * 1000));
-          utterance.onend = () => {
-            clearTimeout(safetyTimer);
+            window.speechSynthesis.speak(utterance);
+            return;
+          } else {
+            // Brauzerda milliy ovoz yo'q bo'lsa, inglizcha sintetik ovozda o'qitmaymiz
             finish();
-          };
-
-          window.speechSynthesis.speak(utterance);
-          return;
+            return;
+          }
         } catch {
           finish();
         }

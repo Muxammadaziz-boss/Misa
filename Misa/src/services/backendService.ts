@@ -397,6 +397,11 @@ export interface AccountSettings {
   thinking_enabled?: boolean;
   has_gemini_key?: boolean;
   api_key_masked?: string;
+  ai_keys?: Record<string, { has_key: boolean; masked_key: string }>;
+  groq_api_key?: string;
+  cerebras_api_key?: string;
+  openrouter_api_key?: string;
+  nvidia_api_key?: string;
   settings?: Record<string, any>;
   version: string;
   app_info?: AccountAppInfo;
@@ -1826,20 +1831,27 @@ class BackendService {
     }
   }
 
-  public async testGeminiApiKey(
-    apiKey?: string
+  public async testApiKey(
+    apiKey?: string,
+    provider: string = "gemini"
   ): Promise<{ ok: boolean; valid?: boolean; message?: string; error?: string; error_code?: string; status_code?: number }> {
     try {
       const authHeaders = await this.getFreshAuthHeaders();
       const res = await fetch(`${API_BASE}/api/ai/test-key`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
-        body: JSON.stringify({ api_key: apiKey || "" }),
+        body: JSON.stringify({ api_key: apiKey || "", provider }),
       });
       return await res.json();
     } catch (err: any) {
       return { ok: false, valid: false, error: err.message || "Serverga ulanishda xatolik yuz berdi" };
     }
+  }
+
+  public async testGeminiApiKey(
+    apiKey?: string
+  ): Promise<{ ok: boolean; valid?: boolean; message?: string; error?: string; error_code?: string; status_code?: number }> {
+    return this.testApiKey(apiKey, "gemini");
   }
 
   public async getAiConfig(): Promise<{
@@ -3537,15 +3549,6 @@ class BackendService {
   public async saveGithubToken(token: string): Promise<{ ok: boolean; message?: string; error?: string }> {
     this.setGitHubToken(token || null);
     return { ok: true, message: "GitHub token saqlandi" };
-  }
-
-  public async testApiKey(apiKey?: string): Promise<{
-    ok: boolean;
-    valid?: boolean;
-    message?: string;
-    error?: string;
-  }> {
-    return this.testGeminiApiKey(apiKey);
   }
 
   public async getAuditTraces(): Promise<{

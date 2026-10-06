@@ -652,7 +652,7 @@ async def handle_chat(request):
 
 
 async def handle_ai_test_key(request):
-    """POST /api/ai/test-key - Google Gemini API kalitini jonli sinovdan o'tkazish (ListModels + multi-model fallback)"""
+    """POST /api/ai/test-key - AI API kalitini jonli sinovdan o'tkazish (Gemini, Groq, Cerebras, OpenRouter, NVIDIA)"""
     if _is_production_mode():
         _, _, _, err_resp = resolve_auth_identity(request, required=True)
         if err_resp:
@@ -663,7 +663,9 @@ async def handle_ai_test_key(request):
     except Exception:
         body = {}
 
+    provider = str(body.get("provider") or "gemini").strip().lower()
     api_key = str(body.get("api_key") or body.get("key") or "").strip()
+
     if any(ch in api_key for ch in ("\n", "\r", "\x00")) or len(api_key) > 256:
         return web.json_response({
             "ok": False,
@@ -671,18 +673,42 @@ async def handle_ai_test_key(request):
             "error_code": "API_KEY_INVALID",
             "error": "API kaliti formati noto'g'ri."
         }, status=400)
-    if not api_key:
-        try:
-            from core.ai_engine import get_gemini_api_key
-            api_key = get_gemini_api_key()
-        except Exception:
-            api_key = os.getenv("GEMINI_API_KEY", "").strip() or os.getenv("GOOGLE_API_KEY", "").strip()
+
+    cfg_key = f"{provider}_api_key"
+    env_key = f"{provider.upper()}_API_KEY"
 
     if not api_key:
+        if provider == "gemini":
+            try:
+                from core.ai_engine import get_gemini_api_key
+                api_key = get_gemini_api_key()
+            except Exception:
+                api_key = os.getenv("GEMINI_API_KEY", "").strip() or os.getenv("GOOGLE_API_KEY", "").strip()
+        else:
+            api_key = os.getenv(env_key, "").strip()
+            if not api_key:
+                try:
+                    cfg_path = os.path.join(DATA_DIR, "config.json")
+                    if os.path.exists(cfg_path):
+                        with open(cfg_path, "r", encoding="utf-8") as f:
+                            cfg = json.load(f)
+                        api_key = str(cfg.get(cfg_key) or cfg.get("ai", {}).get(cfg_key) or "").strip()
+                except Exception:
+                    pass
+
+    if not api_key:
+        provider_names = {
+            "gemini": "Google Gemini",
+            "groq": "Groq Cloud",
+            "cerebras": "Cerebras AI",
+            "openrouter": "OpenRouter",
+            "nvidia": "NVIDIA NIM",
+        }
+        p_name = provider_names.get(provider, provider.capitalize())
         return web.json_response({
             "ok": False,
             "valid": False,
-            "error": "API kaliti kiritilmagan. Iltimos, Google Gemini API kalitini kiriting."
+            "error": f"API kaliti kiritilmagan. Iltimos, {p_name} API kalitini kiriting."
         })
 
     loop = asyncio.get_running_loop()
@@ -704,7 +730,6 @@ async def handle_ai_test_key(request):
                 except Exception:
                     pass
             elif list_resp.status_code in (400, 403):
-                # Aniq kalit xatosi (API_KEY_INVALID, PERMISSION_DENIED, LEAKED)
                 try:
                     err_json = list_resp.json().get("error", {})
                     msg = err_json.get("message", "API kaliti yaroqsiz.")
@@ -757,7 +782,6 @@ async def handle_ai_test_key(request):
                     working_model = model
                     break
                 elif resp.status_code == 429:
-                    # 429 - kvota limitiga yetgan, lekin kalit to'g'ri va tasdiqlangan
                     working_model = model
                     break
                 elif resp.status_code in (400, 403):
@@ -773,7 +797,6 @@ async def handle_ai_test_key(request):
                     except Exception:
                         pass
                 elif resp.status_code == 404:
-                    # Ushbu model topilmadi, keyingi modelga o'tish (xatolik deb hisoblanmaydi)
                     continue
             except Exception as ex:
                 last_error_msg = str(ex)
@@ -784,28 +807,86 @@ async def handle_ai_test_key(request):
 
         return False, last_error_reason, last_error_msg, []
 
-    is_valid, reason, msg, model_list = await loop.run_in_executor(None, _verify_gemini)
+    def _verify_openai_comp(url: str, fallback_model: str, name: str):
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "MisaAI/9.0",
+        }
+        try:
+            resp = requests.get(url, headers=headers, timeout=10)
+            if resp.status_code == 200:
+                try:
+                    data = resp.json()
+                    models = [m.get("id") for m in data.get("data", []) if isinstance(m, dict)]
+                    return True, "OK", f"{name} API kaliti faol va tasdiqlandi!", models[:5] or [fallback_model]
+                except Exception:
+                    return True, "OK", f"{name} API kaliti tasdiqlandi!", [fallback_model]
+            elif resp.status_code == 429:
+                return True, "OK", f"{name} API kaliti tasdiqlandi (kvota limiti mavjud).", [fallback_model]
+            elif resp.status_code in (401, 403):
+                return False, "API_KEY_INVALID", f"{name} API kaliti yaroqsiz (401/403).", []
+            else:
+                return False, f"HTTP_{resp.status_code}", f"{name} tekshiruvida xatolik: {resp.text[:120]}", []
+        except Exception as ex:
+            return False, "NETWORK_ERROR", f"{name} tarmog'iga ulanishda xato: {str(ex)[:120]}", []
+
+    def _verify_openrouter():
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "HTTP-Referer": "https://misa-ai.uz",
+            "X-Title": "Misa AI Assistant",
+        }
+        try:
+            resp = requests.get("https://openrouter.ai/api/v1/auth/key", headers=headers, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json().get("data", {})
+                label = data.get("label") or "Faol"
+                return True, "OK", f"OpenRouter API kaliti tasdiqlandi ({label})!", ["meta-llama/llama-3.3-70b-instruct:free"]
+            elif resp.status_code in (401, 403):
+                return False, "API_KEY_INVALID", "OpenRouter API kaliti yaroqsiz.", []
+            m_resp = requests.get("https://openrouter.ai/api/v1/models", headers=headers, timeout=10)
+            if m_resp.status_code == 200:
+                return True, "OK", "OpenRouter API kaliti faol!", ["meta-llama/llama-3.3-70b-instruct:free"]
+            return False, "API_KEY_INVALID", "OpenRouter kalitini tasdiqlab bo'lmadi.", []
+        except Exception as ex:
+            return False, "NETWORK_ERROR", f"OpenRouter tarmog'ida xatolik: {str(ex)[:120]}", []
+
+    def _verify_all():
+        if provider == "gemini":
+            return _verify_gemini()
+        elif provider == "groq":
+            return _verify_openai_comp("https://api.groq.com/openai/v1/models", "llama-3.3-70b-versatile", "Groq Cloud")
+        elif provider == "cerebras":
+            return _verify_openai_comp("https://api.cerebras.ai/v1/models", "llama-3.3-70b", "Cerebras AI")
+        elif provider == "openrouter":
+            return _verify_openrouter()
+        elif provider == "nvidia":
+            return _verify_openai_comp("https://integrate.api.nvidia.com/v1/models", "meta/llama-3.3-70b-instruct", "NVIDIA NIM")
+        else:
+            return False, "UNKNOWN_PROVIDER", f"Noma'lum provayder: {provider}", []
+
+    is_valid, reason, msg, model_list = await loop.run_in_executor(None, _verify_all)
 
     if is_valid:
-        # Kalit to'g'ri va ishlaydi!
-        os.environ["GEMINI_API_KEY"] = api_key
-        os.environ["GOOGLE_API_KEY"] = api_key
-        try:
-            from core import ai_engine
-            ai_engine.GOOGLE_API_KEY = api_key
-        except Exception:
-            pass
-        try:
-            from core.intelligence import get_orchestrator
-            orch = get_orchestrator()
-            if orch and hasattr(orch, "provider_manager"):
-                for p in orch.provider_manager._providers:
-                    if hasattr(p, "set_api_key"):
-                        p.set_api_key(api_key)
-        except Exception:
-            pass
+        os.environ[env_key] = api_key
+        if provider == "gemini":
+            os.environ["GOOGLE_API_KEY"] = api_key
+            try:
+                from core import ai_engine
+                ai_engine.GOOGLE_API_KEY = api_key
+            except Exception:
+                pass
+            try:
+                from core.intelligence import get_orchestrator
+                orch = get_orchestrator()
+                if orch and hasattr(orch, "provider_manager"):
+                    for p in orch.provider_manager._providers:
+                        if hasattr(p, "set_api_key"):
+                            p.set_api_key(api_key)
+            except Exception:
+                pass
 
-        # Shuningdek data/config.json ga avtomatik saqlash
         try:
             cfg_path = os.path.join(DATA_DIR, "config.json")
             if os.path.exists(cfg_path):
@@ -813,35 +894,45 @@ async def handle_ai_test_key(request):
                     cfg = json.load(f)
                 if "ai" not in cfg:
                     cfg["ai"] = {}
-                cfg["ai"]["gemini_api_key"] = api_key
-                cfg["gemini_api_key"] = api_key
+                cfg["ai"][cfg_key] = api_key
+                cfg[cfg_key] = api_key
                 with open(cfg_path, "w", encoding="utf-8") as f:
                     json.dump(cfg, f, ensure_ascii=False, indent=2)
         except Exception as ce:
             logger.warning(f"config.json ga API kalitni saqlashda xatolik: {ce}")
 
-        active_model = model_list[0] if model_list else "gemini-2.0-flash"
+        active_model = model_list[0] if model_list else None
         try:
             from core.v8.ai_key_manager import get_ai_key_manager
             mgr = get_ai_key_manager()
-            mgr.register_system_key("gemini", api_key, prepend=True)
-            if active_model:
+            mgr.register_system_key(provider, api_key, prepend=True)
+            if active_model and provider == "gemini":
                 mgr.set_preferred_model(active_model)
         except Exception:
             pass
 
+        p_display = {
+            "gemini": "Google Gemini",
+            "groq": "Groq Cloud",
+            "cerebras": "Cerebras AI",
+            "openrouter": "OpenRouter",
+            "nvidia": "NVIDIA NIM",
+        }.get(provider, provider.capitalize())
+
         return web.json_response({
             "ok": True,
             "valid": True,
-            "message": f"Google Gemini API kaliti faol va tasdiqlangan! (Model: {active_model})",
+            "provider": provider,
+            "message": f"{p_display} API kaliti faol va tasdiqlandi! ✓",
             "model": active_model,
             "available_models": model_list[:5]
         })
 
-    logger.warning(f"[API_TEST_KEY] Gemini API tekshiruvi muvaffaqiyatsiz: reason={reason}, msg={msg}")
+    logger.warning(f"[API_TEST_KEY] {provider} API tekshiruvi muvaffaqiyatsiz: reason={reason}, msg={msg}")
     return web.json_response({
         "ok": False,
         "valid": False,
+        "provider": provider,
         "error_code": reason,
         "error": f"API kaliti yaroqsiz ({reason}): {msg}"
     })
@@ -2315,20 +2406,39 @@ async def handle_account_get(request):
     bio = user_cfg.get("bio") or mem_profile.get("bio", "Misa AI shaxsiy sun'iy intellekt yordamchisi")
     language = user_cfg.get("language") or mem_profile.get("til", "uz")
 
-    masked_key = ""
+    ai_keys = {}
     try:
         from core.v8.ai_key_manager import get_ai_key_manager
         ai_mgr = get_ai_key_manager()
+        status_sum = ai_mgr.get_status_summary()
+        active_keys = status_sum.get("active_keys", {})
+        for prov in ("gemini", "groq", "cerebras", "openrouter", "nvidia"):
+            k = active_keys.get(prov) or ""
+            has_k = bool(k)
+            masked = (k[:6] + "..." + k[-4:]) if (has_k and len(k) > 10) else ("●●●●●●" if has_k else "")
+            ai_keys[prov] = {
+                "has_key": has_k,
+                "masked_key": masked,
+            }
         active_key = ai_mgr.get_active_gemini_key(user_id=user_id)
         has_gemini = bool(active_key)
         if has_gemini and len(active_key) > 12:
             masked_key = active_key[:8] + "..." + active_key[-4:]
     except Exception:
         has_gemini = bool(os.environ.get("GEMINI_API_KEY") or ai_cfg.get("gemini_api_key"))
+        for prov in ("gemini", "groq", "cerebras", "openrouter", "nvidia"):
+            k = os.environ.get(f"{prov.upper()}_API_KEY") or ai_cfg.get(f"{prov}_api_key") or ""
+            has_k = bool(k)
+            masked = (k[:6] + "..." + k[-4:]) if (has_k and len(k) > 10) else ("●●●●●●" if has_k else "")
+            ai_keys[prov] = {
+                "has_key": has_k,
+                "masked_key": masked,
+            }
 
     return web.json_response({
         "ok": True,
         "user_id": user_id,
+        "ai_keys": ai_keys,
         "account": account_summary,
         "devices_count": account_summary["devices_count"],
         "active_sessions_count": account_summary["active_sessions_count"],
@@ -2573,35 +2683,43 @@ async def handle_account_update(request):
         cfg["ai"]["mode"] = str(body["ai_mode"])
     if "thinking_enabled" in body:
         cfg["ai"]["thinking_enabled"] = bool(body["thinking_enabled"])
-    if "gemini_api_key" in body and body["gemini_api_key"] is not None:
-        key = str(body["gemini_api_key"]).strip()
-        if key:
-            cfg["ai"]["gemini_api_key"] = key
-            cfg["gemini_api_key"] = key
-            os.environ["GEMINI_API_KEY"] = key
-            os.environ["GOOGLE_API_KEY"] = key
-            try:
-                from core import ai_engine
-                ai_engine.GOOGLE_API_KEY = key
-            except Exception:
-                pass
-            try:
-                from core.intelligence import get_orchestrator
-                orch = get_orchestrator()
-                if orch and hasattr(orch, "provider_manager"):
-                    for p in orch.provider_manager._providers:
-                        if hasattr(p, "set_api_key"):
-                            p.set_api_key(key)
-            except Exception:
-                pass
-            try:
-                from core.v8.ai_key_manager import get_ai_key_manager
-                ai_mgr = get_ai_key_manager()
-                if user_id:
-                    ai_mgr.set_user_key(user_id, "gemini", key)
-                ai_mgr.register_system_key("gemini", key, prepend=True)
-            except Exception:
-                pass
+    # Multi-provider kalitlarini to'liq saqlash (Gemini, Groq, Cerebras, OpenRouter, NVIDIA)
+    for prov in ("gemini", "groq", "cerebras", "openrouter", "nvidia"):
+        param_name = f"{prov}_api_key"
+        if param_name in body and body[param_name] is not None:
+            key = str(body[param_name]).strip()
+            if key:
+                if "ai" not in cfg:
+                    cfg["ai"] = {}
+                cfg["ai"][param_name] = key
+                if prov == "gemini":
+                    cfg["gemini_api_key"] = key
+                    os.environ["GEMINI_API_KEY"] = key
+                    os.environ["GOOGLE_API_KEY"] = key
+                    try:
+                        from core import ai_engine
+                        ai_engine.GOOGLE_API_KEY = key
+                    except Exception:
+                        pass
+                else:
+                    os.environ[f"{prov.upper()}_API_KEY"] = key
+
+                try:
+                    from core.v8.ai_key_manager import get_ai_key_manager
+                    ai_mgr = get_ai_key_manager()
+                    if user_id:
+                        ai_mgr.set_user_key(user_id, prov, key)
+                    ai_mgr.register_system_key(prov, key, prepend=True)
+                except Exception:
+                    pass
+
+                try:
+                    from core.providers import get_provider_system
+                    ps = get_provider_system()
+                    if prov in ps._providers and hasattr(ps._providers[prov], "set_api_key"):
+                        ps._providers[prov].set_api_key(key)
+                except Exception:
+                    pass
 
             try:
                 env_path = os.path.join(BASE_DIR, ".env")
