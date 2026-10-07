@@ -2451,6 +2451,14 @@ async def handle_account_get(request):
                 "masked_key": masked,
             }
 
+    fish_audio_key = os.environ.get("FISH_AUDIO_API_KEY", "")
+    if not fish_audio_key:
+        try:
+            from core.voice_engine import get_fish_audio_api_key
+            fish_audio_key = get_fish_audio_api_key()
+        except Exception:
+            fish_audio_key = cfg.get("voice", {}).get("fish_audio_api_key", "")
+
     return web.json_response({
         "ok": True,
         "user_id": user_id,
@@ -2470,7 +2478,7 @@ async def handle_account_get(request):
         "bio": bio,
         "language": language,
         "voice_type": voice_type or user_cfg.get("voice_type", "ayol"),
-        "fish_audio_api_key": cfg.get("voice", {}).get("fish_audio_api_key", ""),
+        "fish_audio_api_key": fish_audio_key,
         "tts_speed": float(audio_cfg.get("tts_speed", 1.0)),
         "tts_engine": audio_cfg.get("tts_engine", "edge_tts"),
         "auto_speak": audio_cfg.get("auto_speak", True),
@@ -2655,7 +2663,24 @@ async def handle_account_update(request):
                 pass
 
     if "fish_audio_api_key" in body and body["fish_audio_api_key"] is not None:
-        cfg.setdefault("voice", {})["fish_audio_api_key"] = str(body["fish_audio_api_key"]).strip()
+        fish_key = str(body["fish_audio_api_key"]).strip()
+        os.environ["FISH_AUDIO_API_KEY"] = fish_key
+        # config.json dan olib tashlash (xavfsizlik uchun, maxfiy kalit .env da saqlanadi)
+        if "voice" in cfg and "fish_audio_api_key" in cfg["voice"]:
+            cfg["voice"].pop("fish_audio_api_key", None)
+        try:
+            env_path = os.path.join(BASE_DIR, ".env")
+            env_lines = []
+            if os.path.exists(env_path):
+                with open(env_path, "r", encoding="utf-8") as f:
+                    env_lines = f.readlines()
+            new_env_lines = [l for l in env_lines if not l.strip().startswith("FISH_AUDIO_API_KEY=")]
+            if fish_key:
+                new_env_lines.append(f"FISH_AUDIO_API_KEY={fish_key}\n")
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.writelines(new_env_lines)
+        except Exception as e:
+            logger.warning(f".env ga FISH_AUDIO_API_KEY saqlashda xato: {e}")
 
     if "tts_speed" in body and body["tts_speed"] is not None:
         try:

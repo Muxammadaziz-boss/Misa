@@ -27,7 +27,7 @@ CONFIG_FILE = os.path.join(BASE_DIR, "data", "config.json")
 VOICE_TYPE_FILE = os.path.join(BASE_DIR, "data", "ovoz_turi.txt")
 
 # Standart konfiguratsiya
-DEFAULT_FISH_KEY = "sk-fish-G7z7avGh6H0eTfAZJeKqY9Ck88hipSrSYgqfXz_RBI4"
+DEFAULT_FISH_KEY = ""
 MODEL_FISH_ANIME = "d019b0d01cdb478e8f96df578942a552"
 MODEL_FISH_YIGIT = "502b927ae6c44543a3b37eea8529b0a5"
 
@@ -126,10 +126,25 @@ def get_active_voice_id() -> str:
 
 
 def get_fish_audio_api_key() -> str:
-    """Fish Audio API kalitini olish"""
+    """Fish Audio API kalitini xavfsiz tarzda .env fayli yoki muhitdan olish"""
     env_key = os.getenv("FISH_AUDIO_API_KEY", "").strip()
     if env_key:
         return env_key
+
+    # .env faylidan to'g'ridan-to'g'ri o'qish (Gitignore qilingan xavfsiz fayl)
+    env_file = os.path.join(BASE_DIR, ".env")
+    if os.path.exists(env_file):
+        try:
+            with open(env_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line_s = line.strip()
+                    if line_s.startswith("FISH_AUDIO_API_KEY="):
+                        val = line_s.split("FISH_AUDIO_API_KEY=", 1)[1].strip().strip('"').strip("'")
+                        if val:
+                            return val
+        except Exception:
+            pass
+
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:

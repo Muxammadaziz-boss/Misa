@@ -63,7 +63,6 @@
     "silero_model": "uz-UZ-MadinaNeural",
     "speed": 1.0,
     "sample_rate": 44100,
-    "fish_audio_api_key": "sk-fish-G7z7avGh6H0eTfAZJeKqY9Ck88hipSrSYgqfXz_RBI4",
     "fish_audio_model_anime": "d019b0d01cdb478e8f96df578942a552",
     "fish_audio_model_yigit": "502b927ae6c44543a3b37eea8529b0a5"
   },
