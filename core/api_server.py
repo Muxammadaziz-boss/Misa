@@ -245,19 +245,19 @@ def get_current_user_name() -> str:
 
 
 def get_current_voice_type() -> str:
-    """Ovoz turini olish (ayol yoki erkak)"""
+    """Ovoz turini olish (barcha qo'llab-quvvatlanadigan ovozlar)"""
     txt_file = os.path.join(BASE_DIR, "data", "ovoz_turi.txt")
     if os.path.exists(txt_file):
         try:
             with open(txt_file, "r", encoding="utf-8") as f:
                 voice = f.read().strip()
-                if voice in ["ayol", "erkak"]:
+                if voice:
                     return voice
         except Exception:
             pass
     cfg = _read_config()
     cfg_voice = cfg.get("user", {}).get("voice_type")
-    if cfg_voice in ["ayol", "erkak"]:
+    if cfg_voice:
         return cfg_voice
     return "ayol"
 
@@ -1139,41 +1139,19 @@ async def handle_voice_stop(request):
 
 
 def speak_out_loud(text: str, voice_type: Optional[str] = None) -> bool:
-    """Misa ovozli ijro chaqiruvi — main.py orqali yoki to'g'ridan-to'g'ri mustaqil fallback"""
-    if voice_type in ("ayol", "erkak"):
-        try:
-            import global_state
-            global_state.ovoz_turi_global = voice_type
-        except Exception:
-            pass
-
-    m, _, _, _, _, _ = get_modules()
-    if m and hasattr(m, "global_state") and voice_type:
-        try:
-            m.global_state.ovoz_turi_global = voice_type
-        except Exception:
-            pass
-    if m and hasattr(m, "ovoz_chiqar_tez"):
-        try:
-            m.ovoz_chiqar_tez(text, ovoz_turi=voice_type)
-            return True
-        except TypeError:
-            try:
-                m.ovoz_chiqar_tez(text)
-                return True
-            except Exception as e:
-                logger.warning(f"m.ovoz_chiqar_tez chaqirishda xato: {e}")
-        except Exception as e:
-            logger.warning(f"m.ovoz_chiqar_tez chaqirishda xato: {e}")
+    """Misa ovozli ijro chaqiruvi — VoiceEngine orqali (Edge-TTS, Fish Audio, RVC)"""
+    vt = voice_type or get_current_voice_type() or "ayol"
+    try:
+        from core.voice_engine import play_speech_async
+        play_speech_async(text, voice_type=vt)
+        return True
+    except Exception as e:
+        logger.warning(f"VoiceEngine orqali ovoz chiqarishda xato: {e}")
 
     try:
         from main import ovoz_chiqar_tez
-        try:
-            ovoz_chiqar_tez(text, ovoz_turi=voice_type)
-            return True
-        except TypeError:
-            ovoz_chiqar_tez(text)
-            return True
+        ovoz_chiqar_tez(text, ovoz_turi=vt)
+        return True
     except Exception:
         pass
 
@@ -1260,6 +1238,20 @@ async def handle_voice_speak(request):
     sync_broadcast("voice_state", {"state": "speaking"}, loop)
     speak_out_loud(text, voice_type=voice_type)
     return web.json_response({"ok": True, "message": "Ovoz chiqarilmoqda"})
+
+
+async def handle_get_voices(request):
+    """GET /api/voice/voices - Barcha ovozlar ro'yxati va joriy faol ovozni olish"""
+    try:
+        from core.voice_engine import VOICE_CATALOG, get_active_voice_id
+        active_id = get_active_voice_id()
+        return web.json_response({
+            "ok": True,
+            "active_voice": active_id,
+            "voices": VOICE_CATALOG
+        })
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 
 async def handle_chat_clear(request):
@@ -2478,6 +2470,7 @@ async def handle_account_get(request):
         "bio": bio,
         "language": language,
         "voice_type": voice_type or user_cfg.get("voice_type", "ayol"),
+        "fish_audio_api_key": cfg.get("voice", {}).get("fish_audio_api_key", ""),
         "tts_speed": float(audio_cfg.get("tts_speed", 1.0)),
         "tts_engine": audio_cfg.get("tts_engine", "edge_tts"),
         "auto_speak": audio_cfg.get("auto_speak", True),
@@ -2515,20 +2508,7 @@ async def handle_account_get(request):
             "telemetry_disabled": priv_cfg.get("telemetry_disabled", True),
             "save_conversations": priv_cfg.get("save_conversations", True)
         },
-        "voices_available": [
-            {
-                "id": "ayol",
-                "name": "Madina (Ayol)",
-                "lang": "uz-UZ-MadinaNeural",
-                "desc": "Yumshoq, muloyim va tabiiy intonatsiya"
-            },
-            {
-                "id": "erkak",
-                "name": "Sardor (Erkak)",
-                "lang": "uz-UZ-SardorNeural",
-                "desc": "Jiddiy, ishonchli va chuqur tembr"
-            }
-        ],
+        "voices_available": (lambda: __import__("core.voice_engine", fromlist=["VOICE_CATALOG"]).VOICE_CATALOG)(),
         "ai_models_available": [
             {
                 "id": "gemini",
@@ -2661,7 +2641,7 @@ async def handle_account_update(request):
 
     # 2. Voice & Ovoz
     new_voice = body.get("voice_type", "").strip() if "voice_type" in body and body["voice_type"] is not None else None
-    if new_voice in ["ayol", "erkak"]:
+    if new_voice:
         cfg["user"]["voice_type"] = new_voice
         try:
             with open(VOICE_TYPE_FILE, "w", encoding="utf-8") as f:
@@ -2673,6 +2653,9 @@ async def handle_account_update(request):
                 mem.set_profile("ovoz_turi", new_voice)
             except Exception:
                 pass
+
+    if "fish_audio_api_key" in body and body["fish_audio_api_key"] is not None:
+        cfg.setdefault("voice", {})["fish_audio_api_key"] = str(body["fish_audio_api_key"]).strip()
 
     if "tts_speed" in body and body["tts_speed"] is not None:
         try:
@@ -6312,6 +6295,7 @@ def create_app():
     app.router.add_post("/api/voice/start", handle_voice_start)
     app.router.add_post("/api/voice/stop", handle_voice_stop)
     app.router.add_post("/api/voice/speak", handle_voice_speak)
+    app.router.add_get("/api/voice/voices", handle_get_voices)
 
 
     # Buyruqlar (Commands)

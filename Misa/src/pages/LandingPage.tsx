@@ -116,7 +116,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
   const [agentGoal, setAgentGoal] = useState<string | null>(null);
   const [agentSteps, setAgentSteps] = useState<AgentStepItem[]>([]);
-  const [activeVoiceType, setActiveVoiceType] = useState<"ayol" | "erkak">("ayol");
+  const [activeVoiceType, setActiveVoiceType] = useState<string>("ayol");
 
   const recognitionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -132,7 +132,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
   useEffect(() => {
     backendService.getAccount().then((acc) => {
-      if (acc && (acc.voice_type === "ayol" || acc.voice_type === "erkak")) {
+      if (acc && acc.voice_type) {
         setActiveVoiceType(acc.voice_type);
       }
     }).catch(() => {});
@@ -270,9 +270,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
       // Faqat server online bo'lsa yoki haqiqiy milliy ovoz bo'lsagina ovozda ijro etamiz
       if (currentStat.status === "online") {
-        const voiceChoice = (account?.voice_type === "ayol" || account?.voice_type === "erkak")
-          ? account.voice_type
-          : activeVoiceType || "ayol";
+        const voiceChoice = account?.voice_type || activeVoiceType || "ayol";
         await playSpeechAudio(textToSpeak, voiceChoice);
       }
       setTimeout(() => {
@@ -361,8 +359,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     setAudioLevel(0);
   };
 
-  // ── Multi-Layer High-Fidelity Speech Player (Edge TTS) ──
-  const playSpeechAudio = async (text: string, voiceOverride?: "ayol" | "erkak"): Promise<void> => {
+  // ── Multi-Layer High-Fidelity Speech Player (Edge TTS, Fish Audio, RVC) ──
+  const playSpeechAudio = async (text: string, voiceOverride?: string): Promise<void> => {
     const cleanText = text
       .replace(/\[.*?\]\(.*?\)/g, "")
       .replace(/```[\s\S]*?```/g, "")

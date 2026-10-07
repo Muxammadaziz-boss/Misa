@@ -75,6 +75,7 @@ def build():
         "--hidden-import=core.v8.universal_bot",
         "--hidden-import=core.v8.telegram_gateway",
         "--hidden-import=core.common_paths",
+        "--hidden-import=core.voice_engine",
         "--hidden-import=core.providers",
         "--exclude-module=torch",
         "--exclude-module=torchaudio",

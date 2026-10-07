@@ -382,7 +382,8 @@ export interface AccountSettings {
   role?: string;
   bio?: string;
   language?: string;
-  voice_type: "ayol" | "erkak";
+  voice_type: string;
+  fish_audio_api_key?: string;
   tts_speed: number;
   tts_engine?: string;
   auto_speak?: boolean;
@@ -1782,7 +1783,7 @@ class BackendService {
     }
   }
 
-  public async speakText(text: string, voiceType?: "ayol" | "erkak"): Promise<boolean> {
+  public async speakText(text: string, voiceType?: string): Promise<boolean> {
     try {
       const res = await fetch(`${API_BASE}/api/voice/speak`, {
         method: "POST",
@@ -1793,6 +1794,16 @@ class BackendService {
     } catch {
       return false;
     }
+  }
+
+  public async getVoices(): Promise<{ ok: boolean; active_voice: string; voices: any[] }> {
+    try {
+      const res = await fetch(`${API_BASE}/api/voice/voices`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {}
+    return { ok: false, active_voice: "ayol", voices: [] };
   }
 
   public async updateAccount(

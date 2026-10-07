@@ -42,6 +42,10 @@ data/*.json
 !release/**/*.zip
 *.tmp
 *.mp3
+*.pth
+*.pt
+*.onnx
+*.index
 output/
 scratch/
 logos/

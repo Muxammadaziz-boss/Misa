@@ -530,7 +530,7 @@ def ovoz_chiqar_tez(text, ovoz_turi=None):
             if not sentences:
                 sentences = [clean_text]
 
-            # 2. Ovoz turini aniqlash (uz-UZ-MadinaNeural / uz-UZ-SardorNeural)
+            # 2. Ovoz turini aniqlash (barcha modellar: Edge-TTS, Fish Audio, RVC)
             target_ovoz = ovoz_turi or getattr(global_state, "ovoz_turi_global", None)
             if not target_ovoz:
                 fayl = os.path.join(BASE_DIR, "data", "ovoz_turi.txt")
@@ -538,7 +538,7 @@ def ovoz_chiqar_tez(text, ovoz_turi=None):
                     try:
                         with open(fayl, "r", encoding="utf-8") as f:
                             v = f.read().strip()
-                            if v in ["ayol", "erkak"]:
+                            if v:
                                 target_ovoz = v
                     except Exception:
                         pass
@@ -546,7 +546,15 @@ def ovoz_chiqar_tez(text, ovoz_turi=None):
             if not target_ovoz:
                 target_ovoz = "ayol"
 
-            voice = "uz-UZ-MadinaNeural" if target_ovoz == "ayol" else "uz-UZ-SardorNeural"
+            # 3. Unified VoiceEngine orqali ijro etish
+            try:
+                from core.voice_engine import play_speech_sync
+                if play_speech_sync(clean_text, voice_type=target_ovoz):
+                    return
+            except Exception as e:
+                logging.debug(f"VoiceEngine ijro xatosi, mahalliy fallbackga o'tilmoqda: {e}")
+
+            voice = "uz-UZ-MadinaNeural" if target_ovoz in ["ayol", "madina", "fish_anime", "ashley", "yukari"] else "uz-UZ-SardorNeural"
 
             # 3. Tezlik (speed) ni config.json dan olish
             speed_mult = 1.0

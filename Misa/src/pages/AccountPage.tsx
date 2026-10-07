@@ -55,6 +55,69 @@ const ACCENT_PRESETS = [
   { id: "rose", color: "#F43F5E", glow: "#FB7185", label: "Alvon" },
 ];
 
+const VOICE_OPTIONS = [
+  {
+    id: "ayol",
+    name: "Madina (Ayol)",
+    sub: "uz-UZ-MadinaNeural",
+    category: "Microsoft Edge-TTS",
+    badge: "Standart Milliy",
+    badgeColor: "#C04CFD",
+    desc: "Yumshoq, muloyim va tabiiy intonatsiyali milliy o'zbek ovozi. Kotiba va kundalik suhbatlar uchun tavsiya etiladi.",
+    color: "#9303C5",
+  },
+  {
+    id: "erkak",
+    name: "Sardor (Erkak)",
+    sub: "uz-UZ-SardorNeural",
+    category: "Microsoft Edge-TTS",
+    badge: "Rasmiy Diktor",
+    badgeColor: "#3B82F6",
+    desc: "Jiddiy, ishonchli va chuqur tembrli o'zbek erkak ovozi. Texnik buyruqlar va boshqaruv uchun qulay.",
+    color: "#2563EB",
+  },
+  {
+    id: "fish_yigit",
+    name: "Yosh Dinamik (Aziz)",
+    sub: "Fish Audio S2.1 Pro",
+    category: "Fish Neural Cloud",
+    badge: "100% O'zbek Yigit",
+    badgeColor: "#10B981",
+    desc: "100% tabiiy, samimiy va jonli o'zbek yigit ovozi (Aziz Raxmonov). Dinamik, quvnoq va do'stona ohang.",
+    color: "#059669",
+  },
+  {
+    id: "fish_anime",
+    name: "Anime Drama 3",
+    sub: "Drama 3 / S2.1 Pro",
+    category: "Fish Neural Cloud",
+    badge: "Drama 3 Teatr",
+    badgeColor: "#EC4899",
+    desc: "Kinematografik teatr va his-tuyg'uli anime qiz ovozi. Mayin, samimiy va jonli aktyorlik mahorati bilan.",
+    color: "#DB2777",
+  },
+  {
+    id: "ashley",
+    name: "Ashley Clayson",
+    sub: "Cyber Manhunt RVC v2",
+    category: "Lokal RVC v2 Model",
+    badge: "Kiber-Mayin",
+    badgeColor: "#8B5CF6",
+    desc: "Cyber Manhunt kiber-detektiv qahramonining xarizmatik, mayin va intellektual ovoz modeli.",
+    color: "#7C3AED",
+  },
+  {
+    id: "yukari",
+    name: "Yukari",
+    sub: "DiscordJP RVC v2",
+    category: "Anime RVC v2 Model",
+    badge: "Anime Quvnoq",
+    badgeColor: "#F59E0B",
+    desc: "DiscordJP anime yapon/o'zbek uslubidagi quvnoq, yoqimli va yorqin xarakterga ega qizaloq ovozi.",
+    color: "#D97706",
+  },
+];
+
 export const AccountPage: React.FC<AccountPageProps> = ({
   onNavigate,
   onProfileChange,
@@ -93,7 +156,11 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   );
 
   // 2. Ovoz va AI Holati
-  const [voiceType, setVoiceType] = useState<"ayol" | "erkak">("ayol");
+  const [voiceType, setVoiceType] = useState<string>("ayol");
+  const [fishAudioApiKey, setFishAudioApiKey] = useState<string>("");
+  const [showFishKey, setShowFishKey] = useState<boolean>(false);
+  const [fishKeyConfigured, setFishKeyConfigured] = useState<boolean>(false);
+  const [maskedFishKey, setMaskedFishKey] = useState<string>("");
   const [ttsSpeed, setTtsSpeed] = useState<number>(1.0);
   const [autoSpeak, setAutoSpeak] = useState<boolean>(true);
   const [vadEnabled, setVadEnabled] = useState<boolean>(true);
@@ -194,6 +261,11 @@ export const AccountPage: React.FC<AccountPageProps> = ({
           if (data.avatar) setAvatarStyle(data.avatar);
           if (data.avatar_url) setAvatarUrl(data.avatar_url);
           if (data.voice_type) setVoiceType(data.voice_type);
+          if (data.fish_audio_api_key) {
+            const fk = data.fish_audio_api_key;
+            setFishKeyConfigured(true);
+            setMaskedFishKey(fk.length > 10 ? `${fk.slice(0, 7)}...${fk.slice(-4)}` : "●●●●●●");
+          }
           if (typeof data.tts_speed === "number") setTtsSpeed(data.tts_speed);
           if (typeof data.auto_speak === "boolean") setAutoSpeak(data.auto_speak);
           if (typeof data.vad_enabled === "boolean") setVadEnabled(data.vad_enabled);
@@ -286,12 +358,20 @@ export const AccountPage: React.FC<AccountPageProps> = ({
         ...(cerebrasApiKey.trim() ? { cerebras_api_key: cerebrasApiKey.trim() } : {}),
         ...(openrouterApiKey.trim() ? { openrouter_api_key: openrouterApiKey.trim() } : {}),
         ...(nvidiaApiKey.trim() ? { nvidia_api_key: nvidiaApiKey.trim() } : {}),
+        ...(fishAudioApiKey.trim() ? { fish_audio_api_key: fishAudioApiKey.trim() } : {}),
         settings: {
           language: responseLang,
           tone: toneStyle,
           theme: themeMode,
         },
       } as any);
+
+      if (fishAudioApiKey.trim()) {
+        const masked = fishAudioApiKey.trim().slice(0, 7) + "..." + fishAudioApiKey.trim().slice(-4);
+        setFishKeyConfigured(true);
+        setMaskedFishKey(masked);
+        setFishAudioApiKey("");
+      }
 
       if (geminiApiKey.trim()) {
         try {
@@ -336,21 +416,27 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     }
   };
 
-  // Ovozni jonli sinab ko'rish
-  const handleTestVoiceAudio = async (voiceId: "ayol" | "erkak") => {
+  // Ovozni jonli sinab ko'rish (Barcha 6 ta ovoz: Edge-TTS, Fish Audio, RVC)
+  const handleTestVoiceAudio = async (voiceId: string) => {
     setTestingVoiceId(voiceId);
     try {
       // Ovoz turini o'rnatish
       setVoiceType(voiceId);
       await backendService.updateAccount({ voice_type: voiceId, tts_speed: ttsSpeed } as any);
 
-      const phrase =
-        voiceId === "ayol"
-          ? "Salom! Men Madina, Misa AI ning ovozli yordamchisiman."
-          : "Assalomu alaykum! Men Sardor, sizning intellektual yordamchingizman.";
+      const samplePhrases: Record<string, string> = {
+        ayol: "Salom! Men Madina, Misa AI ning ovozli yordamchisiman.",
+        erkak: "Assalomu alaykum! Men Sardor, sizning intellektual yordamchingizman.",
+        fish_yigit: "Assalomu alaykum! Ishlar qalay, bugun qanday vazifalarni bajaramiz?",
+        fish_anime: "Salom! Men siz bilan doim birgaman, birgalikda ajoyib natijalarga erishamiz!",
+        ashley: "Salom! Men Ashley, tizim sizning barcha buyruqlaringizga tayyor.",
+        yukari: "Assalomu alaykum! Men Yukari, birgalikda zo'r ishlar qilamiz!",
+      };
 
+      const phrase = samplePhrases[voiceId] || "Salom! Misa AI ovozi faollashtirildi.";
       await backendService.speakText(phrase, voiceId);
-      showToast(voiceId === "ayol" ? "Madina ovozi yangradi 🔊" : "Sardor ovozi yangradi 🔊");
+      const voiceObj = VOICE_OPTIONS.find((v) => v.id === voiceId);
+      showToast(`${voiceObj ? voiceObj.name : voiceId} ovozi yangradi 🔊`);
     } catch {
       showToast("Ovoz sinovida xatolik");
     } finally {
@@ -854,163 +940,127 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                 </div>
               </div>
 
-              {/* Madina vs Sardor Vizual Tanlash Kartalari */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
-                {/* 1. Madina (Ayol) */}
-                <div
-                  onClick={() => setVoiceType("ayol")}
-                  style={{
-                    padding: "16px",
-                    borderRadius: "16px",
-                    background:
-                      voiceType === "ayol" ? "rgba(147, 3, 197, 0.2)" : "rgba(2, 6, 14, 0.45)",
-                    border:
-                      voiceType === "ayol"
-                        ? "2px solid #C04CFD"
-                        : "1px solid rgba(255, 255, 255, 0.08)",
-                    cursor: "pointer",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "10px",
-                    transition: "all 0.15s ease",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <span
-                        style={{
-                          width: "10px",
-                          height: "10px",
-                          borderRadius: "50%",
-                          background: voiceType === "ayol" ? "#C04CFD" : "rgba(255,255,255,0.2)",
-                          boxShadow: voiceType === "ayol" ? "0 0 10px #C04CFD" : "none",
-                        }}
-                      />
-                      <span style={{ fontSize: "14px", fontWeight: 700, color: "#FFFFFF" }}>
-                        Madina (Ayol)
-                      </span>
-                    </div>
-                    <span
+              {/* 6 ta Kuchli Ovoz Tanlash Kartalari (Edge-TTS, Fish Audio, RVC) */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                  gap: "14px",
+                }}
+              >
+                {VOICE_OPTIONS.map((voice) => {
+                  const isSelected = voiceType === voice.id;
+                  const isTesting = testingVoiceId === voice.id;
+                  return (
+                    <div
+                      key={voice.id}
+                      onClick={() => setVoiceType(voice.id)}
                       style={{
-                        fontSize: "11px",
-                        padding: "2px 8px",
-                        borderRadius: "8px",
-                        background: "rgba(192, 76, 253, 0.2)",
-                        color: "#E8B3FF",
-                        fontWeight: 600,
-                      }}
-                    >
-                      uz-UZ-Madina
-                    </span>
-                  </div>
-                  <p style={{ fontSize: "12px", color: "var(--text-secondary)", margin: 0, lineHeight: 1.4 }}>
-                    Yumshoq, muloyim va tabiiy intonatsiyali milliy o'zbek ovozi. Kotiba va suhbatlar uchun tavsiya etiladi.
-                  </p>
-                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "4px" }}>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleTestVoiceAudio("ayol");
-                      }}
-                      disabled={testingVoiceId === "ayol"}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        padding: "6px 12px",
-                        borderRadius: "10px",
-                        background: "rgba(255, 255, 255, 0.08)",
-                        border: "1px solid rgba(255, 255, 255, 0.12)",
-                        color: "#F5F0FF",
-                        fontSize: "11.5px",
-                        fontWeight: 600,
+                        padding: "16px",
+                        borderRadius: "16px",
+                        background: isSelected
+                          ? "rgba(147, 3, 197, 0.22)"
+                          : "rgba(2, 6, 14, 0.45)",
+                        border: isSelected
+                          ? "2px solid #C04CFD"
+                          : "1px solid rgba(255, 255, 255, 0.08)",
                         cursor: "pointer",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "10px",
+                        transition: "all 0.18s ease",
+                        boxShadow: isSelected
+                          ? "0 4px 20px rgba(192, 76, 253, 0.15)"
+                          : "none",
                       }}
                     >
-                      <VolumeIcon size={12} color="#E8B3FF" />
-                      <span>{testingVoiceId === "ayol" ? "Yangramoqda..." : "Tinglab ko'rish"}</span>
-                    </button>
-                  </div>
-                </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "flex-start",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span
+                            style={{
+                              width: "10px",
+                              height: "10px",
+                              borderRadius: "50%",
+                              background: isSelected ? voice.badgeColor || "#C04CFD" : "rgba(255,255,255,0.2)",
+                              boxShadow: isSelected ? `0 0 10px ${voice.badgeColor || "#C04CFD"}` : "none",
+                            }}
+                          />
+                          <span style={{ fontSize: "14px", fontWeight: 700, color: "#FFFFFF" }}>
+                            {voice.name}
+                          </span>
+                        </div>
+                        <span
+                          style={{
+                            fontSize: "10.5px",
+                            padding: "2px 8px",
+                            borderRadius: "8px",
+                            background: isSelected ? "rgba(192, 76, 253, 0.25)" : "rgba(255, 255, 255, 0.08)",
+                            color: isSelected ? "#F3E8FF" : "var(--text-secondary)",
+                            fontWeight: 600,
+                            border: `1px solid ${isSelected ? "rgba(192, 76, 253, 0.4)" : "rgba(255, 255, 255, 0.08)"}`,
+                          }}
+                        >
+                          {voice.badge}
+                        </span>
+                      </div>
 
-                {/* 2. Sardor (Erkak) */}
-                <div
-                  onClick={() => setVoiceType("erkak")}
-                  style={{
-                    padding: "16px",
-                    borderRadius: "16px",
-                    background:
-                      voiceType === "erkak" ? "rgba(147, 3, 197, 0.2)" : "rgba(2, 6, 14, 0.45)",
-                    border:
-                      voiceType === "erkak"
-                        ? "2px solid #C04CFD"
-                        : "1px solid rgba(255, 255, 255, 0.08)",
-                    cursor: "pointer",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "10px",
-                    transition: "all 0.15s ease",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <span
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ fontSize: "11px", color: voice.badgeColor || "#C04CFD", fontWeight: 600 }}>
+                          {voice.category}
+                        </span>
+                        <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)" }}>•</span>
+                        <span style={{ fontSize: "10.5px", color: "var(--text-secondary)", fontFamily: "monospace" }}>
+                          {voice.sub}
+                        </span>
+                      </div>
+
+                      <p
                         style={{
-                          width: "10px",
-                          height: "10px",
-                          borderRadius: "50%",
-                          background: voiceType === "erkak" ? "#C04CFD" : "rgba(255,255,255,0.2)",
-                          boxShadow: voiceType === "erkak" ? "0 0 10px #C04CFD" : "none",
+                          fontSize: "12px",
+                          color: "var(--text-secondary)",
+                          margin: 0,
+                          lineHeight: 1.4,
+                          minHeight: "34px",
                         }}
-                      />
-                      <span style={{ fontSize: "14px", fontWeight: 700, color: "#FFFFFF" }}>
-                        Sardor (Erkak)
-                      </span>
+                      >
+                        {voice.desc}
+                      </p>
+
+                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "4px" }}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleTestVoiceAudio(voice.id);
+                          }}
+                          disabled={isTesting}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            padding: "6px 12px",
+                            borderRadius: "10px",
+                            background: isSelected ? "rgba(192, 76, 253, 0.2)" : "rgba(255, 255, 255, 0.08)",
+                            border: `1px solid ${isSelected ? "rgba(192, 76, 253, 0.35)" : "rgba(255, 255, 255, 0.12)"}`,
+                            color: isSelected ? "#FFFFFF" : "#F5F0FF",
+                            fontSize: "11.5px",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                        >
+                          <VolumeIcon size={12} color={isSelected ? "#E8B3FF" : "currentColor"} />
+                          <span>{isTesting ? "Yangramoqda..." : "Tinglab ko'rish"}</span>
+                        </button>
+                      </div>
                     </div>
-                    <span
-                      style={{
-                        fontSize: "11px",
-                        padding: "2px 8px",
-                        borderRadius: "8px",
-                        background: "rgba(192, 76, 253, 0.2)",
-                        color: "#E8B3FF",
-                        fontWeight: 600,
-                      }}
-                    >
-                      uz-UZ-Sardor
-                    </span>
-                  </div>
-                  <p style={{ fontSize: "12px", color: "var(--text-secondary)", margin: 0, lineHeight: 1.4 }}>
-                    Jiddiy, ishonchli va chuqur tembrli erkak ovozi. Texnik buyruqlar va boshqaruv uchun qulay.
-                  </p>
-                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "4px" }}>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleTestVoiceAudio("erkak");
-                      }}
-                      disabled={testingVoiceId === "erkak"}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        padding: "6px 12px",
-                        borderRadius: "10px",
-                        background: "rgba(255, 255, 255, 0.08)",
-                        border: "1px solid rgba(255, 255, 255, 0.12)",
-                        color: "#F5F0FF",
-                        fontSize: "11.5px",
-                        fontWeight: 600,
-                        cursor: "pointer",
-                      }}
-                    >
-                      <VolumeIcon size={12} color="#E8B3FF" />
-                      <span>{testingVoiceId === "erkak" ? "Yangramoqda..." : "Tinglab ko'rish"}</span>
-                    </button>
-                  </div>
-                </div>
+                  );
+                })}
               </div>
 
               {/* Ovoz Tezligi Slayderi */}
@@ -1123,6 +1173,116 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                     }}
                   >
                     <span style={{ width: "16px", height: "16px", borderRadius: "50%", background: "#FFFFFF" }} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Fish Audio Bulut Integratsiyasi Card */}
+              <div
+                style={{
+                  padding: "16px 18px",
+                  borderRadius: "16px",
+                  background: "rgba(2, 6, 14, 0.45)",
+                  border: "1px solid rgba(192, 76, 253, 0.25)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "12px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <div
+                      style={{
+                        width: "28px",
+                        height: "28px",
+                        borderRadius: "8px",
+                        background: "rgba(16, 185, 129, 0.2)",
+                        border: "1px solid rgba(52, 211, 153, 0.35)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <SparklesIcon size={14} color="#34D399" />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "13px", fontWeight: 700, color: "#FFFFFF" }}>
+                        Fish Audio Bulut Integratsiyasi (Drama 3 & S2.1 Pro)
+                      </div>
+                      <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                        Yosh Dinamik (Aziz) va Anime Drama 3 ovozlari uchun API kaliti
+                      </div>
+                    </div>
+                  </div>
+                  {fishKeyConfigured && (
+                    <span
+                      style={{
+                        fontSize: "11px",
+                        padding: "3px 10px",
+                        borderRadius: "999px",
+                        background: "rgba(16, 185, 129, 0.15)",
+                        border: "1px solid rgba(52, 211, 153, 0.35)",
+                        color: "#34D399",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Faol: {maskedFishKey || "sk-fish-... ✓"}
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <div style={{ position: "relative", flex: 1 }}>
+                    <input
+                      type={showFishKey ? "text" : "password"}
+                      value={fishAudioApiKey}
+                      onChange={(e) => setFishAudioApiKey(e.target.value)}
+                      placeholder={fishKeyConfigured ? "Yangi Fish Audio kalitini kiritish (sk-fish-...)" : "Fish Audio API kaliti (sk-fish-...)"}
+                      className="misa-glass-input"
+                      style={{
+                        width: "100%",
+                        padding: "10px 40px 10px 14px",
+                        borderRadius: "12px",
+                        fontSize: "12.5px",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowFishKey(!showFishKey)}
+                      style={{
+                        position: "absolute",
+                        right: "10px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "transparent",
+                        border: "none",
+                        color: "var(--text-secondary)",
+                        cursor: "pointer",
+                        fontSize: "12px",
+                      }}
+                      title={showFishKey ? "Yashirish" : "Ko'rsatish"}
+                    >
+                      {showFishKey ? "👁" : "👁‍🗨"}
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveProfile()}
+                    disabled={savingProfile || !fishAudioApiKey.trim()}
+                    style={{
+                      padding: "10px 18px",
+                      borderRadius: "12px",
+                      background: fishAudioApiKey.trim() ? "#9303C5" : "rgba(255, 255, 255, 0.08)",
+                      border: "none",
+                      color: "#FFFFFF",
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      cursor: fishAudioApiKey.trim() ? "pointer" : "default",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Saqlash
                   </button>
                 </div>
               </div>
