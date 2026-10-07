@@ -217,17 +217,42 @@ def _web_search(query: str, platform: str = "google") -> dict:
                 "message": f"'{query}' bo'yicha natijalar:\n{combined}",
             }
 
-        # 4. Natija topilmadi — brauzerni OCHMA!
-        # Agent o'z AI bilimidan javob bersin (Gemini kuchida!)
+        # 4. Wikipedia API orqali qidiruv (kamida 70% ishonchlilikdagi ensiklopedik ma'lumot)
+        try:
+            wiki_resp = requests.get(
+                "https://uz.wikipedia.org/w/api.php",
+                params={"action": "query", "list": "search", "srsearch": query, "format": "json", "utf8": 1},
+                headers={"User-Agent": "MisaAI/9.0 (misa@assistant.ai)"},
+                timeout=5,
+            )
+            if wiki_resp.status_code == 200:
+                wiki_data = wiki_resp.json()
+                items = wiki_data.get("query", {}).get("search", [])
+                if items:
+                    first = items[0]
+                    raw_snip = first.get("snippet", "")
+                    clean_snip = re.sub(r"<[^>]+>", "", raw_snip).strip()
+                    clean_title = first.get("title", "")
+                    return {
+                        "answer": f"{clean_title}: {clean_snip}",
+                        "source": "Vikipediya",
+                        "confidence": "85%",
+                        "message": f"'{clean_title}' bo'yicha ma'lumot (Vikipediya):\n{clean_snip}",
+                    }
+        except Exception:
+            pass
+
+        # 5. Natija topilmadi — brauzerni OCHMA!
+        # Agent o'z AI bilimidan javob bersin (kamida 70% ishonchlilik mezoni bilan)
         return {
-            "message": "Internetda aniq javob topilmadi. O'z bilimingdan javob ber.",
+            "message": "Internetda aniq javob topilmadi. O'z bilimingdan javob ber (kamida 70% aniqlik talab etiladi).",
             "no_results": True,
         }
 
     except Exception as e:
         # API xato — Agent o'zi javob bersin
         return {
-            "message": f"Qidiruv API ishlamadi. O'z bilimingdan javob ber.",
+            "message": f"Qidiruv API ishlamadi. O'z bilimingdan javob ber (kamida 70% aniqlik mezoniga amal qil).",
             "error": str(e),
             "no_results": True,
         }
@@ -600,8 +625,6 @@ def _weather(city: str = "Tashkent") -> dict:
     load_dotenv()
 
     api_key = os.getenv("OPENWEATHER_API_KEY", "")
-    if not api_key:
-        return {"error": "Ob-havo API kaliti topilmadi"}
 
     # O'zbek shahar nomlari
     SHAHAR = {
@@ -619,6 +642,30 @@ def _weather(city: str = "Tashkent") -> dict:
         "urganch": "Urgench",
     }
     city_en = SHAHAR.get(city.lower().strip(), city)
+
+    if not api_key:
+        try:
+            wttr_resp = requests.get(f"https://wttr.in/{city_en}?format=j1", timeout=5)
+            if wttr_resp.status_code == 200:
+                w_data = wttr_resp.json()
+                current = w_data.get("current_condition", [{}])[0]
+                temp = current.get("temp_C", "N/A")
+                feels = current.get("FeelsLikeC", temp)
+                humidity = current.get("humidity", "N/A")
+                wind = current.get("windspeedKmph", "N/A")
+                desc = current.get("weatherDesc", [{}])[0].get("value", "Ochiq havo")
+                return {
+                    "city": city,
+                    "temp": temp,
+                    "feels_like": feels,
+                    "humidity": humidity,
+                    "wind": wind,
+                    "description": desc,
+                    "message": f"🌤️ {city} shahrida havo harorati {temp}°C (his qilinishi {feels}°C), namlik {humidity}%, {desc}.",
+                }
+        except Exception:
+            pass
+        return {"error": "Ob-havo API kaliti topilmadi"}
 
     try:
         resp = requests.get(
@@ -1344,10 +1391,10 @@ def _screen_analyze(question: str = "Ekranda nima bor?") -> dict:
         from core.ai_engine import ekran_tahlil
 
         result = ekran_tahlil(question)
-        if result:
+        if result and not result.startswith("Ekran tasvirini olib bo'lmadi"):
             return {"message": result, "question": question}
         else:
-            return {"error": "Ekran tahlil qilinmadi"}
+            return {"error": result or "Ekran tahlil qilinmadi"}
     except ImportError:
         return {"error": "ai_engine moduli topilmadi"}
     except Exception as e:
@@ -1369,7 +1416,7 @@ TOOL_SCREEN = Tool(
     capabilities=['screen_vision', 'screen_ocr', 'desktop_vision'],
     aliases=['ekran', 'screen', 'vision'],
     risk_level=RiskLevel.LOW,
-    timeout=15.0,
+    timeout=35.0,
     idempotent=True,
     destructive=False,
 )
@@ -1750,14 +1797,20 @@ def _app_check(category: str = "code_editor", app_name: str = "") -> dict:
                 else 0,
             )
             if result.returncode == 0:
+                loc = result.stdout.strip().split("\n")[0]
                 return {
                     "name": app_name,
                     "found": True,
-                    "path": result.stdout.strip().split("\n")[0],
+                    "path": loc,
+                    "message": f"✅ Ha, kompyuteringizda **{app_name}** ilovasi o'rnatilgan ({loc}).",
                 }
         except Exception:
             pass
-        return {"name": app_name, "found": False}
+        return {
+            "name": app_name,
+            "found": False,
+            "message": f"❌ Kompyuteringizda **{app_name}** ilovasi topilmadi (o'rnatilmagan).",
+        }
 
     # Kategoriya bo'yicha barcha ilovalarni tekshirish
     if category not in APP_DATABASE:

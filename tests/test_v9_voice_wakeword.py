@@ -8,23 +8,12 @@ from core.command_dispatcher import CommandDispatcher
 def test_misa_wake_word_calling_only():
     dispatcher = CommandDispatcher()
     
-    # User calls Misa by name only
-    success, reply = dispatcher.dispatch_local("Misa")
-    assert success is True
-    assert "Labbay" in reply
-    assert "tinglayapman" in reply
-
-    success, reply = dispatcher.dispatch_local("Salom Misa")
-    assert success is True
-    assert "Labbay" in reply
-
-    success, reply = dispatcher.dispatch_local("Hey Misa")
-    assert success is True
-    assert "Labbay" in reply
-
-    success, reply = dispatcher.dispatch_local("Ey Misa")
-    assert success is True
-    assert "Labbay" in reply
+    # User calls Misa or Mikasa
+    for wake in ["Misa", "misa", "Mikasa", "mikasa", "Salom Misa", "Salom Mikasa", "Hey Mikasa", "микаса", "миса"]:
+        success, reply = dispatcher.dispatch_local(wake)
+        assert success is True, f"Failed for {wake}"
+        assert "Labbay" in reply, f"No Labbay for {wake}"
+        assert "tinglayapman" in reply, f"No tinglayapman for {wake}"
 
 
 def test_misa_wake_word_with_local_command():
@@ -43,6 +32,14 @@ def test_misa_wake_word_with_local_command():
     assert success is True
     assert "Bugun" in reply
     assert "yil" in reply
+
+
+def test_device_telegram_check():
+    dispatcher = CommandDispatcher()
+    success, reply = dispatcher.dispatch_local("bu qurilmada telegram bormi?", user_name="Ustoz")
+    assert success is True
+    assert "Telegram" in reply or "telegram" in reply.lower()
+    assert ("o'rnatilgan" in reply or "mavjud" in reply or "AyuGram" in reply)
 
 
 def test_misa_wake_word_custom_user():

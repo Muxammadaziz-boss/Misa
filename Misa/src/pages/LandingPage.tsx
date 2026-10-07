@@ -102,7 +102,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [assistantResponse, setAssistantResponse] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [micError, setMicError] = useState<string | null>(null);
-  const [attachedFiles, setAttachedFiles] = useState<{ name: string; size: number; content?: string }[]>([]);
+  const [attachedFiles, setAttachedFiles] = useState<
+    { name: string; size: number; content?: string; dataUrl?: string; type?: "text" | "image" }[]
+  >([]);
 
   // Startup System Briefing (Voice & Banner)
   const [startupBriefing, setStartupBriefing] = useState<string | null>(null);
@@ -114,6 +116,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
   const [agentGoal, setAgentGoal] = useState<string | null>(null);
   const [agentSteps, setAgentSteps] = useState<AgentStepItem[]>([]);
+  const [activeVoiceType, setActiveVoiceType] = useState<"ayol" | "erkak">("ayol");
 
   const recognitionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -128,6 +131,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const isSecretaryModeRef = useRef<boolean>(true);
 
   useEffect(() => {
+    backendService.getAccount().then((acc) => {
+      if (acc && (acc.voice_type === "ayol" || acc.voice_type === "erkak")) {
+        setActiveVoiceType(acc.voice_type);
+      }
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     const clockInterval = setInterval(() => {
       setCurrentTime(new Date());
     }, 15000);
@@ -137,6 +148,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         const data = await backendService.getSystemTelemetry();
         if (data && data.ok !== false) {
           setTelemetry(data);
+          // Backend aloqada ekanligi tasdiqlandi -> xatolik bannerini darhol yopamiz
+          setStartupBriefing((prev) => {
+            if (prev && prev.includes("18420-portda ishga tushirilishi kutilmoqda")) {
+              return null;
+            }
+            return prev;
+          });
         }
       } catch {
         // Silent fallback
@@ -158,6 +176,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     });
     const unsubStatus = backendService.onStatusChange((status) => {
       setBackendStatus(status);
+      if (status.status === "online") {
+        setStartupBriefing((prev) => {
+          if (prev && prev.includes("18420-portda ishga tushirilishi kutilmoqda")) {
+            return null;
+          }
+          return prev;
+        });
+      }
     });
     const unsubResp = backendService.onResponse((data) => {
       setAssistantResponse(data.text);
@@ -202,21 +228,24 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       }
       sessionStorage.setItem("misa_v9_startup_briefing_done", "true");
 
-      // Backend ishga tushishi uchun qayta tekshiruv (retry loop, jami ~4 soniya)
+      // Backend ishga tushishi uchun qayta tekshiruv (retry loop, jami ~7 soniya)
       let currentStat: BackendStatus = { status: "connecting" };
-      for (let attempt = 0; attempt < 6; attempt++) {
+      for (let attempt = 0; attempt < 10; attempt++) {
         try {
           currentStat = await backendService.checkStatus();
           if (currentStat.status === "online") break;
         } catch {
           currentStat = { status: "offline" };
         }
-        await new Promise((r) => setTimeout(r, 650));
+        await new Promise((r) => setTimeout(r, 700));
       }
 
-      let account = null;
+      let account: any = null;
       try {
         account = await backendService.getAccount();
+        if (account?.voice_type === "ayol" || account?.voice_type === "erkak") {
+          setActiveVoiceType(account.voice_type);
+        }
       } catch {}
 
       let textToSpeak = "";
@@ -241,7 +270,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
       // Faqat server online bo'lsa yoki haqiqiy milliy ovoz bo'lsagina ovozda ijro etamiz
       if (currentStat.status === "online") {
-        await playSpeechAudio(textToSpeak);
+        const voiceChoice = (account?.voice_type === "ayol" || account?.voice_type === "erkak")
+          ? account.voice_type
+          : activeVoiceType || "ayol";
+        await playSpeechAudio(textToSpeak, voiceChoice);
       }
       setTimeout(() => {
         startSecretaryListening();
@@ -329,8 +361,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     setAudioLevel(0);
   };
 
-  // ── Multi-Layer High-Fidelity Speech Player (Edge TTS + Web Speech Synthesis) ──
-  const playSpeechAudio = async (text: string): Promise<void> => {
+  // ── Multi-Layer High-Fidelity Speech Player (Edge TTS) ──
+  const playSpeechAudio = async (text: string, voiceOverride?: "ayol" | "erkak"): Promise<void> => {
     const cleanText = text
       .replace(/\[.*?\]\(.*?\)/g, "")
       .replace(/```[\s\S]*?```/g, "")
@@ -370,77 +402,47 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         }
       };
 
-      // 1. Try Backend Speech first (Edge-TTS via backendService.speakText)
+      // 1. Backend Edge-TTS orqali yuqori sifatli milliy ovozda ijro etish (uz-UZ-MadinaNeural / uz-UZ-SardorNeural)
       let backendPlayed = false;
-      try {
-        backendPlayed = await backendService.speakText(cleanText);
-      } catch {
-        backendPlayed = false;
+      const voiceToUse = voiceOverride || activeVoiceType || "ayol";
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          backendPlayed = await backendService.speakText(cleanText, voiceToUse);
+          if (backendPlayed) break;
+        } catch {
+          backendPlayed = false;
+        }
+        await new Promise((r) => setTimeout(r, 400));
       }
 
       if (backendPlayed) {
-        // Estimate speech duration: ~13 characters per second in Uzbek
+        // O'zbek tilida o'rtacha gapirish tezligi: soniyasiga ~13 belgi
         const durationMs = Math.max(1600, Math.min(18000, (cleanText.length / 13) * 1000));
         setTimeout(finish, durationMs);
         return;
       }
 
-      // 2. Client Browser Speech Synthesis fallback (Web Speech API)
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        try {
-          window.speechSynthesis.cancel();
-          const utterance = new SpeechSynthesisUtterance(cleanText);
-          utterance.lang = "uz-UZ";
-          utterance.rate = 1.0;
-          utterance.pitch = 1.0;
-
-          const voices = window.speechSynthesis.getVoices();
-          const uzVoice = voices.find(
-            (v) =>
-              v.lang.startsWith("uz") ||
-              v.lang.startsWith("tr") ||
-              v.name.toLowerCase().includes("madina") ||
-              v.name.toLowerCase().includes("sardor")
-          );
-          if (uzVoice) {
-            utterance.voice = uzVoice;
-            utterance.onend = finish;
-            utterance.onerror = finish;
-
-            const safetyTimer = setTimeout(finish, Math.max(2000, (cleanText.length / 10) * 1000));
-            utterance.onend = () => {
-              clearTimeout(safetyTimer);
-              finish();
-            };
-
-            window.speechSynthesis.speak(utterance);
-            return;
-          } else {
-            // Brauzerda milliy ovoz yo'q bo'lsa, inglizcha sintetik ovozda o'qitmaymiz
-            finish();
-            return;
-          }
-        } catch {
-          finish();
-        }
-      } else {
-        finish();
-      }
+      // Agar backend bir lahzaga ulanmagan bo'lsa, xunuk inglizcha/ruscha robot ovozlarga
+      // aslo o'tmaslik kerak — xavfsiz yakunlaymiz
+      finish();
     });
   };
 
-  // ── Wake-Word & Call Prefix Parser ("Misa ...") ──
+  // ── Wake-Word & Call Prefix Parser ("Misa ...", "Mikasa ...") ──
   const parseMisaInvocation = (rawText: string) => {
     const trimmed = rawText.trim();
-    const callRegex = /^(?:(?:salom|assalomu\s+alaykum|hey|ey|o['']?y)\s+)?(?:misa|mikasa)(?:[,\s:!.]+|$)/i;
+    const callRegex = /^(?:(?:salom|assalomu\s+alaykum|hey|ey|o['']?y|hoy|qani|iltimos)\s+)?(?:misa|mikasa|micasa|миса|микаса|мекаса|mekasa)(?:[,\s:!.]+|$)/i;
     const match = trimmed.match(callRegex);
-    const containsMisa = match !== null || /\b(?:misa|mikasa)\b/i.test(trimmed);
+    const containsMisa =
+      match !== null ||
+      /\b(?:misa|mikasa|micasa|миса|микаса|мекаса|mekasa)\b/i.test(trimmed) ||
+      /(?:misa|mikasa|micasa|миса|микаса)/i.test(trimmed);
 
     let command = trimmed;
     if (match) {
       command = trimmed.slice(match[0].length).trim();
     } else if (containsMisa) {
-      command = trimmed.replace(/\b(?:misa|mikasa)\b/gi, "").trim();
+      command = trimmed.replace(/\b(?:misa|mikasa|micasa|миса|микаса|мекаса|mekasa)\b/gi, "").trim();
     }
 
     return {
@@ -503,6 +505,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
     const fullQuery = commandToExecute + attachmentContext;
 
+    const attachedImage = attachedFiles.find((f) => f.dataUrl || f.type === "image");
+    const imageToSend = attachedImage?.dataUrl;
+
     setUserTranscript(clean);
     setAttachedFiles([]);
     setAssistantResponse("");
@@ -515,7 +520,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
     try {
       // Backendga { speak: false } yuboriladi, shunda backend o'zi alohida gapirib 2 marta takrorlanmaydi
-      const res = await backendService.sendMessage(fullQuery, { speak: false });
+      const res = await backendService.sendMessage(fullQuery, { speak: false, image: imageToSend });
       const replyText = res.reply || "Buyruq bajarildi.";
       setAssistantResponse(replyText);
       setIsProcessing(false);
@@ -736,7 +741,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     const files = e.target.files;
     if (!files || files.length === 0) return;
     Array.from(files).forEach((file) => {
-      if (
+      if (file.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name)) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          setAttachedFiles((prev) => [
+            ...prev,
+            { name: file.name, size: file.size, dataUrl: String(reader.result || ""), type: "image" },
+          ]);
+        };
+        reader.readAsDataURL(file);
+      } else if (
         file.size <= 256 * 1024 &&
         (file.type.startsWith("text/") ||
           /\.(txt|md|json|py|ts|tsx|js|csv|html|css|log)$/i.test(file.name))
@@ -745,7 +759,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         reader.onload = () => {
           setAttachedFiles((prev) => [
             ...prev,
-            { name: file.name, size: file.size, content: String(reader.result || "") },
+            { name: file.name, size: file.size, content: String(reader.result || ""), type: "text" },
           ]);
         };
         reader.readAsText(file);

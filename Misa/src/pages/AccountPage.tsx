@@ -349,7 +349,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
           ? "Salom! Men Madina, Misa AI ning ovozli yordamchisiman."
           : "Assalomu alaykum! Men Sardor, sizning intellektual yordamchingizman.";
 
-      await backendService.speakText(phrase);
+      await backendService.speakText(phrase, voiceId);
       showToast(voiceId === "ayol" ? "Madina ovozi yangradi 🔊" : "Sardor ovozi yangradi 🔊");
     } catch {
       showToast("Ovoz sinovida xatolik");

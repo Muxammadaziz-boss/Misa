@@ -18,9 +18,10 @@ from core.intelligence.memory_types import (
 )
 from core.intelligence.memory_policy import MemoryPolicy
 from core.intelligence.memory_retriever import MemoryRetriever
+from core.common_paths import get_data_path, get_base_dir
 
 logger = logging.getLogger(__name__)
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Loyiha ildizi
+BASE_DIR = get_base_dir()
 
 
 class AgentMemory:
@@ -37,12 +38,10 @@ class AgentMemory:
         # Qisqa muddatli xotira (RAM)
         self._short_term = deque(maxlen=max_short_term)
 
-        # Fayl yo'llari
-        self._conversations_file = os.path.join(
-            BASE_DIR, "data", "agent_conversations.json"
-        )
-        self._profile_file = os.path.join(BASE_DIR, "data", "agent_profile.json")
-        self._knowledge_file = os.path.join(BASE_DIR, "data", "agent_knowledge.json")
+        # Fayl yo'llari (Portable va xavfsiz storage)
+        self._conversations_file = get_data_path("agent_conversations.json")
+        self._profile_file = get_data_path("agent_profile.json")
+        self._knowledge_file = get_data_path("agent_knowledge.json")
 
         self._max_conversations = max_conversations
 
@@ -517,6 +516,7 @@ class AgentMemory:
 
     def _save_json(self, path: str, data):
         """JSON faylga xavfsiz va atomik saqlash (Windows-safe fallback bilan)"""
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
         temp_path = f"{path}.tmp"
         try:
             with open(temp_path, "w", encoding="utf-8") as f:

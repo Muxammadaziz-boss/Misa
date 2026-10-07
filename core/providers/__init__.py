@@ -1,6 +1,17 @@
 # ========== core/providers/__init__.py ==========
 # Misa AI 9.0.0 — Multi-Provider LLM Infrastructure
 
+import os
+try:
+    from dotenv import load_dotenv
+    from core.common_paths import get_base_dir
+    base = get_base_dir()
+    for env_path in [os.path.join(base, ".env"), os.path.join(base, "Misa", ".env"), ".env"]:
+        if os.path.isfile(env_path):
+            load_dotenv(env_path, override=False)
+except Exception:
+    pass
+
 from core.providers.base import (
     LLMProvider,
     StreamChunk,

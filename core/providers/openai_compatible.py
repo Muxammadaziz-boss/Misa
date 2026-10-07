@@ -70,6 +70,90 @@ def _extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _strip_reasoning(text: str) -> str:
+    """<think>...</think> va boshqa ichki fikrlash teglarini tozalash."""
+    if not text:
+        return ""
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    text = re.sub(r"<thought>.*?</thought>", "", text, flags=re.DOTALL)
+    return text.strip()
+
+
+def _is_leaked_reasoning(text: str) -> bool:
+    """Matn foydalanuvchiga qaratilgan javob emas, modelning ichki inglizcha monologi ekanligini aniqlash."""
+    if not text:
+        return False
+    t_lower = text.lower().strip()
+    reasoning_prefixes = [
+        "the user is asking",
+        "the user asks",
+        "the user wants",
+        "the user is inquiring",
+        "i should use the",
+        "i should check",
+        "i need to check",
+        "let me check",
+        "looking at the system",
+        "looking at the provided",
+        "so, 5 applications are listed",
+        "let me think",
+        "we need to answer",
+        "we should respond",
+        "according to the rules",
+        "according to the system",
+        "actually, the system information",
+    ]
+    return any(t_lower.startswith(p) for p in reasoning_prefixes)
+
+
+def _format_tool_schema(t: Dict[str, Any]) -> Dict[str, Any]:
+    """OpenAI / Groq / Cerebras API uchun qat'iy standartdagi JSON Schema formatlash."""
+    name = t.get("name", "unknown")
+    desc = t.get("description", "")
+    raw_params = t.get("parameters", {})
+
+    if isinstance(raw_params, dict) and raw_params.get("type") == "object" and "properties" in raw_params:
+        params_schema = raw_params
+    else:
+        properties = {}
+        required = []
+        if isinstance(raw_params, dict):
+            for p_name, p_def in raw_params.items():
+                if isinstance(p_def, dict):
+                    p_type = p_def.get("type", "string")
+                    if p_type in ("int", "integer"):
+                        p_type = "integer"
+                    elif p_type in ("float", "number"):
+                        p_type = "number"
+                    elif p_type in ("bool", "boolean"):
+                        p_type = "boolean"
+                    else:
+                        p_type = "string"
+                    prop_item: Dict[str, Any] = {"type": p_type}
+                    if p_def.get("description"):
+                        prop_item["description"] = p_def["description"]
+                    properties[p_name] = prop_item
+                    if p_def.get("required") is True:
+                        required.append(p_name)
+                else:
+                    properties[p_name] = {"type": "string"}
+        params_schema = {
+            "type": "object",
+            "properties": properties,
+        }
+        if required:
+            params_schema["required"] = required
+
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": desc,
+            "parameters": params_schema,
+        }
+    }
+
+
 class OpenAICompatibleProvider(LLMProvider):
     """
     OpenAI API spetsifikatsiyasiga (Chat Completions) mos keluvchi barcha
@@ -192,6 +276,10 @@ class OpenAICompatibleProvider(LLMProvider):
             "stream": stream,
         }
 
+        # Qwen modellarida ichki fikrlash (reasoning monologi) tokenlarni yeb qo'ymasligi va tezkor javob uchun:
+        if "qwen" in model.lower() and not (request.metadata and request.metadata.get("reasoning")):
+            payload["reasoning_effort"] = "none"
+
         # 4. Tool / Function Calling (agar talab qilinsa)
         if request.tools:
             formatted_tools = []
@@ -199,14 +287,7 @@ class OpenAICompatibleProvider(LLMProvider):
                 if isinstance(t, dict) and "function" in t:
                     formatted_tools.append(t)
                 elif isinstance(t, dict) and "name" in t:
-                    formatted_tools.append({
-                        "type": "function",
-                        "function": {
-                            "name": t["name"],
-                            "description": t.get("description", ""),
-                            "parameters": t.get("parameters", {"type": "object", "properties": {}}),
-                        }
-                    })
+                    formatted_tools.append(_format_tool_schema(t))
             if formatted_tools:
                 payload["tools"] = formatted_tools
                 payload["tool_choice"] = "auto"
@@ -235,6 +316,16 @@ class OpenAICompatibleProvider(LLMProvider):
         choice0 = choices[0]
         message = choice0.get("message") or {}
         raw_text = (message.get("content") or "").strip()
+        reasoning_text = (message.get("reasoning") or message.get("reasoning_content") or "").strip()
+        raw_text = _strip_reasoning(raw_text)
+
+        # DIQQAT: Inglizcha ichki fikrlash (reasoning) HECH QACHON foydalanuvchiga matn qilib ko'rsatilmaydi!
+        # Faqat agar unda structured JSON bo'lsa, JSON ni qidirib olamiz.
+        if not raw_text and reasoning_text:
+            extracted_from_reasoning = _extract_json_from_text(reasoning_text)
+            if extracted_from_reasoning and isinstance(extracted_from_reasoning, dict):
+                raw_text = json.dumps(extracted_from_reasoning)
+
         usage = raw_data.get("usage") or {}
 
         # 1. Function / Tool Calling tekshirish
@@ -249,15 +340,21 @@ class OpenAICompatibleProvider(LLMProvider):
             except Exception:
                 args = {}
 
+            clean_content = raw_text if (raw_text and not _is_leaked_reasoning(raw_text)) else f"'{func_name}' vositasi bajarilmoqda..."
+
             return AIResponse(
                 provider=self._name,
                 model=model,
                 type="command",
                 intent=func_name,
                 params=args,
-                content=raw_text or f"Tool '{func_name}' chaqirilmoqda.",
+                content=clean_content,
                 usage=usage,
-                metadata={"tool_call_id": tc.get("id"), "raw_tool_call": tc},
+                metadata={
+                    "tool_call_id": tc.get("id"),
+                    "raw_tool_call": tc,
+                    "reasoning": reasoning_text if reasoning_text else None,
+                },
                 raw_text=raw_text,
                 success=True,
             )
@@ -268,7 +365,12 @@ class OpenAICompatibleProvider(LLMProvider):
             resp_type = extracted.get("type", "answer")
             intent = extracted.get("intent")
             params = extracted.get("params") or {}
-            content = extracted.get("response") or extracted.get("question") or raw_text
+            content = extracted.get("response") or extracted.get("question")
+            if not content:
+                if resp_type == "command" and intent:
+                    content = f"'{intent}' buyrug'i bajarilmoqda..."
+                else:
+                    content = "Buyruq qabul qilindi."
 
             return AIResponse(
                 provider=self._name,
@@ -278,18 +380,34 @@ class OpenAICompatibleProvider(LLMProvider):
                 params=params,
                 content=str(content),
                 usage=usage,
-                metadata={"parsed_json": extracted},
+                metadata={
+                    "parsed_json": extracted,
+                    "reasoning": reasoning_text if reasoning_text else None,
+                },
                 raw_text=raw_text,
                 success=True,
             )
 
         # 3. Oddiy matnli javob
+        if _is_leaked_reasoning(raw_text):
+            logger.warning(f"[{self._name}] Model ({model}) ichki inglizcha fikrlashni chiqardi. Filtrlanyapti.")
+            raw_text = "So'rovingiz tushunildi. Natijani aniqlashtiryapman..."
+
+        # Agar javob bo'sh bo'lsa (masalan model barcha tokenlarni reasoning da sarflagan yoki uzilib qolgan)
+        if not raw_text.strip():
+            raise MalformedResponseError(
+                f"Provayder '{self._name}' ({model}) dan bo'sh javob olindi",
+                provider=self._name,
+                model=model,
+            )
+
         return AIResponse(
             provider=self._name,
             model=model,
             type="answer",
             content=raw_text,
             usage=usage,
+            metadata={"reasoning": reasoning_text if reasoning_text else None},
             raw_text=raw_text,
             success=True,
         )
@@ -321,6 +439,17 @@ class OpenAICompatibleProvider(LLMProvider):
                 json=payload,
                 timeout=self._timeout
             )
+
+            # Agar model reasoning_effort parametrini qabul qilmasa (400), uni olib tashlab qayta yuborish
+            if response.status_code == 400 and "reasoning_effort" in payload and "reasoning_effort" in response.text:
+                payload.pop("reasoning_effort", None)
+                response = requests.post(
+                    url,
+                    headers=headers,
+                    json=payload,
+                    timeout=self._timeout
+                )
+
             latency_ms = (time.time() - start_time) * 1000.0
 
             # Xatoliklarni tekshirish va tasniflash

@@ -147,12 +147,7 @@ class AIKeyManager:
             if ukey and now >= self._key_cooldowns.get(ukey, 0):
                 return ukey
 
-        # 2. Tizim kalitlari
-        for k in self._system_keys.get(p, []):
-            if k and now >= self._key_cooldowns.get(k, 0):
-                return k
-
-        # 3. Environment o'zgaruvchilari
+        # 2. Environment o'zgaruvchilari (MISA_<PROV>_API_KEY doimo ustuvor!)
         misa_env = os.getenv(f"MISA_{p.upper()}_API_KEY", "").strip()
         if misa_env and now >= self._key_cooldowns.get(misa_env, 0):
             return misa_env
@@ -161,11 +156,15 @@ class AIKeyManager:
         if std_env and now >= self._key_cooldowns.get(std_env, 0):
             return std_env
 
-        # 4. Maxsus taxalluslar
         if p == "gemini":
             g_env = os.getenv("GOOGLE_API_KEY", "").strip()
             if g_env and now >= self._key_cooldowns.get(g_env, 0):
                 return g_env
+
+        # 3. Tizim kalitlari (test kalitlari e'tiborsiz qoldiriladi)
+        for k in self._system_keys.get(p, []):
+            if k and "test" not in k.lower() and now >= self._key_cooldowns.get(k, 0):
+                return k
 
         # 5. data/config.json
         try:

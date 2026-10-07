@@ -21,33 +21,11 @@ import time
 import urllib.parse
 
 # Ishchi katalogni to'g'ri o'rnatish
-if getattr(sys, "frozen", False):
-    # PyInstaller muhiti (standalone bundled executable)
-    BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
-else:
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from core.common_paths import get_base_dir, get_data_dir
+
+BASE_DIR = get_base_dir()
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
-
-def get_data_dir() -> str:
-    """Xavfsiz ma'lumotlar papkasi yo'lini aniqlash (mahalliy data/ yoki %APPDATA%/MisaAI/data)."""
-    if custom := os.environ.get("MISA_DATA_DIR"):
-        os.makedirs(custom, exist_ok=True)
-        return custom
-    local_data = os.path.join(BASE_DIR, "data")
-    try:
-        os.makedirs(local_data, exist_ok=True)
-        test_file = os.path.join(local_data, ".write_test")
-        with open(test_file, "w") as f:
-            f.write("ok")
-        os.remove(test_file)
-        return local_data
-    except Exception:
-        pass
-    appdata = os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    safe_data = os.path.join(appdata, "MisaAI", "data")
-    os.makedirs(safe_data, exist_ok=True)
-    return safe_data
 
 DATA_DIR = get_data_dir()
 
@@ -413,17 +391,30 @@ async def handle_system_metrics(request):
 
 
 # ========== 2. CHAT & VOICE HANDLERS ==========
-def execute_command_pipeline(text: str, user: str, ovoz: str, mode: str = "ask", user_id: Optional[str] = None) -> str:
+def execute_command_pipeline(text: str, user: str, ovoz: str, mode: str = "ask", user_id: Optional[str] = None, image: Optional[str] = None) -> str:
     """
     Misa AI 9.0.0 — Unified Command & AI Pipeline
     Mahalliy buyruqlarni darhol kompyuterda bajaradi, murakkab savollarni AI ga yo'naltiradi.
     """
-    clean_text = text.strip()
-    if not clean_text:
+    clean_text = text.strip() if text else ""
+    if not clean_text and not image:
         return "Bo'sh so'rov."
 
-
     m, ai, mem, _, _, dispatcher = get_modules()
+
+    # Agar rasm biriktirilgan bo'lsa, uni Gemini Vision orqali tahlil qilish
+    if image:
+        if ai and hasattr(ai, "rasm_tahlil"):
+            try:
+                logger.info(f"Rasm tahlil qilinmoqda (Gemini Vision), so'rov: '{clean_text[:60]}'")
+                prompt = clean_text or "Ushbu rasmni o'zbek tilida batafsil va aniq tahlil qilib ber."
+                res = ai.rasm_tahlil(image, prompt, user_id=user_id)
+                if res:
+                    return res
+                return "Kechirasiz, rasmni tahlil qilishda xatolik yuz berdi yoki AI Vision javob bermadi."
+            except Exception as e:
+                logger.error(f"Rasm tahlilida xatolik: {e}")
+                return f"Rasmni tahlil qilishda xatolik yuz berdi: {e}"
     last_gui_messages = []
 
     def _gui_collector(msg):
@@ -446,29 +437,32 @@ def execute_command_pipeline(text: str, user: str, ovoz: str, mode: str = "ask",
     try:
         from core.agent_tools import get_registry
         reg = get_registry()
+        supported_direct_tools = {"calculator", "weather", "app_check", "system_info", "notification", "currency"}
         candidate = clean_text.split()[0].lower() if " " in clean_text else clean_text.lower()
-        tool = reg.get(candidate)
-        if tool:
-            args_str = clean_text[len(candidate):].strip()
-            kwargs = {}
-            if candidate == "calculator" and args_str:
-                kwargs["expression"] = args_str
-            elif candidate == "weather" and args_str:
-                kwargs["city"] = args_str
-            elif candidate == "app_check" and args_str:
-                kwargs["app_name"] = args_str
-            elif candidate == "system_info" and args_str:
-                kwargs["category"] = args_str
-            elif candidate == "notification" and args_str:
-                kwargs["message"] = args_str
-            elif candidate == "currency" and args_str:
-                parts = args_str.split()
-                if len(parts) >= 2:
-                    kwargs["from_currency"], kwargs["to_currency"] = parts[0], parts[1]
-                elif len(parts) == 1:
-                    kwargs["from_currency"] = parts[0]
-            call_res = tool.call(**kwargs)
-            return format_tool_result(candidate, call_res)
+        if candidate in supported_direct_tools:
+            tool = reg.get(candidate)
+            if tool:
+                args_str = clean_text[len(candidate):].strip()
+                kwargs = {}
+                if candidate == "calculator" and args_str:
+                    kwargs["expression"] = args_str
+                elif candidate == "weather" and args_str:
+                    kwargs["city"] = args_str
+                elif candidate == "app_check" and args_str:
+                    kwargs["app_name"] = args_str
+                elif candidate == "system_info" and args_str:
+                    kwargs["category"] = args_str
+                elif candidate == "notification" and args_str:
+                    kwargs["message"] = args_str
+                elif candidate == "currency" and args_str:
+                    parts = args_str.split()
+                    if len(parts) >= 2:
+                        kwargs["from_currency"], kwargs["to_currency"] = parts[0], parts[1]
+                    elif len(parts) == 1:
+                        kwargs["from_currency"] = parts[0]
+                call_res = tool.call(**kwargs)
+                if call_res.get("success"):
+                    return format_tool_result(candidate, call_res)
     except Exception as e:
         logger.error(f"ToolRegistry chaqirishda xatolik: {e}")
 
@@ -594,6 +588,7 @@ async def handle_chat(request):
         return web.json_response({"ok": False, "error": "Noto'g'ri JSON formati"}, status=400)
 
     text = (body.get("text") or body.get("query") or "").strip()
+    image_data = body.get("image") or body.get("image_base64") or body.get("image_url")
     mode = body.get("mode", "ask")
     speak_param = body.get("speak")
     if speak_param is not None:
@@ -601,8 +596,11 @@ async def handle_chat(request):
     else:
         speak_out = True
 
-    if not text:
-        return web.json_response({"ok": False, "error": "Matn bo'sh bo'lishi mumkin emas"}, status=400)
+    if not text and image_data:
+        text = "Ushbu rasmni o'zbek tilida batafsil tahlil qilib ber."
+
+    if not text and not image_data:
+        return web.json_response({"ok": False, "error": "Matn yoki rasm bo'sh bo'lishi mumkin emas"}, status=400)
 
     m, _, mem, _, _, _ = get_modules()
     user_id, auth_user, session, _ = resolve_auth_identity(request, required=False)
@@ -618,7 +616,7 @@ async def handle_chat(request):
     def _execute():
         global _voice_state
         try:
-            reply_text = execute_command_pipeline(text, user, ovoz, mode, user_id=user_id)
+            reply_text = execute_command_pipeline(text, user, ovoz, mode, user_id=user_id, image=image_data)
 
             if mem:
                 try:
@@ -628,7 +626,7 @@ async def handle_chat(request):
 
             if speak_out:
                 sync_broadcast("voice_state", {"state": "speaking"}, loop)
-                speak_out_loud(reply_text)
+                speak_out_loud(reply_text, voice_type=ovoz)
 
             return reply_text
         except Exception as e:
@@ -1140,29 +1138,54 @@ async def handle_voice_stop(request):
     return web.json_response({"ok": True, "status": "stopped"})
 
 
-def speak_out_loud(text: str) -> bool:
+def speak_out_loud(text: str, voice_type: Optional[str] = None) -> bool:
     """Misa ovozli ijro chaqiruvi — main.py orqali yoki to'g'ridan-to'g'ri mustaqil fallback"""
+    if voice_type in ("ayol", "erkak"):
+        try:
+            import global_state
+            global_state.ovoz_turi_global = voice_type
+        except Exception:
+            pass
+
     m, _, _, _, _, _ = get_modules()
+    if m and hasattr(m, "global_state") and voice_type:
+        try:
+            m.global_state.ovoz_turi_global = voice_type
+        except Exception:
+            pass
     if m and hasattr(m, "ovoz_chiqar_tez"):
         try:
-            m.ovoz_chiqar_tez(text)
+            m.ovoz_chiqar_tez(text, ovoz_turi=voice_type)
             return True
+        except TypeError:
+            try:
+                m.ovoz_chiqar_tez(text)
+                return True
+            except Exception as e:
+                logger.warning(f"m.ovoz_chiqar_tez chaqirishda xato: {e}")
         except Exception as e:
             logger.warning(f"m.ovoz_chiqar_tez chaqirishda xato: {e}")
 
     try:
         from main import ovoz_chiqar_tez
-        ovoz_chiqar_tez(text)
-        return True
+        try:
+            ovoz_chiqar_tez(text, ovoz_turi=voice_type)
+            return True
+        except TypeError:
+            ovoz_chiqar_tez(text)
+            return True
     except Exception:
         pass
 
     def _standalone_speak():
         try:
             import edge_tts, ctypes, tempfile, uuid
+            vt = (voice_type or get_current_voice_type() or "ayol").lower()
             voice = "uz-UZ-MadinaNeural"
-            if get_current_voice_type() == "erkak":
+            if vt in ("erkak", "sardor", "uz-uz-sardorneural"):
                 voice = "uz-UZ-SardorNeural"
+            elif vt in ("ayol", "madina", "uz-uz-madinaneural"):
+                voice = "uz-UZ-MadinaNeural"
             clean_text = re.sub(r"\[.*?\]\(.*?\)", "", text)
             clean_text = re.sub(r"```[\s\S]*?```", "", clean_text)
             clean_text = re.sub(r"`.*?`", "", clean_text)
@@ -1229,12 +1252,13 @@ async def handle_voice_speak(request):
         return web.json_response({"ok": False, "error": "Noto'g'ri JSON formati"}, status=400)
 
     text = body.get("text", "").strip()
+    voice_type = body.get("voice_type") or body.get("voice")
     if not text:
         return web.json_response({"ok": False, "error": "Matn kiritilmadi"}, status=400)
 
     loop = asyncio.get_running_loop()
     sync_broadcast("voice_state", {"state": "speaking"}, loop)
-    speak_out_loud(text)
+    speak_out_loud(text, voice_type=voice_type)
     return web.json_response({"ok": True, "message": "Ovoz chiqarilmoqda"})
 
 

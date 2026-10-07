@@ -52,7 +52,7 @@
   },
   "user": {
     "name": "test",
-    "voice_type": "erkak",
+    "voice_type": "ayol",
     "avatar": "emerald",
     "role": "Dasturchi / Muhandis",
     "bio": "Misa AI shaxsiy sun'iy intellekt yordamchisi",
@@ -85,31 +85,31 @@
   "providers": {
     "groq": {
       "enabled": true,
-      "priority": 95,
+      "priority": 96,
       "timeout": 15.0,
       "base_url": "https://api.groq.com/openai/v1",
-      "default_model": "llama-3.3-70b-versatile"
+      "default_model": "qwen/qwen3.8-27b"
     },
     "cerebras": {
       "enabled": true,
-      "priority": 92,
+      "priority": 94,
       "timeout": 15.0,
       "base_url": "https://api.cerebras.ai/v1",
-      "default_model": "llama-3.3-70b"
+      "default_model": "qwen-3.8-27b"
     },
     "gemini": {
       "enabled": true,
-      "priority": 94,
+      "priority": 95,
       "timeout": 15.0,
       "base_url": "https://generativelanguage.googleapis.com/v1beta",
-      "default_model": "gemini-2.0-flash"
+      "default_model": "gemini-flash-lite-latest"
     },
     "openrouter": {
       "enabled": true,
-      "priority": 80,
+      "priority": 82,
       "timeout": 20.0,
       "base_url": "https://openrouter.ai/api/v1",
-      "default_model": "meta-llama/llama-3.3-70b-instruct:free"
+      "default_model": "nvidia/nemotron-3.5-lightning:free"
     },
     "nvidia": {
       "enabled": true,

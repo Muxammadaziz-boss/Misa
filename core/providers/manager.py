@@ -47,7 +47,7 @@ class ProviderSystem:
         self._providers["groq"] = OpenAICompatibleProvider(
             name="groq",
             base_url="https://api.groq.com/openai/v1",
-            default_model="llama-3.3-70b-versatile",
+            default_model="qwen/qwen3.8-27b",
             timeout=15.0
         )
 
@@ -55,13 +55,13 @@ class ProviderSystem:
         self._providers["cerebras"] = OpenAICompatibleProvider(
             name="cerebras",
             base_url="https://api.cerebras.ai/v1",
-            default_model="llama-3.3-70b",
+            default_model="qwen-3.8-27b",
             timeout=15.0
         )
 
         # 3. Google Gemini (Tier 1 Multimodal/Vision: 1M kontekst, Grounding, 15 RPM)
         self._providers["gemini"] = GeminiProvider(
-            default_model="gemini-2.0-flash",
+            default_model="gemini-flash-lite-latest",
             timeout=18.0
         )
 
@@ -69,7 +69,7 @@ class ProviderSystem:
         self._providers["openrouter"] = OpenAICompatibleProvider(
             name="openrouter",
             base_url="https://openrouter.ai/api/v1",
-            default_model="meta-llama/llama-3.3-70b-instruct:free",
+            default_model="nvidia/nemotron-3.5-lightning:free",
             timeout=20.0
         )
 

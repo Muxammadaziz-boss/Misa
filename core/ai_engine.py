@@ -18,8 +18,15 @@ load_dotenv()
 
 
 # ========== Sozlamalar ==========
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "") or os.getenv("GEMINI_API_KEY", "")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+GOOGLE_API_KEY = (
+    os.getenv("MISA_GEMINI_API_KEY", "").strip()
+    or os.getenv("GOOGLE_API_KEY", "").strip()
+    or os.getenv("GEMINI_API_KEY", "").strip()
+)
+OPENROUTER_API_KEY = (
+    os.getenv("MISA_OPENROUTER_API_KEY", "").strip()
+    or os.getenv("OPENROUTER_API_KEY", "").strip()
+)
 OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "google/gemini-2.0-flash-exp:free")
 
 
@@ -34,13 +41,17 @@ def get_gemini_api_key(user_id: Optional[str] = None) -> str:
     except Exception:
         pass
 
-    if GOOGLE_API_KEY and str(GOOGLE_API_KEY).strip():
-        return str(GOOGLE_API_KEY).strip()
-    key = os.getenv("GEMINI_API_KEY", "").strip() or os.getenv("GOOGLE_API_KEY", "").strip()
-
+    key = (
+        os.getenv("MISA_GEMINI_API_KEY", "").strip()
+        or os.getenv("GEMINI_API_KEY", "").strip()
+        or os.getenv("GOOGLE_API_KEY", "").strip()
+    )
     if key:
         GOOGLE_API_KEY = key
         return key
+
+    if GOOGLE_API_KEY and str(GOOGLE_API_KEY).strip():
+        return str(GOOGLE_API_KEY).strip()
     try:
         cfg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "config.json")
         if os.path.exists(cfg_path):
@@ -126,6 +137,11 @@ MUHIM QOIDALAR:
    "farg'onada hav" = "farg'onada havo qanday"
    Sen AQLLI bo'l — chala gapni o'zing to'ldirib tushun!
 5. Xato yozilgan yoki noto'g'ri eshitilgan so'zlarni ham tushunishga harakat qil.
+6. HECH QACHON inglizcha fikrlash jarayonini (reasoning, 'The user is asking...', 'I should...') foydalanuvchiga matn qilib ko'rsatma! Faqat toza o'zbekcha yakuniy javob ber.
+7. INTERNETDAN QIDIRUV VA 70% ANQLIK MEZONI:
+   Foydalanuvchi so'ragan har qanday ma'lumot, yangilik, narx, ob-havo, atama yoki fakt bo'yicha erkin internetdan izlashing mumkin.
+   Taqdim etilayotgan har qanday ma'lumotning ishonchliligi va to'g'riligi kamida 70% bo'lishi SHART!
+   Agar biror ma'lumotning aniqligi yoki ishonchliligi 70% dan past bo'lsa, shubhali bo'lsa yoki tasdiqlanmagan mish-mish bo'lsa, uni mutlaq haqiqat deb taqdim etma! Foydalanuvchiga buni ochiq bildir yoki faqat tekshirilgan qismini ko'rsat.
 
 VAZIFANG:
 Foydalanuvchi biron narsa aytganda, sen ikki xil javob bera olasan:
@@ -506,27 +522,104 @@ def suhbat_tarixini_tozalash():
 
 
 # ========== Ekran tahlili (AI Vision) ==========
-def ekran_tahlil(savol="Ekranda nima ko'rinmoqda? Qisqacha tushuntir."):
-    """Ekran screenshot olib, AI Vision orqali tahlil qilish"""
+def _capture_screen_pil():
+    """Ekrandan ishonchli screenshot olish (pyautogui va Windows GDI BitBlt fallback)"""
     try:
         import pyautogui
-        
-        # Screenshot olish
-        screenshot = pyautogui.screenshot()
+        return pyautogui.screenshot()
+    except Exception as e:
+        logging.warning(f"pyautogui screenshot ololmadi: {e}, GDI BitBlt orqali olishga urinilmoqda...")
+    
+    # Windows GDI BitBlt fallback (non-interactive / background / DWM sesiyalar uchun 100% ishlaydi)
+    try:
+        import ctypes
+        from ctypes import wintypes
+        from PIL import Image
+
+        user32 = ctypes.windll.user32
+        gdi32 = ctypes.windll.gdi32
+
+        try:
+            user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
+        w = user32.GetSystemMetrics(0)
+        h = user32.GetSystemMetrics(1)
+        if w <= 0 or h <= 0:
+            w, h = 1920, 1080
+
+        hdesktop = user32.GetDesktopWindow()
+        desktop_dc = user32.GetWindowDC(hdesktop)
+        img_dc = gdi32.CreateCompatibleDC(desktop_dc)
+        mem_bitmap = gdi32.CreateCompatibleBitmap(desktop_dc, w, h)
+        old_bmp = gdi32.SelectObject(img_dc, mem_bitmap)
+
+        SRCCOPY = 0x00CC0020
+        gdi32.BitBlt(img_dc, 0, 0, w, h, desktop_dc, 0, 0, SRCCOPY)
+
+        class BITMAPINFOHEADER(ctypes.Structure):
+            _fields_ = [
+                ('biSize', wintypes.DWORD),
+                ('biWidth', wintypes.LONG),
+                ('biHeight', wintypes.LONG),
+                ('biPlanes', wintypes.WORD),
+                ('biBitCount', wintypes.WORD),
+                ('biCompression', wintypes.DWORD),
+                ('biSizeImage', wintypes.DWORD),
+                ('biXPelsPerMeter', wintypes.LONG),
+                ('biYPelsPerMeter', wintypes.LONG),
+                ('biClrUsed', wintypes.DWORD),
+                ('biClrImportant', wintypes.DWORD)
+            ]
+
+        bmi = BITMAPINFOHEADER()
+        bmi.biSize = ctypes.sizeof(BITMAPINFOHEADER)
+        bmi.biWidth = w
+        bmi.biHeight = -h  # top-down DIB
+        bmi.biPlanes = 1
+        bmi.biBitCount = 32
+        bmi.biCompression = 0
+
+        buffer_len = w * h * 4
+        buf = ctypes.create_string_buffer(buffer_len)
+        DIB_RGB_COLORS = 0
+        gdi32.GetDIBits(desktop_dc, mem_bitmap, 0, h, buf, ctypes.byref(bmi), DIB_RGB_COLORS)
+
+        # Tozalash
+        gdi32.SelectObject(img_dc, old_bmp)
+        gdi32.DeleteObject(mem_bitmap)
+        gdi32.DeleteDC(img_dc)
+        user32.ReleaseDC(hdesktop, desktop_dc)
+
+        img = Image.frombuffer('RGBA', (w, h), buf, 'raw', 'BGRA', 0, 1)
+        return img.convert('RGB')
+    except Exception as gdi_err:
+        logging.error(f"GDI screenshot olishda ham xatolik: {gdi_err}")
+        return None
+
+
+def ekran_tahlil(savol="Ekranda nima ko'rinmoqda? Qisqacha tushuntir.", user_id=None):
+    """Ekran screenshot olib, AI Vision orqali tahlil qilish"""
+    try:
+        screenshot = _capture_screen_pil()
+        if not screenshot:
+            logging.error("Ekran tahlili: screenshot olinmadi")
+            return "Ekran tasvirini olib bo'lmadi (ekran ruxsati yoki oyna holati cheklangan)."
         
         # Rasmni kichiklashtirish (API uchun tez va arzon)
-        screenshot = screenshot.resize((1024, int(1024 * screenshot.height / screenshot.width)))
+        screenshot = screenshot.resize((1024, max(1, int(1024 * screenshot.height / screenshot.width))))
         
         # Base64 ga o'girish
         buffer = io.BytesIO()
-        screenshot.save(buffer, format="JPEG", quality=70)
+        screenshot.save(buffer, format="JPEG", quality=75)
         img_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
         
-        logging.debug(f"Screenshot olindi: {len(img_base64)} bytes (base64)")
+        logging.info(f"Screenshot olindi: {len(img_base64)} bytes (base64)")
         
         # Gemini Vision API ga yuborish
-        if GOOGLE_API_KEY:
-            result = _gemini_vision(img_base64, savol)
+        if get_gemini_api_key(user_id=user_id):
+            result = _gemini_vision(img_base64, savol, user_id=user_id)
             if result:
                 return result
         
@@ -537,11 +630,11 @@ def ekran_tahlil(savol="Ekranda nima ko'rinmoqda? Qisqacha tushuntir."):
                 return result
         
         logging.error("Ekran tahlili: hech qaysi AI provider ishlamadi")
-        return None
+        return "Ekran tahlili uchun AI Vision xizmati javob bermadi."
         
     except Exception as e:
         logging.error(f"Ekran tahlili xatolik: {e}")
-        return None
+        return f"Ekran tahlilida xatolik yuz berdi: {e}"
 
 
 def ekran_element_top(element_nomi):
@@ -617,41 +710,86 @@ Javobni FAQAT shu formatda ber (boshqa hech narsa yozma):
         return {"muvaffaqiyat": False, "tavsif": str(e), "keyingi_qadam": "qayta urinish"}
 
 
-def _gemini_vision(img_base64, savol):
-    """Gemini Vision API ga rasm yuborish"""
-    VISION_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"]
-    
+def rasm_tahlil(img_data_or_path: str, savol: str = "Ushbu rasmni o'zbek tilida batafsil va aniq tahlil qilib ber.", user_id: Optional[str] = None) -> Optional[str]:
+    """Ixtiyoriy rasm fayli yoki Base64 ma'lumotini Gemini Vision orqali tahlil qilish."""
+    if not img_data_or_path:
+        return None
+
+    img_b64 = ""
+    # 1. Fayl yo'li bo'lsa o'qish
+    if len(img_data_or_path) < 1000 and os.path.isfile(img_data_or_path):
+        try:
+            with open(img_data_or_path, "rb") as f:
+                img_b64 = base64.b64encode(f.read()).decode("utf-8")
+        except Exception as e:
+            logging.error(f"Rasm faylini o'qishda xatolik ({img_data_or_path}): {e}")
+            return None
+    else:
+        img_b64 = img_data_or_path
+
+    # 2. Gemini Vision orqali tahlil
+    result = _gemini_vision(img_b64, savol, user_id=user_id)
+    if result:
+        return result
+
+    # 3. OpenRouter Vision zaxirasi
+    if OPENROUTER_API_KEY:
+        res_open = _openrouter_vision(img_b64, savol)
+        if res_open:
+            return res_open
+
+    return None
+
+
+def _gemini_vision(img_base64: str, savol: str, user_id: Optional[str] = None) -> Optional[str]:
+    """Gemini Vision API ga rasm yuborish (Gemini 3.8 Flash & 2.5 Flash)"""
+    key = get_gemini_api_key(user_id=user_id)
+    if not key:
+        logging.warning("Gemini Vision: API kaliti topilmadi")
+        return None
+
+    VISION_MODELS = [
+        "gemini-flash-lite-latest",
+        "gemini-3.1-flash-lite-preview",
+        "gemini-flash-latest",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash",
+        "gemini-3.8-flash",
+    ]
+
+    # Agar "data:image/...;base64," prefix bilan kelsa, tozalaymiz
+    if "," in img_base64 and img_base64.startswith("data:"):
+        img_base64 = img_base64.split(",", 1)[1]
+    img_base64 = img_base64.strip()
+
     for model in VISION_MODELS:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-            
-            gen_config = {"maxOutputTokens": 512, "temperature": 0.2}
-            if "2.5" in model:
-                gen_config["thinkingConfig"] = {"thinkingBudget": 0}
-            
+            gen_config = {"maxOutputTokens": 1024, "temperature": 0.2}
+
             response = requests.post(
-                f"{url}?key={GOOGLE_API_KEY}",
+                f"{url}?key={key}",
                 headers={"Content-Type": "application/json"},
                 json={
                     "contents": [{
                         "parts": [
-                            {"text": savol},
+                            {"text": savol or "Ushbu rasmni o'zbek tilida batafsil va aniq tushuntirib ber."},
                             {"inline_data": {"mime_type": "image/jpeg", "data": img_base64}}
                         ]
                     }],
                     "generationConfig": gen_config
                 },
-                timeout=20
+                timeout=35
             )
-            
+
             if response.status_code == 429:
-                logging.warning(f"Vision {model} kvota tugagan, keyingi...")
+                logging.warning(f"Vision {model} kvota tugagan (429), keyingi...")
                 continue
-            
+
             if response.status_code != 200:
-                logging.error(f"Vision {model} xato: {response.status_code}")
+                logging.error(f"Vision {model} xato: {response.status_code} - {response.text[:120]}")
                 continue
-            
+
             data = response.json()
             candidates = data.get("candidates") or []
             if not candidates:
@@ -660,12 +798,14 @@ def _gemini_vision(img_base64, savol):
             if not parts or "text" not in parts[0]:
                 continue
             ai_text = parts[0]["text"].strip()
-            logging.debug(f"Vision ({model}) javobi: {ai_text[:100]}")
+            logging.info(f"Vision ({model}) muvaffaqiyatli tahlil qildi: {ai_text[:80]}")
             return ai_text
-            
+
         except Exception as e:
             logging.error(f"Vision {model} xatolik: {e}")
             continue
+
+    return None
     
     return None
 

@@ -250,7 +250,7 @@ class IntelligenceOrchestrator:
 
                 if is_success:
                     raw_result = tool_call_res.get("result")
-                    formatted_content = self._format_tool_output(tool_name, raw_result, decision.content)
+                    formatted_content = self._format_tool_output(tool_name, raw_result, decision.content, tool_res=tool_call_res)
                     logger.info(f"[IntelligenceOrchestrator] Asbob muvaffaqiyatli bajarildi: '{tool_name}'")
                     return self._finalize_response(
                         IntelligenceResponse(
@@ -341,10 +341,15 @@ class IntelligenceOrchestrator:
             )
 
         # 11. Standart Suhbat Javobi (Answer)
+        clean_ans = decision.content or ""
+        if self._is_leaked_reasoning(clean_ans):
+            logger.warning("[IntelligenceOrchestrator] Leaked reasoning aniqlandi, toza o'zbekcha javob qaytarilmoqda.")
+            clean_ans = "So'rovingiz tushunildi. Buni siz uchun bajaryapman."
+
         return self._finalize_response(
             IntelligenceResponse(
                 type="answer",
-                content=decision.content,
+                content=clean_ans,
                 intent=intent.name,
                 verified=True,
                 provider=ai_response.provider,
@@ -373,9 +378,51 @@ class IntelligenceOrchestrator:
                 response.metadata["retrieval_explanations"] = request.metadata["retrieval_explanations"]
         return response
 
-    def _format_tool_output(self, tool_name: str, result: Any, default_text: str) -> str:
+    def _is_leaked_reasoning(self, text: str) -> bool:
+        """Matn inglizcha ichki fikrlash (Chain-of-Thought) ekanligini aniqlash"""
+        if not text:
+            return False
+        t_lower = text.lower().strip()
+        reasoning_prefixes = [
+            "the user is asking",
+            "the user asks",
+            "the user wants",
+            "the user is inquiring",
+            "i should use the",
+            "i should check",
+            "i need to check",
+            "let me check",
+            "looking at the system",
+            "looking at the provided",
+            "so, 5 applications are listed",
+            "let me think",
+            "we need to answer",
+            "we should respond",
+            "according to the rules",
+            "actually, the system information",
+        ]
+        return any(t_lower.startswith(p) for p in reasoning_prefixes)
+
+    def _format_tool_output(self, tool_name: str, result: Any, default_text: str = "", tool_res: Any = None) -> str:
         """Asbob natijasini foydalanuvchiga tushunarli matnga aylantirish"""
+        # 1. Agar tool_res da tayyor o'zbekcha xabar bo'lsa
+        if tool_res and hasattr(tool_res, "get") and tool_res.get("message"):
+            msg = str(tool_res.get("message")).strip()
+            if msg and not self._is_leaked_reasoning(msg):
+                return msg
+
         if isinstance(result, dict):
+            # app_check maxsus formatlash
+            if tool_name == "app_check":
+                if result.get("found"):
+                    app_n = result.get("name") or "Ilova"
+                    app_p = result.get("path")
+                    p_info = f" ({app_p})" if app_p and app_p != "(process)" else ""
+                    return f"✅ Ha, kompyuteringizda **{app_n}** ilovasi o'rnatilgan{p_info}."
+                elif result.get("found") is False:
+                    app_n = result.get("name") or "So'ralgan ilova"
+                    return f"❌ Kompyuteringizda **{app_n}** ilovasi topilmadi (o'rnatilmagan)."
+
             if tool_name == "system_info" and "info" in result and isinstance(result["info"], dict) and result["info"]:
                 info = result["info"]
                 sections = []
@@ -414,10 +461,14 @@ class IntelligenceOrchestrator:
                 return "Ma'lumotlar:\n" + "\n".join(lines)
             if "error" in result and result["error"]:
                 return f"Xatolik: {result['error']}"
+
         if isinstance(result, str) and result.strip():
             return result.strip()
-        if default_text and not any(h in default_text for h in ["1050 Ti", "GTX 1050"]):
+
+        # default_text faqat haqiqiy o'zbekcha javob bo'lsa va leaked reasoning bo'lmasa qabul qilinadi
+        if default_text and not self._is_leaked_reasoning(default_text) and not any(h in default_text for h in ["1050 Ti", "GTX 1050"]):
             return default_text
+
         return f"'{tool_name}' vositasi muvaffaqiyatli bajarildi."
 
     def _is_multi_step_goal(self, text: str) -> bool:

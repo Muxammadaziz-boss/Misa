@@ -23,9 +23,10 @@ except ImportError:
     CRYPTO_AVAILABLE = False
     logger.warning("cryptography moduli topilmadi. pip install cryptography")
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Loyiha ildizi
-VAULT_FILE = os.path.join(BASE_DIR, "data", "secure_vault.json")
-KEY_FILE = os.path.join(BASE_DIR, "data", ".vault.key")
+from core.common_paths import get_data_path, get_base_dir
+BASE_DIR = get_base_dir()
+VAULT_FILE = get_data_path("secure_vault.json")
+KEY_FILE = get_data_path(".vault.key")
 
 
 class SecureVault:

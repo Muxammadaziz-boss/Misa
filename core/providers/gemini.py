@@ -73,10 +73,10 @@ class GeminiProvider(LLMProvider):
     """
 
     DEFAULT_MODELS = [
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
+        "gemini-3.8-flash",
         "gemini-2.5-flash",
-        "gemini-1.5-flash",
+        "gemini-flash-lite-latest",
+        "gemini-flash-latest",
     ]
 
     def __init__(
@@ -91,7 +91,7 @@ class GeminiProvider(LLMProvider):
         self._name = "gemini"
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key or ""
-        self._default_model = default_model or "gemini-2.0-flash"
+        self._default_model = default_model or "gemini-3.8-flash"
         self._timeout = timeout
         self._health_monitor = health_monitor or get_health_monitor()
         self._registry = registry or get_model_registry()

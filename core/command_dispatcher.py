@@ -418,7 +418,7 @@ class CommandDispatcher:
         # -------------------------------------------------------------
         # 0.1. Misa chaqiruv so'zi (Wake-word / Call prefix: "Misa ...")
         # -------------------------------------------------------------
-        misa_call_match = re.match(r"^(?:(?:salom|assalomu\s+alaykum|hey|ey|o['']?y)\s+)?(?:misa|mikasa)(?:[,\s:!.]+|$)", clean_text)
+        misa_call_match = re.match(r"^(?:(?:salom|assalomu\s+alaykum|hey|ey|o['']?y|hoy|qani|iltimos)\s+)?(?:misa|mikasa|micasa|миса|микаса|мекаса|mekasa)(?:[,\s:!.]*|$)", clean_text, re.IGNORECASE)
         if misa_call_match:
             sub_command = clean_text[misa_call_match.end():].strip()
             if not sub_command or len(sub_command) < 2:
@@ -622,8 +622,24 @@ class CommandDispatcher:
         ])
 
         if not is_comparative:
+            # Jami nechta ilova bor / qanday dasturlar bor so'rovi
+            total_apps_match = re.search(
+                r"(?:menda|kompyuterimda|kompyuterda|bu\s+qurilmada|pcda|tizimda)?\s*(?:jami\s+)?(?:nechta|qanday|qanaqa|qaysi)\s*(?:ilova|dastur|programmala?r?)\s*(?:bor|mavjud|o['']rnatilgan)\??$",
+                clean_text
+            )
+            if total_apps_match:
+                try:
+                    from core.app_detector import get_app_detector
+                    detector = get_app_detector()
+                    inv = detector.get_realtime_inventory_summary()
+                    items = [line for line in inv.split("\n") if line.strip().startswith("•")]
+                    count = len(items)
+                    return True, f"📊 Kompyuteringizda aniqlangan asosiy dasturlar (jami {count} ta):\n\n{inv}"
+                except Exception as e:
+                    logger.warning(f"Ilovalar sonini aniqlashda xatolik: {e}")
+
             app_inquiry_match = re.search(
-                r"(?:kel\s+undan\s+oldin|avval)?\s*(?:menda|kompyuterimda|kompyuterda|pcda)?\s*(telegram|tg|ayugram|kotatogram|chrome|google chrome|vs code|vscode|code|discord|brave|python|spotify|steam|cursor)\s*(?:ilovasi|dasturi)?\s*(?:bormi|brmi|bormikan|o['']rnatilganmi|ornatilganmi|mavjudmi)\s*(?:tekshir|ayt|ko['']rsat)?\??$",
+                r"(?:kel\s+undan\s+oldin|avval)?\s*(?:menda|kompyuterimda|kompyuterda|bu\s+qurilmada|pcda)?\s*(telegram|tg|ayugram|kotatogram|chrome|google chrome|vs code|vscode|code|discord|brave|python|spotify|steam|cursor|pycharm|opencode|webstorm|sublime|notepad\+\+|notepad)\s*(?:ilovasi|dasturi)?\s*(?:bormi|brmi|bormikan|o['']rnatilganmi|ornatilganmi|mavjudmi)\s*(?:tekshir|ayt|ko['']rsat)?\??$",
                 clean_text
             )
             if app_inquiry_match:

@@ -43,6 +43,7 @@ def build():
         f"--workpath={build_dir}",
         f"--distpath={dist_dir}",
         "--add-data=core;core",
+        "--add-data=data;data",
         "--add-data=main.py;.",
         "--hidden-import=main",
         "--hidden-import=edge_tts",
@@ -57,22 +58,24 @@ def build():
         "--hidden-import=cryptography.hazmat.primitives.asymmetric.ed25519",
         "--hidden-import=psutil",
         "--hidden-import=requests",
+        "--hidden-import=tzdata",
         "--hidden-import=core.v8.update_service",
         "--hidden-import=core.v8.account_auth",
         "--hidden-import=core.v8.device_auth",
         "--hidden-import=core.v8.device_enrollment",
         "--hidden-import=core.v8.account_device",
-        "--hidden-import=core.v8.permissions",
-        "--hidden-import=core.v8.remote",
+        "--hidden-import=core.v8.permission_center",
+        "--hidden-import=core.v8.remote_orchestrator",
         "--hidden-import=core.v8.remote_tools",
         "--hidden-import=core.v8.command_queue",
         "--hidden-import=core.v8.auth_session",
         "--hidden-import=core.v8.events",
-        "--hidden-import=core.v8.tools",
         "--hidden-import=core.v8.telegram_webhook",
         "--hidden-import=core.v8.telegram_identity",
         "--hidden-import=core.v8.universal_bot",
         "--hidden-import=core.v8.telegram_gateway",
+        "--hidden-import=core.common_paths",
+        "--hidden-import=core.providers",
         "--exclude-module=torch",
         "--exclude-module=torchaudio",
         "--exclude-module=torchvision",
@@ -123,8 +126,8 @@ def build():
     shutil.copytree(built_dir, tauri_backend_dir)
     logger.info(f"✔ Deployed backend to Tauri resources: {tauri_backend_dir}")
 
-    # Destination 2: release/v9.0.0/backend/ (for release distribution)
-    for rel_ver in ["v9.0.0", "v8.0.0"]:
+    # Destination 2: release/v9.0.1/backend/ (for release distribution)
+    for rel_ver in ["v9.0.1", "v9.0.0", "v8.0.0"]:
         rel_dir = root_dir / "release" / rel_ver
         if rel_dir.exists():
             release_backend_dir = rel_dir / "backend"

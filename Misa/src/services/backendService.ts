@@ -1066,14 +1066,19 @@ class BackendService {
   public async sendChat(
     text: string,
     mode: "ask" | "command" | "summary" = "ask",
-    speak: boolean = true
+    speak: boolean = true,
+    image?: string
   ): Promise<ChatResponse> {
     this.notifyVoiceState("thinking");
     try {
+      const payload: any = { text, mode, speak };
+      if (image) {
+        payload.image = image;
+      }
       const res = await fetch(`${API_BASE}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, mode, speak }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const errText = await res.text();
@@ -1777,12 +1782,12 @@ class BackendService {
     }
   }
 
-  public async speakText(text: string): Promise<boolean> {
+  public async speakText(text: string, voiceType?: "ayol" | "erkak"): Promise<boolean> {
     try {
       const res = await fetch(`${API_BASE}/api/voice/speak`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, voice_type: voiceType }),
       });
       return res.ok;
     } catch {
@@ -3431,11 +3436,11 @@ class BackendService {
 
   public async sendMessage(
     text: string,
-    options?: { mode?: "ask" | "command" | "summary" | string; speak?: boolean; [key: string]: any }
+    options?: { mode?: "ask" | "command" | "summary" | string; speak?: boolean; image?: string; [key: string]: any }
   ): Promise<ChatResponse> {
     const mode = (options?.mode === "command" || options?.mode === "summary" ? options.mode : "ask") as "ask" | "command" | "summary";
     const speak = options?.speak !== undefined ? Boolean(options.speak) : true;
-    const res = await this.sendChat(text, mode, speak);
+    const res = await this.sendChat(text, mode, speak, options?.image);
     return {
       ...res,
       reply: res.reply || res.response,

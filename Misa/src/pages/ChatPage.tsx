@@ -14,7 +14,6 @@ import {
   RefreshIcon,
   SearchIcon,
   SettingsIcon,
-  GlobeIcon,
   CameraIcon,
 } from "../components/icons/Icons";
 import {
@@ -49,7 +48,7 @@ interface ChatPageProps {
   onNavigate?: (path: string) => void;
 }
 
-type ComposerMode = "chat" | "web" | "image";
+type ComposerMode = "chat" | "image";
 
 const saveSessionsToStorage = (sessions: ChatSession[], activeId?: string) => {
   try {
@@ -92,7 +91,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   const [sidebarTab, setSidebarTab] = useState<"chats" | "images">("chats");
   const [composerMode, setComposerMode] = useState<ComposerMode>("chat");
   const [sessionSearch, setSessionSearch] = useState("");
-  const [attachedFiles, setAttachedFiles] = useState<{ name: string; content?: string }[]>([]);
+  const [attachedFiles, setAttachedFiles] = useState<
+    { name: string; content?: string; dataUrl?: string; type?: "text" | "image" }[]
+  >([]);
   const [autoSpeak, setAutoSpeak] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem("misa_auto_speak");
@@ -376,6 +377,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       return;
     }
 
+    const attachedImage = attachedFiles.find((f) => f.dataUrl || f.type === "image");
+    const imageToSend = attachedImage?.dataUrl;
+
     const attachmentSuffix =
       attachedFiles.length > 0
         ? "\n\n[Biriktirilgan fayl: " +
@@ -385,10 +389,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           "]"
         : "";
 
-    const effectiveQuery =
-      composerMode === "web" && !rawQuery.toLowerCase().includes("internet")
-        ? `[Internet qidiruvi orqali aniq ma'lumot topib javob ber]: ${rawQuery}${attachmentSuffix}`
-        : `${rawQuery}${attachmentSuffix}`;
+    const effectiveQuery = `${rawQuery}${attachmentSuffix}`;
 
     const userMsg: Message = {
       id: `u_${Date.now()}`,
@@ -405,7 +406,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     setActiveAgentPlan(null);
 
     try {
-      const response = await backendService.sendMessage(effectiveQuery, { speak: autoSpeak });
+      const response = await backendService.sendMessage(effectiveQuery, { speak: autoSpeak, image: imageToSend });
       const completedPlan = activeAgentPlanRef.current || undefined;
       const aiMsg: Message = {
         id: `a_${Date.now()}`,
@@ -533,7 +534,16 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     const files = e.target.files;
     if (!files || files.length === 0) return;
     Array.from(files).forEach((file) => {
-      if (
+      if (file.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name)) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          setAttachedFiles((prev) => [
+            ...prev,
+            { name: file.name, dataUrl: String(reader.result || ""), type: "image" },
+          ]);
+        };
+        reader.readAsDataURL(file);
+      } else if (
         file.size <= 256 * 1024 &&
         (file.type.startsWith("text/") ||
           /\.(txt|md|json|py|ts|tsx|js|csv|html|css|log)$/i.test(file.name))
@@ -542,7 +552,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         reader.onload = () => {
           setAttachedFiles((prev) => [
             ...prev,
-            { name: file.name, content: String(reader.result || "") },
+            { name: file.name, content: String(reader.result || ""), type: "text" },
           ]);
         };
         reader.readAsText(file);
@@ -560,7 +570,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   );
 
   const cycleComposerMode = () => {
-    setComposerMode((prev) => (prev === "chat" ? "web" : prev === "web" ? "image" : "chat"));
+    setComposerMode((prev) => (prev === "chat" ? "image" : "chat"));
   };
 
   return (
@@ -1590,7 +1600,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                       color: "#E8B3FF",
                     }}
                   >
-                    📎 {f.name}
+                    {f.type === "image" || f.dataUrl ? "🖼️" : "📎"} {f.name}
                     <button
                       type="button"
                       onClick={() => setAttachedFiles((p) => p.filter((_, idx) => idx !== i))}
@@ -1643,11 +1653,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                   type="button"
                   onClick={cycleComposerMode}
                   title={
-                    composerMode === "web"
-                      ? "Internet qidiruvi (Faol) — Oddiy chatga o'tish uchun bosing"
-                      : composerMode === "image"
-                      ? "Tasvir yaratish (Faol) — Oddiy chatga o'tish uchun bosing"
-                      : "Oddiy chat — Internet qidiruvini yoqish uchun bosing"
+                    composerMode === "image"
+                      ? "Tasvir yaratish rejimi (Faol) — Oddiy chatga qaytish"
+                      : "Tasvir yaratish rejimini yoqish"
                   }
                   style={{
                     display: "inline-flex",
@@ -1656,38 +1664,23 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                     padding: "6px 10px",
                     borderRadius: "9999px",
                     background:
-                      composerMode === "chat"
-                        ? "rgba(147, 3, 197, 0.14)"
-                        : composerMode === "web"
-                        ? "rgba(147, 3, 197, 0.35)"
-                        : "rgba(78, 222, 163, 0.18)",
+                      composerMode === "image"
+                        ? "rgba(78, 222, 163, 0.22)"
+                        : "rgba(255, 255, 255, 0.04)",
                     border:
                       composerMode === "image"
-                        ? "1px solid rgba(78, 222, 163, 0.4)"
-                        : "1px solid rgba(192, 76, 253, 0.35)",
-                    color: composerMode === "image" ? "#4EDEA3" : "#E8B3FF",
+                        ? "1px solid rgba(78, 222, 163, 0.45)"
+                        : "1px solid rgba(255, 255, 255, 0.08)",
+                    color: composerMode === "image" ? "#4EDEA3" : "var(--text-secondary)",
                     fontSize: "11.5px",
                     fontWeight: 600,
                     cursor: "pointer",
                     whiteSpace: "nowrap",
+                    transition: "all 0.15s ease",
                   }}
                 >
-                  {composerMode === "image" ? (
-                    <>
-                      <CameraIcon size={13} color="#4EDEA3" />
-                      <span>Tasvir</span>
-                    </>
-                  ) : composerMode === "web" ? (
-                    <>
-                      <GlobeIcon size={13} color="#E8B3FF" />
-                      <span>Internet</span>
-                    </>
-                  ) : (
-                    <>
-                      <GlobeIcon size={13} color="rgba(232, 179, 255, 0.7)" />
-                      <span>Chat</span>
-                    </>
-                  )}
+                  <CameraIcon size={13} color={composerMode === "image" ? "#4EDEA3" : "currentColor"} />
+                  <span>Tasvir</span>
                 </button>
 
                 <button

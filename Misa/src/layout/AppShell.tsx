@@ -14,7 +14,6 @@ import {
   LaptopIcon,
   TelegramIcon,
   SearchIcon,
-  MicIcon,
 } from "../components/icons/Icons";
 
 interface AppShellProps {
@@ -40,7 +39,6 @@ const EXTRA_NAV_ITEMS = [
   { path: "/devices", label: "Qurilmalar", desc: "Ulangan kompyuterlar boshqaruvi", icon: LaptopIcon },
   { path: "/remote", label: "Masofaviy Boshqaruv", desc: "Ruxsatlar va xavfsizlik markazi", icon: RemoteControlIcon },
   { path: "/telegram", label: "Telegram Integratsiya", desc: "OTP ulanish va mobil agent", icon: TelegramIcon },
-  { path: "/voice", label: "Ovozli Muloqot", desc: "To'liq ekranli jonli ovoz rejimi", icon: MicIcon },
 ];
 
 export const AppShell: React.FC<AppShellProps> = ({
