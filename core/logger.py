@@ -15,6 +15,16 @@ import threading
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
+# Windows terminalida UnicodeEncodeError (charmap / emoji) oldini olish
+if sys.platform.startswith("win"):
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOGS_DIR = os.path.join(BASE_DIR, "logs")
 os.makedirs(LOGS_DIR, exist_ok=True)

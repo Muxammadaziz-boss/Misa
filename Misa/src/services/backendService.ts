@@ -1778,6 +1778,10 @@ class BackendService {
         voices_available: [
           { id: "ayol", name: "Madina (Ayol)", lang: "uz-UZ-MadinaNeural" },
           { id: "erkak", name: "Sardor (Erkak)", lang: "uz-UZ-SardorNeural" },
+          { id: "fish_yigit", name: "Yosh Dinamik (Aziz)", lang: "Fish Audio S2.1 Pro" },
+          { id: "fish_anime", name: "Anime Drama 3", lang: "Fish Audio Drama 3" },
+          { id: "ashley", name: "Ashley Clayson", lang: "Cyber Manhunt RVC v2" },
+          { id: "yukari", name: "Yukari", lang: "Anime RVC v2" },
         ],
       };
     }

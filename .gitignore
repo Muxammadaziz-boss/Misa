@@ -39,7 +39,6 @@ data/*.json
 # Arxiv va vaqtinchalik
 *.rar
 *.zip
-!release/**/*.zip
 *.tmp
 *.mp3
 *.pth

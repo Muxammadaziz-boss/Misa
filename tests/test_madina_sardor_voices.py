@@ -4,7 +4,7 @@ import os
 import tempfile
 import uuid
 
-async def test_voices():
+async def _async_test_voices():
     # 1. Test Madina
     fn_madina = os.path.join(tempfile.gettempdir(), f"test_madina_{uuid.uuid4().hex[:6]}.mp3")
     await edge_tts.Communicate("Salom! Men Madina, Misa AI ning ovozli yordamchisiman.", "uz-UZ-MadinaNeural").save(fn_madina)
@@ -25,5 +25,6 @@ async def test_voices():
     if os.path.exists(fn_sardor):
         os.remove(fn_sardor)
 
-if __name__ == "__main__":
-    asyncio.run(test_voices())
+
+def test_voices():
+    asyncio.run(_async_test_voices())

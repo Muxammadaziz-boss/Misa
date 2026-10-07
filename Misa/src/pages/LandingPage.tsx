@@ -243,7 +243,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       let account: any = null;
       try {
         account = await backendService.getAccount();
-        if (account?.voice_type === "ayol" || account?.voice_type === "erkak") {
+        if (account?.voice_type) {
           setActiveVoiceType(account.voice_type);
         }
       } catch {}

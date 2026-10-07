@@ -233,11 +233,8 @@ with zipfile.ZipFile(dst, 'w', zipfile.ZIP_DEFLATED) as zf:
 `;
   const pyScript = path.join(releaseVersionDir, "_make_zip.py");
   fs.writeFileSync(pyScript, pyCode, "utf-8");
-  const pyExe = fs.existsSync("d:\\\\Ishchi stoli\\\\Misa\\\\.venv\\\\Scripts\\\\python.exe")
-    ? '"d:\\\\Ishchi stoli\\\\Misa\\\\.venv\\\\Scripts\\\\python.exe"'
-    : fs.existsSync("d:\\\\Ishchi stoli\\\\Mikasa\\\\.venv\\\\Scripts\\\\python.exe")
-    ? '"d:\\\\Ishchi stoli\\\\Mikasa\\\\.venv\\\\Scripts\\\\python.exe"'
-    : "python";
+  const venvPy = path.join(projectRoot, ".venv", "Scripts", "python.exe");
+  const pyExe = fs.existsSync(venvPy) ? `"${venvPy}"` : "python";
   const { execSync } = require("child_process");
   execSync(`${pyExe} "${pyScript}" "${tempZipStaging}" "${zipTarget}"`, { stdio: "inherit" });
   if (fs.existsSync(pyScript)) fs.unlinkSync(pyScript);

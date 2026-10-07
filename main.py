@@ -6,7 +6,18 @@
 VERSION = "9.0.1"
 APP_NAME = "Misa AI"
 import os
+import sys
 import logging
+
+if sys.platform.startswith("win"):
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 import webbrowser
 import urllib.request
 from urllib.parse import quote_plus
