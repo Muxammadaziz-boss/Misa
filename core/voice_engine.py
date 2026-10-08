@@ -30,6 +30,8 @@ VOICE_TYPE_FILE = os.path.join(BASE_DIR, "data", "ovoz_turi.txt")
 DEFAULT_FISH_KEY = ""
 MODEL_FISH_ANIME = "d019b0d01cdb478e8f96df578942a552"
 MODEL_FISH_YIGIT = "502b927ae6c44543a3b37eea8529b0a5"
+MODEL_FISH_ASHLEY = "5c071b5e0fde43beb4204509b08b96ca"
+MODEL_FISH_YUKARI = "aaa4089bda2f41b8ad69086712f99882"
 
 VOICE_CATALOG = [
     {
@@ -72,18 +74,18 @@ VOICE_CATALOG = [
         "id": "ashley",
         "name": "Ashley Clayson",
         "gender": "ayol",
-        "provider": "rvc",
-        "desc": "Mayin kiber-qiz ovozi (Cyber Manhunt RVC v2)",
-        "badge": "Lokal RVC",
-        "sample": "Salom! Men Ashley, tizim barcha vazifalarga tayyor."
+        "provider": "fish_audio",
+        "desc": "Mayin kiber-detektiv qiz ovozi (Cyber Manhunt Ashley Neural)",
+        "badge": "Kiber-Mayin",
+        "sample": "Salom! Men Ashley, tizim sizning barcha buyruqlaringizga tayyor."
     },
     {
         "id": "yukari",
         "name": "Yukari",
         "gender": "ayol",
-        "provider": "rvc",
-        "desc": "Yoqimli quvnoq anime qizaloq (DiscordJP RVC v2)",
-        "badge": "Anime RVC",
+        "provider": "fish_audio",
+        "desc": "Quvnoq, samimiy va yoqimli anime qizaloq (DiscordJP Yukari Neural)",
+        "badge": "Anime Quvnoq",
         "sample": "Assalomu alaykum! Men Yukari, birgalikda ajoyib ishlar qilamiz!"
     }
 ]
@@ -256,13 +258,24 @@ def generate_audio_for_voice(text: str, voice_type: Optional[str] = None) -> Opt
 
     # 3. Ashley Clayson (Cyber Manhunt)
     if vt in ("ashley", "ashley_clayson"):
-        # Ashley uchun kiber-mayin intonatsiya: pitch +6Hz, tezlik +4%
-        return synthesize_edge_tts(clean_text, "uz-UZ-MadinaNeural", pitch="+6Hz", rate="+4%")
+        # 1-darajali: Fish Audio orqali xarakter modeli
+        audio_file = synthesize_fish_audio(clean_text, MODEL_FISH_ASHLEY, is_drama=False)
+        if audio_file:
+            return audio_file
+        # 2-darajali Fallback: kiber-detektiv xarizmatik intonatsiyasi (chuqurroq pitch, vazmin temp)
+        return synthesize_edge_tts(clean_text, "uz-UZ-MadinaNeural", pitch="-14Hz", rate="-3%")
 
-    # 4. Yukari (Anime RVC)
+    # 4. Yukari (Anime DiscordJP)
     if vt in ("yukari", "discordjp"):
-        # Yukari uchun yoqimli quvnoq anime intonatsiya: pitch +9Hz, tezlik +6%
-        return synthesize_edge_tts(clean_text, "uz-UZ-MadinaNeural", pitch="+9Hz", rate="+6%")
+        # 1-darajali: Fish Audio orqali quvnoq anime qizaloq modeli
+        anime_text = clean_text
+        if not anime_text.startswith("["):
+            anime_text = f"[quvnoq, yoqimli qizaloq ohangida] {anime_text}"
+        audio_file = synthesize_fish_audio(anime_text, MODEL_FISH_YUKARI, is_drama=True)
+        if audio_file:
+            return audio_file
+        # 2-darajali Fallback: quvnoq anime qizaloq intonatsiyasi (baland pitch +60Hz, chaqqon tezlik +16%)
+        return synthesize_edge_tts(clean_text, "uz-UZ-MadinaNeural", pitch="+60Hz", rate="+16%")
 
     # 5. Sardor (Erkak Edge-TTS)
     if vt in ("sardor", "erkak", "uz-uz-sardorneural"):

@@ -1160,10 +1160,18 @@ def speak_out_loud(text: str, voice_type: Optional[str] = None) -> bool:
             import edge_tts, ctypes, tempfile, uuid
             vt = (voice_type or get_current_voice_type() or "ayol").lower()
             voice = "uz-UZ-MadinaNeural"
+            pitch_str = "+0Hz"
             if vt in ("erkak", "sardor", "uz-uz-sardorneural"):
                 voice = "uz-UZ-SardorNeural"
+            elif vt in ("ashley", "ashley_clayson"):
+                voice = "uz-UZ-MadinaNeural"
+                pitch_str = "-14Hz"
+            elif vt in ("yukari", "discordjp"):
+                voice = "uz-UZ-MadinaNeural"
+                pitch_str = "+60Hz"
             elif vt in ("ayol", "madina", "uz-uz-madinaneural"):
                 voice = "uz-UZ-MadinaNeural"
+                pitch_str = "+3Hz"
             clean_text = re.sub(r"\[.*?\]\(.*?\)", "", text)
             clean_text = re.sub(r"```[\s\S]*?```", "", clean_text)
             clean_text = re.sub(r"`.*?`", "", clean_text)
@@ -1181,10 +1189,14 @@ def speak_out_loud(text: str, voice_type: Optional[str] = None) -> bool:
                         speed_mult = float(cfg_speed)
                 except Exception:
                     speed_mult = 1.0
+                if vt in ("yukari", "discordjp"):
+                    speed_mult *= 1.15
+                elif vt in ("ashley", "ashley_clayson"):
+                    speed_mult *= 0.97
                 speed_pct = int((speed_mult - 1.0) * 100)
                 sign = "+" if speed_pct >= 0 else ""
                 rate_str = f"{sign}{speed_pct}%"
-                asyncio.run(edge_tts.Communicate(clean_text, voice, rate=rate_str).save(fn))
+                asyncio.run(edge_tts.Communicate(clean_text, voice, rate=rate_str, pitch=pitch_str).save(fn))
                 played = False
                 alias = f"sa_{uuid.uuid4().hex[:8]}"
                 try:
