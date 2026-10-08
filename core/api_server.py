@@ -626,7 +626,15 @@ async def handle_chat(request):
 
             if speak_out:
                 sync_broadcast("voice_state", {"state": "speaking"}, loop)
-                speak_out_loud(reply_text, voice_type=ovoz)
+                try:
+                    from core.voice.voice_manager import get_voice_manager
+                    vm = get_voice_manager()
+                    def _chat_done(interrupted: bool):
+                        sync_broadcast("voice_state", {"state": "idle"}, loop)
+                    vm.speak(reply_text, voice_id=ovoz, on_complete=_chat_done)
+                except Exception as ve:
+                    logger.warning(f"VoiceManager orqali chat ijrosida xato: {ve}")
+                    speak_out_loud(reply_text, voice_type=ovoz)
 
             return reply_text
         except Exception as e:
@@ -1075,72 +1083,83 @@ async def handle_ai_sync(request):
 
 
 async def handle_voice_start(request):
-    """POST /api/voice/start - Ovozli tinglashni boshlash"""
+    """POST /api/voice/start - Ovozli tinglashni boshlash (Autonomous Conversational Voice Service)"""
     global _voice_state
-    m, _, _, _, _, _ = get_modules()
-    if not m:
-        return web.json_response({"ok": False, "error": "Backend moduli yuklanmagan"}, status=500)
-
     loop = asyncio.get_running_loop()
-    _voice_state = "listening"
-    await broadcast_ws("voice_state", {"state": "listening"})
 
-    def _voice_callback(msg):
-        import re
-        msg_str = str(msg).strip()
-        sync_broadcast("voice_event", {"message": msg_str}, loop)
+    try:
+        from core.voice.service import get_conversational_voice_service
+        from core.voice.voice_manager import get_voice_manager
+        service = get_conversational_voice_service()
 
-        # 1. Foydalanuvchi gapirganini aniqlash
-        if "🗣️ Siz:" in msg_str:
-            user_text = msg_str.split("🗣️ Siz:", 1)[1].strip()
-            sync_broadcast("voice_state", {"state": "thinking"}, loop)
-            sync_broadcast("voice_transcript", {"text": user_text, "sender": "user"}, loop)
-        # 2. Agent yoki AI javobi
-        elif any(marker in msg_str for marker in ["🤖 Agent:", "🤖 AI:", "✨", "✅", "👋 Salom"]):
-            clean_reply = re.sub(r"^[🤖✨✅⚠️❌]\s*(?:Agent:|AI:)?\s*", "", msg_str).strip()
-            sync_broadcast("voice_state", {"state": "speaking"}, loop)
-            sync_broadcast("ai_response", {"text": clean_reply, "mode": "voice"}, loop)
-            sync_broadcast("voice_transcript", {"text": clean_reply, "sender": "misa"}, loop)
-        # 3. Tinglash holatiga qaytish
-        elif "🎙️ Tinglash boshlandi" in msg_str or "Tinglash davom" in msg_str:
-            sync_broadcast("voice_state", {"state": "listening"}, loop)
-        elif "🛑 Tinglash to'xtatildi" in msg_str:
-            sync_broadcast("voice_state", {"state": "idle"}, loop)
+        # Tanlangan ovozni yangilash
+        service.voice_id = get_current_voice_type() or "ayol"
 
-    def _listen():
-        global _voice_state
-        try:
-            user = get_current_user_name()
-            ovoz = get_current_voice_type()
+        # WebSocket signallarini ulab qo'yish
+        service.add_state_callback(lambda st: sync_broadcast("voice_state", {"state": st}, loop))
+        service.add_transcript_callback(lambda txt, sender: sync_broadcast("voice_transcript", {"text": txt, "sender": sender}, loop))
+        service.add_response_callback(lambda resp: sync_broadcast("ai_response", {"text": resp, "mode": "voice"}, loop))
+        service.add_audio_level_callback(lambda lvl: sync_broadcast("audio_level", {"level": lvl}, loop))
+
+        # AudioQueue holatlarini MisaAperture ga sinxron uzatish
+        get_voice_manager().register_state_callback(lambda st: sync_broadcast("voice_state", {"state": st}, loop))
+
+        service.start()
+
+        m, _, _, _, _, _ = get_modules()
+        if m and hasattr(m, "global_state"):
             m.global_state.tinglash_faol = True
             m.global_state.gapirmoqda = False
-            m.fon_xizmat(user, ovoz, _voice_callback)
-        except Exception as e:
-            logger.error(f"Ovozli tinglashda xato: {e}")
-        finally:
-            _voice_state = "idle"
-            sync_broadcast("voice_state", {"state": "idle"}, loop)
 
-    t = threading.Thread(target=_listen, daemon=True, name="ApiVoiceThread")
-    t.start()
-    return web.json_response({"ok": True, "status": "listening"})
+        _voice_state = "listening"
+        await broadcast_ws("voice_state", {"state": "listening"})
+        return web.json_response({
+            "ok": True,
+            "status": "listening",
+            "mode": "autonomous_conversational",
+            "wake_word": "Misa (offline/local)",
+            "barge_in": "enabled"
+        })
+    except Exception as e:
+        logger.error(f"Conversational voice service start xatosi: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 
 async def handle_voice_stop(request):
     """POST /api/voice/stop - Ovozli tinglashni to'xtatish"""
     global _voice_state
+    try:
+        from core.voice.service import get_conversational_voice_service
+        from core.voice.voice_manager import get_voice_manager
+
+        service = get_conversational_voice_service()
+        service.stop()
+
+        vm = get_voice_manager()
+        vm.interrupt()
+    except Exception as e:
+        logger.warning(f"Voice service to'xtatishda ogohlantirish: {e}")
+
     m, _, _, _, _, _ = get_modules()
-    if m:
+    if m and hasattr(m, "global_state"):
         m.global_state.tinglash_faol = False
         m.global_state.gapirmoqda = False
+
     _voice_state = "idle"
     await broadcast_ws("voice_state", {"state": "idle"})
     return web.json_response({"ok": True, "status": "stopped"})
 
 
 def speak_out_loud(text: str, voice_type: Optional[str] = None) -> bool:
-    """Misa ovozli ijro chaqiruvi — VoiceEngine orqali (Edge-TTS, Fish Audio, RVC)"""
+    """Misa ovozli ijro chaqiruvi — Unified VoiceManager (AudioQueue, Non-overlapping, Barge-in)"""
     vt = voice_type or get_current_voice_type() or "ayol"
+    try:
+        from core.voice.voice_manager import get_voice_manager
+        vm = get_voice_manager()
+        return vm.speak(text, voice_id=vt)
+    except Exception as e:
+        logger.warning(f"VoiceManager orqali ijroda xatolik: {e}")
+
     try:
         from core.voice_engine import play_speech_async
         play_speech_async(text, voice_type=vt)
@@ -1235,7 +1254,7 @@ def speak_out_loud(text: str, voice_type: Optional[str] = None) -> bool:
 
 
 async def handle_voice_speak(request):
-    """POST /api/voice/speak - Istalgan matnni ovoz chiqarib o'qish"""
+    """POST /api/voice/speak - Istalgan matnni ovoz chiqarib o'qish yoki To'xtatish"""
     try:
         body = await request.json()
     except Exception:
@@ -1247,20 +1266,44 @@ async def handle_voice_speak(request):
         return web.json_response({"ok": False, "error": "Matn kiritilmadi"}, status=400)
 
     loop = asyncio.get_running_loop()
+
+    # Fast-path Barge-in: "To'xta" / "Stop" bo'lsa darhol to'xtatish
+    from core.voice.barge_in import BargeInDetector
+    barge = BargeInDetector()
+    if barge.is_stop_command(text):
+        from core.voice.voice_manager import get_voice_manager
+        count = get_voice_manager().interrupt()
+        sync_broadcast("voice_state", {"state": "idle"}, loop)
+        return web.json_response({"ok": True, "message": "Ovoz darhol to'xtatildi (Barge-in)", "cancelled_tracks": count})
+
     sync_broadcast("voice_state", {"state": "speaking"}, loop)
-    speak_out_loud(text, voice_type=voice_type)
+
+    from core.voice.voice_manager import get_voice_manager
+    vm = get_voice_manager()
+
+    def _on_done(interrupted: bool):
+        sync_broadcast("voice_state", {"state": "idle"}, loop)
+
+    success = vm.speak(text, voice_id=voice_type, on_complete=_on_done)
+    if not success:
+        # Fallback
+        speak_out_loud(text, voice_type=voice_type)
+
     return web.json_response({"ok": True, "message": "Ovoz chiqarilmoqda"})
 
 
 async def handle_get_voices(request):
     """GET /api/voice/voices - Barcha ovozlar ro'yxati va joriy faol ovozni olish"""
     try:
-        from core.voice_engine import VOICE_CATALOG, get_active_voice_id
+        from core.voice.voice_registry import get_voice_registry
+        from core.voice_engine import get_active_voice_id
+        registry = get_voice_registry()
         active_id = get_active_voice_id()
+        catalog = registry.get_catalog()
         return web.json_response({
             "ok": True,
             "active_voice": active_id,
-            "voices": VOICE_CATALOG
+            "voices": catalog
         })
     except Exception as e:
         return web.json_response({"ok": False, "error": str(e)}, status=500)
@@ -6519,6 +6562,16 @@ def run_server(host=None, port=None):
         global _main_loop
         import signal
         _main_loop = asyncio.get_running_loop()
+
+        # VoiceManager holatini (speaking/idle) avtomatik ravishda barcha WS ulanishlarga tarqatish
+        try:
+            from core.voice.voice_manager import get_voice_manager
+            get_voice_manager().register_state_callback(
+                lambda st: sync_broadcast("voice_state", {"state": st}, _main_loop)
+            )
+        except Exception as ve:
+            logger.debug(f"VoiceManager callback ulanishda ogohlantirish: {ve}")
+
         runner = web.AppRunner(app)
         await runner.setup()
 

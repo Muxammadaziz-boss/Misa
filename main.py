@@ -1991,6 +1991,12 @@ def agent_pipeline_run(matn):
         gui_ga_xabar_yuborish(f"⚠️ Agent: {response}")
         ovoz_chiqar_tez(response)
 
+    try:
+        from core.voice.session_manager import get_session_manager
+        get_session_manager().record_turn(matn, response)
+    except Exception:
+        pass
+
 
 # ========== OpenRouter AI ==========
 def openrouter_ai_suhbat(matn):
@@ -2648,6 +2654,11 @@ def buyruqni_tushun(matn, foydalanuvchi_ismi, ovoz_turi):
             try:
                 handled, result_msg = command_dispatcher.dispatch_local(matn)
                 if handled and result_msg:
+                    try:
+                        from core.voice.session_manager import get_session_manager
+                        get_session_manager().record_turn(matn, result_msg)
+                    except Exception:
+                        pass
                     gui_ga_xabar_yuborish(f"✨ {result_msg}", ovoz=True)
                     return
             except Exception as e:
