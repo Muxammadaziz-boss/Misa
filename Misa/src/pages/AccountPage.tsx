@@ -12,6 +12,7 @@ import {
   ShieldIcon,
   KeyIcon,
   VolumeIcon,
+  MicIcon,
   CheckIcon,
   CloseIcon,
   GoogleIcon,
@@ -23,6 +24,8 @@ import {
   MikasaAuthUser,
   TelegramAccountResponse,
   UserDevice,
+  AudioInputDevice,
+  MicrophoneTestResult,
 } from "../services/backendService";
 import { UpdateCheckResponse } from "../services/updateService";
 import { supabase } from "../services/supabaseClient";
@@ -156,6 +159,16 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   );
 
   // 2. Ovoz va AI Holati
+  // 2.1 Mikrofon Holati (Audio Input Device)
+  const [audioDevices, setAudioDevices] = useState<AudioInputDevice[]>([]);
+  const [selectedMicId, setSelectedMicId] = useState<string>("default");
+  const [selectedMicName, setSelectedMicName] = useState<string>("Tizim standarti");
+  const [micStatusText, setMicStatusText] = useState<string>("Yuklanmoqda...");
+  const [micFallbackUsed, setMicFallbackUsed] = useState<boolean>(false);
+  const [micTesting, setMicTesting] = useState<boolean>(false);
+  const [micTestLevel, setMicTestLevel] = useState<number>(0);
+  const [micTestResult, setMicTestResult] = useState<MicrophoneTestResult | null>(null);
+
   const [voiceType, setVoiceType] = useState<string>("ayol");
   const [fishAudioApiKey, setFishAudioApiKey] = useState<string>("");
   const [showFishKey, setShowFishKey] = useState<boolean>(false);
@@ -294,7 +307,77 @@ export const AccountPage: React.FC<AccountPageProps> = ({
         if (res.ok && res.devices) setDevices(res.devices);
       })
       .catch(() => {});
+
+    loadMicrophoneDevices();
   }, []);
+
+  // Mikrofon qurilmalarini yuklash
+  const loadMicrophoneDevices = async () => {
+    try {
+      const res = await backendService.getAudioInputDevices();
+      if (res.ok) {
+        setAudioDevices(res.devices || []);
+        setSelectedMicId(res.selected_device_id || "default");
+        setSelectedMicName(res.selected_device_name || "Tizim standarti");
+        setMicStatusText(res.message || "Ulangan / Ishlamoqda");
+        setMicFallbackUsed(!!res.fallback_used);
+      }
+    } catch (err) {
+      console.warn("Mikrofon qurilmalarini yuklashda xatolik:", err);
+    }
+  };
+
+  // Mikrofonni tanlash
+  const handleSelectMicrophone = async (deviceId: string) => {
+    const chosen = audioDevices.find((d) => d.id === deviceId);
+    setSelectedMicId(deviceId);
+    if (chosen) setSelectedMicName(chosen.name);
+    setMicTestResult(null);
+    setMicTestLevel(0);
+    try {
+      const res = await backendService.selectAudioInputDevice(deviceId, chosen?.name);
+      if (res.ok) {
+        setMicStatusText(res.message || "Ulangan / Ishlamoqda");
+        setMicFallbackUsed(!!res.fallback_used);
+        showToast(res.message || "Mikrofon tanlandi ✓");
+      } else {
+        showToast("Mikrofonni tanlashda xatolik yuz berdi");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Mikrofonni saqlab bo'lmadi");
+    }
+  };
+
+  // Mikrofonni real sinovdan o'tkazish
+  const handleTestMicrophone = async () => {
+    setMicTesting(true);
+    setMicTestResult(null);
+    setMicTestLevel(0);
+    try {
+      const res = await backendService.testMicrophone(selectedMicId, 1.5);
+      setMicTestResult(res);
+      if (res.ok) {
+        const peakVal = res.peak ?? 0;
+        const rmsVal = res.rms ?? 0;
+        const levelPct = Math.min(100, Math.max(0, Math.round((peakVal > 0 ? peakVal : rmsVal * 3) * 100)));
+        setMicTestLevel(levelPct);
+        showToast(res.message || "Mikrofon sinovdan o'tdi ✓");
+      } else {
+        showToast(res.message || "Mikrofon sinovida xatolik");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Mikrofonni ochib bo'lmadi");
+      setMicTestResult({
+        ok: false,
+        working: false,
+        level: 0,
+        status: "error",
+        message: err.message || "Mikrofonni ochib bo'lmadi",
+      });
+    } finally {
+      setMicTesting(false);
+    }
+  };
 
   // Appearance persistence
   const updateAppearance = (
@@ -904,6 +987,279 @@ export const AccountPage: React.FC<AccountPageProps> = ({
         {/* ── TAB 2: MISA AI VA OVOZ ── */}
         {activeTab === "voice_ai" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+            {/* ══════════════════════════════════════════════════════════
+                MIKROFON SOZLAMALARI KARTASI (AUDIO INPUT DEVICE SELECTION)
+               ══════════════════════════════════════════════════════════ */}
+            <div
+              className="misa-ultra-glass"
+              style={{
+                padding: "24px",
+                borderRadius: "22px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "18px",
+                border: "1px solid rgba(192, 76, 253, 0.28)",
+                background: "linear-gradient(135deg, rgba(147, 3, 197, 0.08) 0%, rgba(2, 6, 14, 0.7) 100%)",
+                boxShadow: "0 8px 32px rgba(0, 0, 0, 0.35)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <div
+                    style={{
+                      width: "38px",
+                      height: "38px",
+                      borderRadius: "12px",
+                      background: "rgba(147, 3, 197, 0.22)",
+                      border: "1px solid rgba(192, 76, 253, 0.38)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      boxShadow: "0 0 16px rgba(147, 3, 197, 0.3)",
+                    }}
+                  >
+                    <MicIcon size={18} color="#E8B3FF" />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF", margin: 0 }}>
+                      Mikrofon
+                    </h2>
+                    <p style={{ fontSize: "11.5px", color: "var(--text-secondary)", margin: 0 }}>
+                      Ovozli buyruqlar va "Misa" uyg'onish so'zi uchun audio kirish qurilmasi • Tanlangan: <strong style={{ color: "#E8B3FF" }}>{selectedMicName}</strong>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Jonli Qurilma Holati Indikatori */}
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "4px 12px",
+                    borderRadius: "999px",
+                    background: micFallbackUsed
+                      ? "rgba(245, 158, 11, 0.15)"
+                      : micTestResult && !micTestResult.ok
+                      ? "rgba(239, 68, 68, 0.15)"
+                      : "rgba(16, 185, 129, 0.15)",
+                    border: micFallbackUsed
+                      ? "1px solid rgba(245, 158, 11, 0.35)"
+                      : micTestResult && !micTestResult.ok
+                      ? "1px solid rgba(239, 68, 68, 0.35)"
+                      : "1px solid rgba(52, 211, 153, 0.35)",
+                    color: micFallbackUsed
+                      ? "#FBBF24"
+                      : micTestResult && !micTestResult.ok
+                      ? "#F87171"
+                      : "#34D399",
+                    fontSize: "11.5px",
+                    fontWeight: 600,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: "7px",
+                      height: "7px",
+                      borderRadius: "50%",
+                      backgroundColor: "currentColor",
+                      boxShadow: "0 0 8px currentColor",
+                    }}
+                  />
+                  <span>
+                    {micFallbackUsed
+                      ? "Default mikrofon ishlatilmoqda"
+                      : micTestResult && !micTestResult.ok
+                      ? "Xatolik / Ulanmagan"
+                      : "Ulangan / Ishlamoqda"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Tanlash boshqaruvi va dropdown */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px", alignItems: "flex-end" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)" }}>
+                    Mikrofonni tanlang
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <select
+                      value={selectedMicId}
+                      onChange={(e) => handleSelectMicrophone(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "10px 14px",
+                        paddingRight: "32px",
+                        borderRadius: "14px",
+                        background: "rgba(2, 6, 14, 0.75)",
+                        border: "1px solid rgba(192, 76, 253, 0.32)",
+                        color: "#FFFFFF",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        outline: "none",
+                        cursor: "pointer",
+                        appearance: "none",
+                        WebkitAppearance: "none",
+                      }}
+                    >
+                      <option value="default" style={{ background: "#0D1117", color: "#FFFFFF" }}>
+                        Default (Tizim standarti)
+                      </option>
+                      {audioDevices.map((d) => (
+                        <option
+                          key={d.id}
+                          value={d.id}
+                          style={{ background: "#0D1117", color: d.available ? "#FFFFFF" : "#888888" }}
+                        >
+                          {d.name} {d.is_default ? "★ (Default)" : ""} {!d.available ? "(Ulanmagan)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <span
+                      style={{
+                        position: "absolute",
+                        right: "12px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        pointerEvents: "none",
+                        color: "#C04CFD",
+                        fontSize: "10px",
+                      }}
+                    >
+                      ▼
+                    </span>
+                  </div>
+                </div>
+
+                {/* Mikrofonni tekshirish tugmasi */}
+                <div>
+                  <button
+                    type="button"
+                    onClick={handleTestMicrophone}
+                    disabled={micTesting}
+                    className="misa-btn-violet"
+                    style={{
+                      width: "100%",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "8px",
+                      padding: "10px 18px",
+                      borderRadius: "14px",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                      cursor: micTesting ? "wait" : "pointer",
+                      boxShadow: "0 4px 18px rgba(147, 3, 197, 0.28)",
+                    }}
+                  >
+                    <MicIcon size={15} color="#FFFFFF" />
+                    <span>{micTesting ? "Ovoz o'lchanmoqda (1.5s)..." : "🎙 Mikrofonni tekshirish"}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Status va Fallback Xabardorligi */}
+              {micStatusText && (
+                <div
+                  style={{
+                    padding: "8px 14px",
+                    borderRadius: "10px",
+                    background: micFallbackUsed
+                      ? "rgba(245, 158, 11, 0.1)"
+                      : "rgba(255, 255, 255, 0.04)",
+                    border: micFallbackUsed
+                      ? "1px solid rgba(245, 158, 11, 0.25)"
+                      : "1px solid rgba(255, 255, 255, 0.07)",
+                    color: micFallbackUsed ? "#FCD34D" : "var(--text-secondary)",
+                    fontSize: "11.5px",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  <span style={{ fontWeight: 600 }}>Holat: </span>
+                  {micStatusText}
+                </div>
+              )}
+
+              {/* Real Input Level Bar */}
+              <div
+                style={{
+                  padding: "12px 16px",
+                  borderRadius: "14px",
+                  background: "rgba(2, 6, 14, 0.5)",
+                  border: "1px solid rgba(255, 255, 255, 0.06)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "8px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)" }}>
+                    Input darajasi (Real Signal):
+                  </span>
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      fontFamily: "monospace",
+                      fontWeight: 700,
+                      color: micTestLevel > 50 ? "#4EDEA3" : micTestLevel > 15 ? "#C04CFD" : "var(--text-muted)",
+                    }}
+                  >
+                    {micTesting
+                      ? "Yozib olinmoqda..."
+                      : micTestResult
+                      ? `${micTestLevel}% (RMS: ${micTestResult.rms ?? 0})`
+                      : "0% — Tekshirish tugmasini bosing"}
+                  </span>
+                </div>
+
+                {/* Progress bar */}
+                <div
+                  style={{
+                    width: "100%",
+                    height: "10px",
+                    borderRadius: "999px",
+                    background: "rgba(255, 255, 255, 0.06)",
+                    overflow: "hidden",
+                    position: "relative",
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${micTestLevel}%`,
+                      background:
+                        micTestLevel > 75
+                          ? "linear-gradient(90deg, #9303C5 0%, #C04CFD 50%, #EF4444 100%)"
+                          : "linear-gradient(90deg, #9303C5 0%, #C04CFD 70%, #4EDEA3 100%)",
+                      borderRadius: "999px",
+                      transition: "width 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                      boxShadow: micTestLevel > 0 ? "0 0 12px rgba(192, 76, 253, 0.6)" : "none",
+                    }}
+                  />
+                </div>
+
+                {/* Sinov natijasi xabari */}
+                {micTestResult && (
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      color: micTestResult.ok ? "#4EDEA3" : "#F87171",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      marginTop: "2px",
+                    }}
+                  >
+                    <span>{micTestResult.ok ? "●" : "⚠"}</span>
+                    <span>
+                      {micTestResult.message}
+                      {micTestResult.device_name ? ` (${micTestResult.device_name})` : ""}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Ovoz Tanlash Kartasi */}
             <div
               className="misa-glass-card"

@@ -35,6 +35,7 @@ ovoz_turi.txt
 buyruqlar_tarixi.txt
 eslatmalar.txt
 data/*.json
+core/config.json
 
 # Arxiv va vaqtinchalik
 *.rar

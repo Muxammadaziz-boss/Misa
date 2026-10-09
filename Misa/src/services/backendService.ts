@@ -1126,6 +1126,48 @@ class BackendService {
     }
   }
 
+  // ========== Real Microphone Device Management ==========
+  public async getAudioInputDevices(): Promise<AudioDevicesResponse> {
+    try {
+      const res = await fetch(`${API_BASE}/api/voice/devices`);
+      if (res.ok) {
+        return await res.json();
+      }
+      return { ok: false, devices: [], selected_device_id: "default", selected_device_name: "Default", error: `HTTP ${res.status}` };
+    } catch (e: any) {
+      return { ok: false, devices: [], selected_device_id: "default", selected_device_name: "Default", error: String(e) };
+    }
+  }
+
+  public async selectAudioInputDevice(
+    deviceId: string,
+    deviceName?: string
+  ): Promise<{ ok: boolean; selected_device_id?: string; fallback_used?: boolean; status?: string; message?: string; error?: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/api/voice/devices/select`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ device_id: deviceId, device_name: deviceName }),
+      });
+      return await res.json();
+    } catch (e: any) {
+      return { ok: false, error: String(e) };
+    }
+  }
+
+  public async testMicrophone(deviceId?: string, duration: number = 1.5): Promise<MicrophoneTestResult> {
+    try {
+      const res = await fetch(`${API_BASE}/api/voice/devices/test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ device_id: deviceId, duration }),
+      });
+      return await res.json();
+    } catch (e: any) {
+      return { ok: false, working: false, level: 0, status: "error", message: String(e), error: String(e) };
+    }
+  }
+
   // ========== Real System Metrics ==========
   public async getSystemMetrics(): Promise<SystemMetrics | null> {
     try {
@@ -2881,6 +2923,9 @@ class BackendService {
           clearStoredOAuthState();
           return data;
         }
+        if (data?.status === "pending") {
+          return { ok: false };
+        }
       } else if (res.status === 400) {
         const errData = await res.json().catch(() => ({}));
         const rawErr = errData?.oauth_error || errData?.error || "Google orqali kirishda xatolik yuz berdi";
@@ -3946,6 +3991,44 @@ export interface SecurityWarningPayload {
   warning_text: string;
   policy_version: string;
   expires_in: number;
+}
+
+export interface AudioInputDevice {
+  id: string;
+  name: string;
+  type: "input";
+  available: boolean;
+  is_default: boolean;
+  index?: number | null;
+  channels?: number;
+  sample_rate?: number;
+}
+
+export interface AudioDevicesResponse {
+  ok: boolean;
+  devices: AudioInputDevice[];
+  selected_device_id: string;
+  selected_device_name: string;
+  active_device?: AudioInputDevice;
+  resolved_index?: number;
+  fallback_used?: boolean;
+  status?: string;
+  message?: string;
+  error?: string;
+}
+
+export interface MicrophoneTestResult {
+  ok: boolean;
+  working: boolean;
+  level: number;
+  rms?: number;
+  peak?: number;
+  status: "connected" | "warning" | "error" | "disconnected";
+  message: string;
+  device_name?: string;
+  device_id?: string;
+  sample_rate?: number;
+  error?: string;
 }
 
 export const backendService = new BackendService();

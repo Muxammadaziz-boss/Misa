@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+ # -*- coding: utf-8 -*-
 """
 Misa AI — Production Autonomous Conversational Voice Service
 To'liq siklli avtonom ovozli yordamchi dvigateli:
@@ -14,6 +14,7 @@ from typing import Optional, Callable, Dict, Any, List
 
 import numpy as np
 
+from .devices import MicrophoneManager
 from .cancellation import CancellationToken
 from .wake_word import WakeWordDetector
 from .vad import StreamingVAD
@@ -53,6 +54,7 @@ class ConversationalVoiceService:
         self.voice_id = voice_id or "ayol"
 
         # Quyi modullar
+        self.mic_manager: MicrophoneManager = MicrophoneManager.get_instance()
         self.wake_detector = WakeWordDetector(sample_rate=self.sample_rate, sensitivity=0.65)
         self.vad = StreamingVAD(sample_rate=self.sample_rate, silence_timeout=1.1)
         self.barge_in = BargeInDetector(sample_rate=self.sample_rate)
@@ -64,6 +66,7 @@ class ConversationalVoiceService:
         # Oqim va holat
         self.state: str = VoiceServiceState.IDLE
         self._is_running = False
+        self._reconnect_stream_event = threading.Event()
         self._lock = threading.Lock()
         self._stream_thread: Optional[threading.Thread] = None
         self._state_callbacks: List[Callable[[str], None]] = []
@@ -179,6 +182,15 @@ class ConversationalVoiceService:
         time.sleep(0.3)
         self._set_state(VoiceServiceState.LISTENING)
 
+    def set_microphone(self, device_id: str, device_name: Optional[str] = None) -> Dict[str, Any]:
+        """Mikrofonni tanlash va agar oqim ishlayotgan bo'lsa uni yangi qurilmada qayta ishga tushirish"""
+        res = self.mic_manager.set_selected_device(device_id, device_name)
+        with self._lock:
+            if self._is_running:
+                logger.info("[VOICE] Mikrofon sozlamasi o'zgardi -> Oqim yangi qurilmaga o'tkazilmoqda...")
+                self._reconnect_stream_event.set()
+        return res
+
     def _audio_capture_loop(self) -> None:
         """
         Doimiy mikrofon oqimini o'qish va holatlar mashinasi (State Machine).
@@ -192,57 +204,80 @@ class ConversationalVoiceService:
 
         chunk_size = int(self.sample_rate * 0.1)  # 100ms = 1600 samples
 
-        # Audio kirish qurilmasini aniqlash va diagnostika ma'lumotlarini chop etish
-        try:
-            dev_idx = sd.default.device[0]
-            if dev_idx is None or dev_idx < 0:
-                devices = sd.query_devices()
-                for i, d in enumerate(devices):
-                    if d.get("max_input_channels", 0) > 0:
-                        dev_idx = i
-                        break
+        while self._is_running:
+            self._reconnect_stream_event.clear()
+
+            # Audio kirish qurilmasini aniqlash va diagnostika ma'lumotlarini chop etish
+            dev_idx, dev_info, fallback_used, status_msg = self.mic_manager.resolve_selected_device()
             if dev_idx is None or dev_idx < 0:
                 logger.error("[VOICE] Xatolik: Hech qanday audio kirish qurilmasi (mikrofon) topilmadi!")
                 self._set_state(VoiceServiceState.ERROR)
-                return
+                time.sleep(2.0)
+                continue
 
-            dev_info = sd.query_devices(dev_idx)
             dev_name = dev_info.get("name", "Noma'lum mikrofon")
-        except Exception as dev_err:
-            logger.error(f"[VOICE] Audio kirish qurilmasi aniqlanmadi: {dev_err}")
-            self._set_state(VoiceServiceState.ERROR)
-            return
+            if fallback_used:
+                logger.warning(f"[VOICE] OGOHLANTIRISH: {status_msg}")
+            else:
+                logger.info(f"[VOICE] Tanlangan mikrofon: {dev_name} (Index: {dev_idx})")
 
-        logger.info(f"[VOICE] Input device: {dev_name}")
-        logger.info(f"[VOICE] Input device index: {dev_idx}")
-        logger.info(f"[VOICE] Sample rate: {self.sample_rate}")
-        logger.info(f"[VOICE] Channels: 1")
-        logger.info(f"[VOICE] Block size: {chunk_size}")
-        logger.info(f"[VOICE] Stream active: True")
-        logger.info("[VOICE] Microphone stream started")
+            logger.info(f"[VOICE] Input device: {dev_name}")
+            logger.info(f"[VOICE] Input device index: {dev_idx}")
+            logger.info(f"[VOICE] Sample rate: {self.sample_rate}")
+            logger.info(f"[VOICE] Channels: 1")
+            logger.info(f"[VOICE] Block size: {chunk_size}")
+            logger.info(f"[VOICE] Stream active: True")
+            logger.info("[VOICE] Microphone stream started")
 
-        while self._is_running:
+            # Apparat moslashuvi: to'g'ridan-to'g'ri 16000Hz yoki native samplerate bilan ochish
+            native_sr = int(dev_info.get("sample_rate", 44100))
+            use_resampling = False
+            stream_sr = self.sample_rate
+            stream_chunk = chunk_size
+
+            # Test ochish: agar 16000Hz to'g'ridan-to'g'ri ishlamasa, native samplerate ishlatiladi
             try:
-                with sd.InputStream(
+                test_stream = sd.InputStream(
                     device=dev_idx,
                     samplerate=self.sample_rate,
                     channels=1,
                     dtype="float32",
                     blocksize=chunk_size
+                )
+                test_stream.close()
+            except Exception as sr_err:
+                logger.info(f"[VOICE] 16000Hz to'g'ridan-to'g'ri ochilmadi ({sr_err}), native {native_sr}Hz ishlatilmoqda")
+                use_resampling = True
+                stream_sr = native_sr
+                stream_chunk = int(native_sr * 0.1)
+
+            try:
+                with sd.InputStream(
+                    device=dev_idx,
+                    samplerate=stream_sr,
+                    channels=1,
+                    dtype="float32",
+                    blocksize=stream_chunk
                 ) as stream:
                     # Uskunaning dastlabki DC/click shovqinini tashlab yuborish (warmup)
                     try:
-                        stream.read(chunk_size)
-                        stream.read(chunk_size)
+                        stream.read(stream_chunk)
+                        stream.read(stream_chunk)
                     except Exception:
                         pass
 
-                    while self._is_running:
-                        chunk, overflowed = stream.read(chunk_size)
+                    while self._is_running and not self._reconnect_stream_event.is_set():
+                        chunk, overflowed = stream.read(stream_chunk)
                         if chunk is None or len(chunk) == 0:
                             continue
 
-                        flat_chunk = np.asarray(chunk, dtype=np.float32).flatten()
+                        raw_chunk = np.asarray(chunk, dtype=np.float32).flatten()
+                        if use_resampling and len(raw_chunk) > 0:
+                            indices = np.linspace(0, len(raw_chunk) - 1, chunk_size)
+                            flat_chunk = np.interp(indices, np.arange(len(raw_chunk)), raw_chunk).astype(np.float32)
+                        else:
+                            flat_chunk = raw_chunk
+
                         rms = float(np.sqrt(np.mean(flat_chunk**2)))
                         self._emit_level(min(1.0, rms * 15.0))
 

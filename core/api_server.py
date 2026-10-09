@@ -1156,29 +1156,86 @@ async def handle_voice_stop(request):
     return web.json_response({"ok": True, "status": "stopped"})
 
 
-async def handle_voice_diagnostic(request):
-    """GET /api/voice/diagnostic - Haqiqiy ovoz tizimi va mikrofon telemetriyasi (Section 11)"""
+async def handle_voice_devices_get(request):
+    """GET /api/voice/devices - Barcha Windows audio kirish (input/capture) qurilmalarini ro'yxati"""
     try:
+        from core.voice.devices import MicrophoneManager
+        mgr = MicrophoneManager.get_instance()
+        devices = mgr.get_input_devices()
+        idx, dev_info, fallback_used, status_msg = mgr.resolve_selected_device()
+        return web.json_response({
+            "ok": True,
+            "devices": devices,
+            "selected_device_id": mgr._selected_device_id or "default",
+            "selected_device_name": mgr._selected_device_name or "Tizim standarti (Windows Default)",
+            "active_device": dev_info,
+            "resolved_index": idx,
+            "fallback_used": fallback_used,
+            "status": status_msg
+        })
+    except Exception as e:
+        logger.error(f"Ovoz qurilmalarini olishda xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_voice_device_select(request):
+    """POST /api/voice/devices/select - Foydalanuvchi tanlagan mikrofonni saqlash va oqimni yangilash"""
+    try:
+        data = await request.json()
+        device_id = str(data.get("device_id") or "default").strip()
+        device_name = str(data.get("device_name") or "").strip() or None
+
         from core.voice.service import get_conversational_voice_service
         service = get_conversational_voice_service()
+        res = service.set_microphone(device_id, device_name)
+
+        # WebSocket orqali interfeysga xabar berish
+        await broadcast_ws("microphone_changed", res)
+        return web.json_response(res)
+    except Exception as e:
+        logger.error(f"Mikrofonni tanlashda xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_voice_device_test(request):
+    """POST /api/voice/devices/test - Tanlangan mikrofondan real apparat audio signali va darajasini tekshirish"""
+    try:
+        device_id = None
+        if request.method == "POST":
+            try:
+                data = await request.json()
+                device_id = data.get("device_id")
+            except Exception:
+                pass
+        if not device_id:
+            device_id = request.query.get("device_id")
+
+        from core.voice.devices import MicrophoneManager
+        mgr = MicrophoneManager.get_instance()
+        res = mgr.test_microphone(device_id=device_id, duration_s=1.0)
+        return web.json_response(res)
+    except Exception as e:
+        logger.error(f"Mikrofon testida xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_voice_diagnostic(request):
+    """GET /api/voice/diagnostic - Haqiqiy ovoz tizimi va mikrofon telemetriyasi"""
+    try:
+        from core.voice.service import get_conversational_voice_service
+        from core.voice.devices import MicrophoneManager
+
+        service = get_conversational_voice_service()
+        mgr = MicrophoneManager.get_instance()
 
         score = getattr(service.wake_detector, "last_wake_score", 0.0)
         thresh = getattr(service.wake_detector, "last_threshold", 0.56)
         is_running = getattr(service, "_is_running", False)
 
-        dev_name = "Noma'lum"
-        dev_idx = -1
-        mic_status = "DISCONNECTED"
-
-        try:
-            import sounddevice as sd
-            dev_idx = sd.default.device[0]
-            if dev_idx is not None and dev_idx >= 0:
-                dev_info = sd.query_devices(dev_idx)
-                dev_name = dev_info.get("name", "Noma'lum mikrofon")
-                mic_status = "CONNECTED"
-        except Exception:
-            pass
+        idx, dev_info, fallback_used, status_msg = mgr.resolve_selected_device()
+        dev_name = dev_info.get("name", "Noma'lum mikrofon")
+        dev_idx = idx if idx is not None else -1
+        mic_status = "CONNECTED" if (idx is not None and idx >= 0) else "DISCONNECTED"
 
         stream_status = "ACTIVE" if is_running else "INACTIVE"
         detector_status = "RUNNING" if is_running else "STOPPED"
@@ -1192,6 +1249,10 @@ async def handle_voice_diagnostic(request):
             "Threshold": round(thresh, 2),
             "device_name": dev_name,
             "device_index": dev_idx,
+            "selected_device_id": mgr._selected_device_id or "default",
+            "selected_device_name": mgr._selected_device_name or "Tizim standarti (Windows Default)",
+            "fallback_used": fallback_used,
+            "microphone_status": status_msg,
             "state": service.state,
             "voice_id": service.voice_id
         })
@@ -5069,6 +5130,11 @@ async def handle_oauth_session_save(request):
 
 async def handle_oauth_session_get(request):
     """GET /api/auth/callback/session - Desktop ilova uchun kutilayotgan sessiyani state orqali bir martalik olish"""
+    # 1. Agar brauzer to'g'ridan-to'g'ri HTML qabul qiluvchi sifatida kelsa (masalan, Supabase redirect)
+    accept_hdr = request.headers.get("Accept", "")
+    if "text/html" in accept_hdr:
+        return await handle_oauth_callback(request)
+
     _clean_expired_oauth_sessions()
     req_state = request.query.get("state", "").strip()
 
@@ -5156,9 +5222,19 @@ async def handle_oauth_session_get(request):
             headers=_oauth_security_headers(),
         )
 
+    # Agar ro'yxatga olingan state hali tasdiqlanish jarayonida bo'lsa (pending polling):
+    if is_still_pending:
+        return web.json_response({
+            "ok": False,
+            "status": "pending",
+            "session": None,
+            "message": "OAuth sessiyasi kutilmoqda"
+        }, status=200, headers=_oauth_security_headers())
+
+    # State topilmagan, muddati o'tgan yoki allaqachon olingan (one-time replay himoyasi)
     return web.json_response({
         "ok": False,
-        "status": "pending" if is_still_pending else "not_found",
+        "status": "not_found",
         "session": None,
         "error": "Sessiya topilmadi yoki muddati o'tgan"
     }, status=404, headers=_oauth_security_headers())
@@ -6426,6 +6502,10 @@ def create_app():
     app.router.add_post("/api/voice/speak", handle_voice_speak)
     app.router.add_get("/api/voice/voices", handle_get_voices)
     app.router.add_get("/api/voice/diagnostic", handle_voice_diagnostic)
+    app.router.add_get("/api/voice/devices", handle_voice_devices_get)
+    app.router.add_post("/api/voice/devices/select", handle_voice_device_select)
+    app.router.add_post("/api/voice/devices/test", handle_voice_device_test)
+    app.router.add_get("/api/voice/devices/test", handle_voice_device_test)
 
 
     # Buyruqlar (Commands)
