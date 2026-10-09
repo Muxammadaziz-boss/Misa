@@ -143,6 +143,48 @@ def test_wake_word_detector_silence_and_noise_rejection():
         assert not detected, "Fon shovqinida 'Misa' soxta (false positive) uyg'onmasligi kerak!"
 
 
+def test_wake_word_detector_speech_trigger():
+    """Haqiqiy 'Misa' nutqi kelganda WakeWordDetector uyg'onishi va callback chaqirilishi"""
+    callback_fired = False
+
+    def on_wake():
+        nonlocal callback_fired
+        callback_fired = True
+
+    detector = WakeWordDetector(sample_rate=16000, sensitivity=0.65, on_wake_detected=on_wake)
+
+    # Sun'iy 'Misa' fonetik ketma-ketligi:
+    # 1. /m-i/ (200ms) - past/o'rta chastota 300Hz/2200Hz, past ZCR
+    # 2. /s/ (150ms) - yuqori chastota 4500Hz, yuqori ZCR
+    # 3. /a/ (200ms) - ochiq unli 750Hz, past ZCR
+    sr = 16000
+    t_mi = np.linspace(0, 0.20, int(sr * 0.20), endpoint=False)
+    sig_mi = (0.25 * np.sin(2 * np.pi * 300 * t_mi) + 0.15 * np.sin(2 * np.pi * 2200 * t_mi)).astype(np.float32)
+
+    t_s = np.linspace(0, 0.15, int(sr * 0.15), endpoint=False)
+    np.random.seed(99)
+    # /s/ frikativ: yuqori chastotali modulyatsiyalangan shovqin
+    sig_s = (0.35 * np.sin(2 * np.pi * 4500 * t_s) + 0.10 * (np.random.rand(len(t_s)) - 0.5)).astype(np.float32)
+
+    t_a = np.linspace(0, 0.20, int(sr * 0.20), endpoint=False)
+    sig_a = (0.30 * np.sin(2 * np.pi * 750 * t_a) + 0.15 * np.sin(2 * np.pi * 1200 * t_a)).astype(np.float32)
+
+    misa_speech = np.concatenate([sig_mi, sig_s, sig_a])
+
+    # 100ms bo'laklar bilan yuborish
+    chunk_size = 1600
+    detected_any = False
+    for i in range(0, len(misa_speech), chunk_size):
+        chunk = misa_speech[i : i + chunk_size]
+        if len(chunk) < chunk_size:
+            chunk = np.pad(chunk, (0, chunk_size - len(chunk)))
+        if detector.process_frame(chunk):
+            detected_any = True
+
+    assert detected_any, "'Misa' fonetik ketma-ketligi kelganda detektor True qaytarishi shart!"
+    assert callback_fired, "Wake-word callback chaqirilishi shart!"
+
+
 def test_streaming_vad_speech_detection():
     """VAD faolligi: nutq va sukunat chegaralarini aniqlash"""
     vad = StreamingVAD(sample_rate=16000, silence_timeout=0.2, min_speech_duration=0.1)

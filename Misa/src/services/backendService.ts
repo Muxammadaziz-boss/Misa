@@ -414,6 +414,8 @@ export interface AccountSettings {
 
 export type VoiceState =
   | "idle"
+  | "wake_detected"
+  | "acknowledging"
   | "listening"
   | "thinking"
   | "planning"

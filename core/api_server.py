@@ -21,6 +21,12 @@ import time
 import urllib.parse
 
 # Ishchi katalogni to'g'ri o'rnatish
+_curr_dir = os.path.dirname(os.path.abspath(__file__))
+_parent_dir = os.path.dirname(_curr_dir)
+for _p in (_curr_dir, _parent_dir):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 from core.common_paths import get_base_dir, get_data_dir
 
 BASE_DIR = get_base_dir()
@@ -1148,6 +1154,49 @@ async def handle_voice_stop(request):
     _voice_state = "idle"
     await broadcast_ws("voice_state", {"state": "idle"})
     return web.json_response({"ok": True, "status": "stopped"})
+
+
+async def handle_voice_diagnostic(request):
+    """GET /api/voice/diagnostic - Haqiqiy ovoz tizimi va mikrofon telemetriyasi (Section 11)"""
+    try:
+        from core.voice.service import get_conversational_voice_service
+        service = get_conversational_voice_service()
+
+        score = getattr(service.wake_detector, "last_wake_score", 0.0)
+        thresh = getattr(service.wake_detector, "last_threshold", 0.56)
+        is_running = getattr(service, "_is_running", False)
+
+        dev_name = "Noma'lum"
+        dev_idx = -1
+        mic_status = "DISCONNECTED"
+
+        try:
+            import sounddevice as sd
+            dev_idx = sd.default.device[0]
+            if dev_idx is not None and dev_idx >= 0:
+                dev_info = sd.query_devices(dev_idx)
+                dev_name = dev_info.get("name", "Noma'lum mikrofon")
+                mic_status = "CONNECTED"
+        except Exception:
+            pass
+
+        stream_status = "ACTIVE" if is_running else "INACTIVE"
+        detector_status = "RUNNING" if is_running else "STOPPED"
+
+        return web.json_response({
+            "ok": True,
+            "Microphone": mic_status,
+            "Stream": stream_status,
+            "Wake detector": detector_status,
+            "Current wake score": round(score, 2),
+            "Threshold": round(thresh, 2),
+            "device_name": dev_name,
+            "device_index": dev_idx,
+            "state": service.state,
+            "voice_id": service.voice_id
+        })
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 
 def speak_out_loud(text: str, voice_type: Optional[str] = None) -> bool:
@@ -6376,6 +6425,7 @@ def create_app():
     app.router.add_post("/api/voice/stop", handle_voice_stop)
     app.router.add_post("/api/voice/speak", handle_voice_speak)
     app.router.add_get("/api/voice/voices", handle_get_voices)
+    app.router.add_get("/api/voice/diagnostic", handle_voice_diagnostic)
 
 
     # Buyruqlar (Commands)
@@ -6578,6 +6628,23 @@ def run_server(host=None, port=None):
         primary_site = web.TCPSite(runner, resolved_host, resolved_port)
         await primary_site.start()
         logger.info(f"Asosiy API server ishga tushdi: http://{resolved_host}:{resolved_port}")
+
+        # Desktop rejimida avtonom lokal ovoz xizmatini (Wake-word "Misa") avtomatik ishga tushirish
+        if not _is_headless_server_mode():
+            try:
+                from core.voice.service import get_conversational_voice_service
+                service = get_conversational_voice_service()
+                service.voice_id = get_current_voice_type() or "ayol"
+
+                service.add_state_callback(lambda st: sync_broadcast("voice_state", {"state": st}, _main_loop))
+                service.add_transcript_callback(lambda txt, sender: sync_broadcast("voice_transcript", {"text": txt, "sender": sender}, _main_loop))
+                service.add_response_callback(lambda resp: sync_broadcast("ai_response", {"text": resp, "mode": "voice"}, _main_loop))
+                service.add_audio_level_callback(lambda lvl: sync_broadcast("audio_level", {"level": lvl}, _main_loop))
+
+                service.start()
+                logger.info("[VOICE] ConversationalVoiceService avtomatik ishga tushirildi (Boot auto-listen)")
+            except Exception as ve:
+                logger.error(f"[VOICE] ConversationalVoiceService avtomatik start xatosi: {ve}")
 
         # Auxiliary ports (1420, 140) - local desktop OAuth fallback only (never on cloud/Railway)
         is_cloud = bool(os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("RAILWAY_PROJECT_ID"))

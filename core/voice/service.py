@@ -148,13 +148,17 @@ class ConversationalVoiceService:
                 return True
             self._is_running = True
 
+        # Wake detector callback bog'lash
+        self.wake_detector.on_wake_detected = self._on_wake_detected
+
         self._stream_thread = threading.Thread(
             target=self._audio_capture_loop,
             daemon=True,
             name="MisaVoiceCaptureLoop"
         )
         self._stream_thread.start()
-        logger.info("ConversationalVoiceService: Ishga tushirildi (Mahalliy 'Misa' kutish rejimi)")
+        logger.info("[VOICE] ConversationalVoiceService started")
+        logger.info("[VOICE] WakeWordDetector started")
         self._set_state(VoiceServiceState.IDLE)
         return True
 
@@ -182,28 +186,63 @@ class ConversationalVoiceService:
         try:
             import sounddevice as sd
         except ImportError:
-            logger.error("sounddevice o'rnatilmagan, ovozli xizmat ishlamaydi")
+            logger.error("[VOICE] sounddevice o'rnatilmagan, ovozli xizmat ishlamaydi")
             self._set_state(VoiceServiceState.ERROR)
             return
 
         chunk_size = int(self.sample_rate * 0.1)  # 100ms = 1600 samples
 
+        # Audio kirish qurilmasini aniqlash va diagnostika ma'lumotlarini chop etish
+        try:
+            dev_idx = sd.default.device[0]
+            if dev_idx is None or dev_idx < 0:
+                devices = sd.query_devices()
+                for i, d in enumerate(devices):
+                    if d.get("max_input_channels", 0) > 0:
+                        dev_idx = i
+                        break
+            if dev_idx is None or dev_idx < 0:
+                logger.error("[VOICE] Xatolik: Hech qanday audio kirish qurilmasi (mikrofon) topilmadi!")
+                self._set_state(VoiceServiceState.ERROR)
+                return
+
+            dev_info = sd.query_devices(dev_idx)
+            dev_name = dev_info.get("name", "Noma'lum mikrofon")
+        except Exception as dev_err:
+            logger.error(f"[VOICE] Audio kirish qurilmasi aniqlanmadi: {dev_err}")
+            self._set_state(VoiceServiceState.ERROR)
+            return
+
+        logger.info(f"[VOICE] Input device: {dev_name}")
+        logger.info(f"[VOICE] Input device index: {dev_idx}")
+        logger.info(f"[VOICE] Sample rate: {self.sample_rate}")
+        logger.info(f"[VOICE] Channels: 1")
+        logger.info(f"[VOICE] Block size: {chunk_size}")
+        logger.info(f"[VOICE] Stream active: True")
+        logger.info("[VOICE] Microphone stream started")
+
         while self._is_running:
             try:
                 with sd.InputStream(
+                    device=dev_idx,
                     samplerate=self.sample_rate,
                     channels=1,
                     dtype="float32",
                     blocksize=chunk_size
                 ) as stream:
-                    logger.info("PortAudio kirish oqimi muvaffaqiyatli ochildi")
+                    # Uskunaning dastlabki DC/click shovqinini tashlab yuborish (warmup)
+                    try:
+                        stream.read(chunk_size)
+                        stream.read(chunk_size)
+                    except Exception:
+                        pass
 
                     while self._is_running:
                         chunk, overflowed = stream.read(chunk_size)
                         if chunk is None or len(chunk) == 0:
                             continue
 
-                        flat_chunk = chunk.flatten().astype(np.float32)
+                        flat_chunk = np.asarray(chunk, dtype=np.float32).flatten()
                         rms = float(np.sqrt(np.mean(flat_chunk**2)))
                         self._emit_level(min(1.0, rms * 15.0))
 
@@ -213,7 +252,6 @@ class ConversationalVoiceService:
                         if self.voice_manager.is_speaking():
                             # Barge-in: gapirish vaqtida "To'xta" aytilganini tekshirish
                             if self.barge_in.check_audio_interruption(flat_chunk, threshold=0.040):
-                                # Agar ovoz to'xtatish komandasi bo'lsa
                                 self.handle_interruption()
                             continue
 
@@ -249,14 +287,15 @@ class ConversationalVoiceService:
                             continue
 
             except Exception as e:
-                logger.error(f"Mikrofon oqimida uzilish yoki xatolik: {e}. 1.5s dan so'ng qayta ulanadi...")
+                logger.error(f"[VOICE] Mikrofon oqimida uzilish yoki xatolik: {e}. 1.5s dan so'ng qayta ulanadi...")
                 time.sleep(1.5)
 
     def _on_wake_detected(self) -> None:
         """'Misa' kalit so'zi aniqlanganda darhol bajariladigan jarayon"""
+        logger.info("[VOICE] WAKE DETECTED")
+        logger.info("[VOICE] ACK START")
         self._set_state(VoiceServiceState.WAKE_DETECTED)
         self.session.on_wake_word_activated()
-        logger.info("WakeWord hodisasi: Foydalanuvchi 'Misa' deb chaqirdi")
 
         self._set_state(VoiceServiceState.ACKNOWLEDGING)
 
@@ -265,14 +304,21 @@ class ConversationalVoiceService:
         self._emit_response(ack_phrase)
         self._emit_transcript("Misa", sender="user")
 
+        def _on_ack_start():
+            logger.info("[VOICE] ACK PLAYING")
+
         def _after_ack(interrupted: bool):
+            logger.info(f"[VOICE] ACK COMPLETE (interrupted={interrupted})")
             if not interrupted and self._is_running:
                 self.vad.reset()
                 self._set_state(VoiceServiceState.LISTENING)
 
+        logger.info("[VOICE] ACK TTS CREATED")
+        logger.info("[VOICE] ACK QUEUED")
         self.voice_manager.speak(
             ack_phrase,
             voice_id=self.voice_id,
+            on_start=_on_ack_start,
             on_complete=_after_ack
         )
 

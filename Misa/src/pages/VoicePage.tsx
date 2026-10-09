@@ -80,6 +80,10 @@ export const VoicePage: React.FC<VoicePageProps> = ({
 
   const getStateDescription = () => {
     switch (effectiveOrbState) {
+      case "wake_detected":
+        return "Misa uyg'ondi! Sizni tinglamoqda...";
+      case "acknowledging":
+        return "Ha, eshitaman...";
       case "listening":
         return "Sizni eshitmoqdaman... Gapiring";
       case "thinking":
