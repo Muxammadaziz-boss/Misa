@@ -1161,7 +1161,11 @@ async def handle_voice_devices_get(request):
     try:
         from core.voice.devices import MicrophoneManager
         mgr = MicrophoneManager.get_instance()
-        devices = mgr.get_input_devices()
+        force_refresh = request.query.get("refresh", "").lower() in ["true", "1"]
+        if force_refresh:
+            devices = mgr.refresh_devices()
+        else:
+            devices = mgr.get_input_devices()
         idx, dev_info, fallback_used, status_msg = mgr.resolve_selected_device()
         return web.json_response({
             "ok": True,
@@ -1171,10 +1175,34 @@ async def handle_voice_devices_get(request):
             "active_device": dev_info,
             "resolved_index": idx,
             "fallback_used": fallback_used,
-            "status": status_msg
+            "status": status_msg,
+            "message": status_msg
         })
     except Exception as e:
         logger.error(f"Ovoz qurilmalarini olishda xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_voice_devices_refresh(request):
+    """POST /api/voice/devices/refresh - PortAudio hot-plug re-scan va yangilangan qurilmalar ro'yxati"""
+    try:
+        from core.voice.devices import MicrophoneManager
+        mgr = MicrophoneManager.get_instance()
+        devices = mgr.refresh_devices()
+        idx, dev_info, fallback_used, status_msg = mgr.resolve_selected_device()
+        return web.json_response({
+            "ok": True,
+            "devices": devices,
+            "selected_device_id": mgr._selected_device_id or "default",
+            "selected_device_name": mgr._selected_device_name or "Tizim standarti (Windows Default)",
+            "active_device": dev_info,
+            "resolved_index": idx,
+            "fallback_used": fallback_used,
+            "status": status_msg,
+            "message": status_msg
+        })
+    except Exception as e:
+        logger.error(f"Ovoz qurilmalarini yangilashda xatolik: {e}")
         return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 
@@ -6503,6 +6531,7 @@ def create_app():
     app.router.add_get("/api/voice/voices", handle_get_voices)
     app.router.add_get("/api/voice/diagnostic", handle_voice_diagnostic)
     app.router.add_get("/api/voice/devices", handle_voice_devices_get)
+    app.router.add_post("/api/voice/devices/refresh", handle_voice_devices_refresh)
     app.router.add_post("/api/voice/devices/select", handle_voice_device_select)
     app.router.add_post("/api/voice/devices/test", handle_voice_device_test)
     app.router.add_get("/api/voice/devices/test", handle_voice_device_test)

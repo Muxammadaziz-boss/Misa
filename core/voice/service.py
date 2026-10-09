@@ -186,9 +186,9 @@ class ConversationalVoiceService:
         """Mikrofonni tanlash va agar oqim ishlayotgan bo'lsa uni yangi qurilmada qayta ishga tushirish"""
         res = self.mic_manager.set_selected_device(device_id, device_name)
         with self._lock:
+            self._reconnect_stream_event.set()
             if self._is_running:
                 logger.info("[VOICE] Mikrofon sozlamasi o'zgardi -> Oqim yangi qurilmaga o'tkazilmoqda...")
-                self._reconnect_stream_event.set()
         return res
 
     def _audio_capture_loop(self) -> None:

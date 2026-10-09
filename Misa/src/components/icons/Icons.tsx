@@ -527,3 +527,4 @@ export const ImageIcon: React.FC<IconProps> = ({ size = 16, color = "currentColo
     <polyline points="21 15 16 10 5 21" />
   </svg>
 );
+

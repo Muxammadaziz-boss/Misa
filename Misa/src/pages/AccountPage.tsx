@@ -18,6 +18,7 @@ import {
   GoogleIcon,
   TelegramIcon,
   LaptopIcon,
+  RefreshIcon,
 } from "../components/icons/Icons";
 import {
   backendService,
@@ -166,6 +167,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   const [micStatusText, setMicStatusText] = useState<string>("Yuklanmoqda...");
   const [micFallbackUsed, setMicFallbackUsed] = useState<boolean>(false);
   const [micTesting, setMicTesting] = useState<boolean>(false);
+  const [micRefreshing, setMicRefreshing] = useState<boolean>(false);
   const [micTestLevel, setMicTestLevel] = useState<number>(0);
   const [micTestResult, setMicTestResult] = useState<MicrophoneTestResult | null>(null);
 
@@ -312,9 +314,9 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   }, []);
 
   // Mikrofon qurilmalarini yuklash
-  const loadMicrophoneDevices = async () => {
+  const loadMicrophoneDevices = async (refresh: boolean = false) => {
     try {
-      const res = await backendService.getAudioInputDevices();
+      const res = await backendService.getAudioInputDevices(refresh);
       if (res.ok) {
         setAudioDevices(res.devices || []);
         setSelectedMicId(res.selected_device_id || "default");
@@ -324,6 +326,28 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       }
     } catch (err) {
       console.warn("Mikrofon qurilmalarini yuklashda xatolik:", err);
+    }
+  };
+
+  // Yangi ulangan mikrofonlarni qidirish (Hot-plug re-scan)
+  const handleRefreshMicrophones = async () => {
+    setMicRefreshing(true);
+    try {
+      const res = await backendService.refreshAudioInputDevices();
+      if (res.ok) {
+        setAudioDevices(res.devices || []);
+        setSelectedMicId(res.selected_device_id || "default");
+        setSelectedMicName(res.selected_device_name || "Tizim standarti");
+        setMicStatusText(res.message || "Ulangan / Ishlamoqda");
+        setMicFallbackUsed(!!res.fallback_used);
+        showToast("Audio qurilmalar ro'yxati yangilandi ✓");
+      } else {
+        showToast("Qurilmalarni yangilab bo'lmadi");
+      }
+    } catch {
+      showToast("Qurilmalarni yangilashda xatolik");
+    } finally {
+      setMicRefreshing(false);
     }
   };
 
@@ -1068,7 +1092,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                   />
                   <span>
                     {micFallbackUsed
-                      ? "Default mikrofon ishlatilmoqda"
+                      ? "Tanlangan mikrofon ulanmagan"
                       : micTestResult && !micTestResult.ok
                       ? "Xatolik / Ulanmagan"
                       : "Ulangan / Ishlamoqda"}
@@ -1079,9 +1103,34 @@ export const AccountPage: React.FC<AccountPageProps> = ({
               {/* Tanlash boshqaruvi va dropdown */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px", alignItems: "flex-end" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                  <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)" }}>
-                    Mikrofonni tanlang
-                  </label>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)" }}>
+                      Mikrofonni tanlang
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleRefreshMicrophones}
+                      disabled={micRefreshing}
+                      title="Yangi ulangan mikrofonlarni qidirish / ro'yxatni yangilash"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "5px",
+                        background: "rgba(147, 3, 197, 0.18)",
+                        border: "1px solid rgba(192, 76, 253, 0.35)",
+                        borderRadius: "8px",
+                        padding: "3px 9px",
+                        color: "#E8B3FF",
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        cursor: micRefreshing ? "wait" : "pointer",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      <RefreshIcon size={11} color="#E8B3FF" className={micRefreshing ? "misa-spin" : ""} />
+                      <span>{micRefreshing ? "Qidirilmoqda..." : "Qurilmalarni yangilash"}</span>
+                    </button>
+                  </div>
                   <div style={{ position: "relative" }}>
                     <select
                       value={selectedMicId}

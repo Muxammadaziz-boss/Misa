@@ -1127,15 +1127,30 @@ class BackendService {
   }
 
   // ========== Real Microphone Device Management ==========
-  public async getAudioInputDevices(): Promise<AudioDevicesResponse> {
+  public async getAudioInputDevices(refresh: boolean = false): Promise<AudioDevicesResponse> {
     try {
-      const res = await fetch(`${API_BASE}/api/voice/devices`);
+      const url = refresh ? `${API_BASE}/api/voice/devices?refresh=true` : `${API_BASE}/api/voice/devices`;
+      const res = await fetch(url);
       if (res.ok) {
         return await res.json();
       }
       return { ok: false, devices: [], selected_device_id: "default", selected_device_name: "Default", error: `HTTP ${res.status}` };
     } catch (e: any) {
       return { ok: false, devices: [], selected_device_id: "default", selected_device_name: "Default", error: String(e) };
+    }
+  }
+
+  public async refreshAudioInputDevices(): Promise<AudioDevicesResponse> {
+    try {
+      const res = await fetch(`${API_BASE}/api/voice/devices/refresh`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      return await this.getAudioInputDevices(true);
+    } catch (e: any) {
+      return await this.getAudioInputDevices(true);
     }
   }
 
