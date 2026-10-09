@@ -17,6 +17,29 @@ from core.v8.events import RemoteEventType, RemoteAuditLogger
 logger = logging.getLogger("core.v8.device")
 
 
+def get_current_app_version() -> str:
+    """Tizimning joriy versiyasini dinamik olish (yagona haqiqat manbai)."""
+    try:
+        from config import get_config
+        ver = get_config("app.version")
+        if ver:
+            return str(ver).strip()
+    except Exception:
+        pass
+    try:
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        cfg_path = os.path.join(base_dir, "data", "config.json")
+        if os.path.exists(cfg_path):
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                v = data.get("app", {}).get("version")
+                if v:
+                    return str(v).strip()
+    except Exception:
+        pass
+    return "9.0.1"
+
+
 @dataclass
 class DeviceIdentity:
     """
@@ -32,8 +55,8 @@ class DeviceIdentity:
     mac_address: str = "00:00:00:00:00:00"
     local_ip: str = "127.0.0.1"
     fingerprint: str = ""
-    agent_version: str = "9.0.0"
-    misa_version: str = "9.0.0"
+    agent_version: str = field(default_factory=get_current_app_version)
+    misa_version: str = field(default_factory=get_current_app_version)
     last_seen: Optional[str] = None
     status: DeviceState = DeviceState.OFFLINE
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -135,8 +158,8 @@ class DeviceIdentityManager:
             mac_address=mac,
             local_ip=cls.get_local_ip(),
             fingerprint=fingerprint,
-            agent_version="9.0.0",
-            misa_version="9.0.0",
+            agent_version=get_current_app_version(),
+            misa_version=get_current_app_version(),
             status=DeviceState.ONLINE
         )
 

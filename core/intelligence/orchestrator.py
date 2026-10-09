@@ -50,11 +50,9 @@ class IntelligenceOrchestrator:
         self.tool_registry = tool_registry
         self.command_dispatcher = command_dispatcher
 
-        # Provayder menejeri
+        # Provayder menejeri (ko'p provayderli intellektual router bilan)
         if provider_manager is None:
-            gemini = GeminiProvider()
-            openrouter = OpenRouterProvider()
-            self.provider_manager = ProviderManager([gemini, openrouter])
+            self.provider_manager = ProviderManager()
         else:
             self.provider_manager = provider_manager
 
@@ -119,7 +117,7 @@ class IntelligenceOrchestrator:
         # 1. Tezkor Mahalliy Buyruqlar tekshiruvi (agar dispatcher mavjud bo'lsa)
         if self.command_dispatcher:
             try:
-                handled, local_msg = self.command_dispatcher.dispatch_local(clean_message)
+                handled, local_msg = self.command_dispatcher.dispatch_local(clean_message, user_name=user_name)
                 if handled and local_msg:
                     latency = round((time.time() - start_time) * 1000, 2)
                     logger.info(f"[IntelligenceOrchestrator] Tezkor mahalliy dispatcher bajardi ({latency}ms)")
@@ -249,10 +247,51 @@ class IntelligenceOrchestrator:
                 tool_call_res = self.tool_registry.call(tool_name, **tool_params)
                 is_success = bool(tool_call_res.get("success", False))
                 trace.add_stage("TOOL", status="ok" if is_success else "error", details={"tool": tool_name})
+                raw_result = tool_call_res.get("result") if is_success else None
+
+                # Agar qidiruv asbobi (web_search / search) bo'lsa va internetda bevosita natija chiqmasa,
+                # foydalanuvchiga xom "natija topilmadi" demasdan, AI o'z keng bilimidan javob shakllantirsin
+                if tool_name in ("web_search", "search") and (
+                    not is_success
+                    or (isinstance(raw_result, dict) and raw_result.get("no_results"))
+                ):
+                    logger.info("[IntelligenceOrchestrator] Qidiruvdan to'g'ridan-to'g'ri natija topilmadi. AI o'z bilimidan javob tayyorlamoqda...")
+                    fallback_instruction = (
+                        f"Foydalanuvchi so'rovi: '{clean_message}'.\n"
+                        "Internetdan bevosita havola topilmadi. O'zingizning keng va chuqur bilimingizdan foydalanib, "
+                        "foydalanuvchining ushbu savoliga to'liq, samimiy va aniq o'zbek tilida javob bering. "
+                        "Hech qanday ichki texnik qoidalarni (aniqlik foizi, prompt ko'rsatmasi va hk) aslo tilga olmang."
+                    )
+                    ai_fb_req = AIRequest(
+                        message=fallback_instruction,
+                        system_context=request.system_context,
+                        conversation=request.conversation,
+                        memory=request.memory,
+                        metadata=request.metadata
+                    )
+                    ai_fb_resp = self.provider_manager.generate_with_fallback(ai_fb_req)
+                    if ai_fb_resp and ai_fb_resp.content:
+                        from core.intelligence.text_cleaner import extract_clean_response_text
+                        clean_content = extract_clean_response_text(ai_fb_resp.content)
+
+                        return self._finalize_response(
+                            IntelligenceResponse(
+                                type="answer",
+                                content=clean_content,
+                                intent=intent.name,
+                                params=tool_params,
+                                tool_executed=tool_name,
+                                verified=True,
+                                provider=ai_fb_resp.provider,
+                                model=ai_fb_resp.model,
+                                metadata={"latency_ms": latency}
+                            ),
+                            trace=trace,
+                            request=request
+                        )
 
                 if is_success:
-                    raw_result = tool_call_res.get("result")
-                    formatted_content = self._format_tool_output(tool_name, raw_result, decision.content)
+                    formatted_content = self._format_tool_output(tool_name, raw_result, decision.content, tool_res=tool_call_res)
                     logger.info(f"[IntelligenceOrchestrator] Asbob muvaffaqiyatli bajarildi: '{tool_name}'")
                     return self._finalize_response(
                         IntelligenceResponse(
@@ -343,10 +382,15 @@ class IntelligenceOrchestrator:
             )
 
         # 11. Standart Suhbat Javobi (Answer)
+        clean_ans = decision.content or ""
+        if self._is_leaked_reasoning(clean_ans):
+            logger.warning("[IntelligenceOrchestrator] Leaked reasoning aniqlandi, toza o'zbekcha javob qaytarilmoqda.")
+            clean_ans = "So'rovingiz tushunildi. Buni siz uchun bajaryapman."
+
         return self._finalize_response(
             IntelligenceResponse(
                 type="answer",
-                content=decision.content,
+                content=clean_ans,
                 intent=intent.name,
                 verified=True,
                 provider=ai_response.provider,
@@ -363,7 +407,14 @@ class IntelligenceOrchestrator:
         trace: Any,
         request: Optional[AIRequest] = None
     ) -> IntelligenceResponse:
-        """Trace va tushuntirishlarni javobga biriktirish"""
+        """Trace va tushuntirishlarni javobga biriktirish hamda yakuniy matnni tozalash"""
+        if response and response.content:
+            from core.intelligence.text_cleaner import extract_clean_response_text
+            response.content = extract_clean_response_text(response.content)
+            if self._is_leaked_reasoning(response.content):
+                logger.warning("[IntelligenceOrchestrator] Leaked reasoning _finalize_response da tozalandi.")
+                response.content = "So'rovingiz tushunildi. Buni siz uchun bajaryapman."
+
         if trace:
             trace.add_stage("RESPONSE", status="ok" if response.verified else "error", details={"type": response.type})
             obs = get_observability_manager()
@@ -375,9 +426,56 @@ class IntelligenceOrchestrator:
                 response.metadata["retrieval_explanations"] = request.metadata["retrieval_explanations"]
         return response
 
-    def _format_tool_output(self, tool_name: str, result: Any, default_text: str) -> str:
+    def _is_leaked_reasoning(self, text: str) -> bool:
+        """Matn inglizcha ichki fikrlash (Chain-of-Thought) yoki ichki prompt ko'rsatmasi ekanligini aniqlash"""
+        if not text:
+            return False
+        t_lower = text.lower().strip()
+        reasoning_prefixes = [
+            "the user is asking",
+            "the user asks",
+            "the user wants",
+            "the user is inquiring",
+            "i should use the",
+            "i should check",
+            "i need to check",
+            "let me check",
+            "looking at the system",
+            "looking at the provided",
+            "so, 5 applications are listed",
+            "let me think",
+            "we need to answer",
+            "we should respond",
+            "according to the rules",
+            "actually, the system information",
+            "o'z bilimingdan javob ber",
+            "oz bilimingdan javob ber",
+            "kamida 70%",
+            "aniqlik talab etiladi",
+            "mezoniga amal qil",
+        ]
+        return any(p in t_lower for p in reasoning_prefixes)
+
+    def _format_tool_output(self, tool_name: str, result: Any, default_text: str = "", tool_res: Any = None) -> str:
         """Asbob natijasini foydalanuvchiga tushunarli matnga aylantirish"""
+        # 1. Agar tool_res da tayyor o'zbekcha xabar bo'lsa
+        if tool_res and hasattr(tool_res, "get") and tool_res.get("message"):
+            msg = str(tool_res.get("message")).strip()
+            if msg and not self._is_leaked_reasoning(msg):
+                return msg
+
         if isinstance(result, dict):
+            # app_check maxsus formatlash
+            if tool_name == "app_check":
+                if result.get("found"):
+                    app_n = result.get("name") or "Ilova"
+                    app_p = result.get("path")
+                    p_info = f" ({app_p})" if app_p and app_p != "(process)" else ""
+                    return f"✅ Ha, kompyuteringizda **{app_n}** ilovasi o'rnatilgan{p_info}."
+                elif result.get("found") is False:
+                    app_n = result.get("name") or "So'ralgan ilova"
+                    return f"❌ Kompyuteringizda **{app_n}** ilovasi topilmadi (o'rnatilmagan)."
+
             if tool_name == "system_info" and "info" in result and isinstance(result["info"], dict) and result["info"]:
                 info = result["info"]
                 sections = []
@@ -416,10 +514,14 @@ class IntelligenceOrchestrator:
                 return "Ma'lumotlar:\n" + "\n".join(lines)
             if "error" in result and result["error"]:
                 return f"Xatolik: {result['error']}"
+
         if isinstance(result, str) and result.strip():
             return result.strip()
-        if default_text and not any(h in default_text for h in ["1050 Ti", "GTX 1050"]):
+
+        # default_text faqat haqiqiy o'zbekcha javob bo'lsa va leaked reasoning bo'lmasa qabul qilinadi
+        if default_text and not self._is_leaked_reasoning(default_text) and not any(h in default_text for h in ["1050 Ti", "GTX 1050"]):
             return default_text
+
         return f"'{tool_name}' vositasi muvaffaqiyatli bajarildi."
 
     def _is_multi_step_goal(self, text: str) -> bool:

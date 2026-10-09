@@ -165,6 +165,20 @@ class WindowsAppDetector:
             "exe_names": ["cursor.exe"],
             "protocol": "cursor:",
             "web_url": "https://cursor.com"
+        },
+        "pycharm": {
+            "title": "PyCharm",
+            "aliases": ["pycharm", "pycharm ide", "jetbrains pycharm"],
+            "exe_names": ["pycharm64.exe", "pycharm.exe", "pycharm.bat"],
+            "protocol": "",
+            "web_url": "https://www.jetbrains.com/pycharm"
+        },
+        "opencode": {
+            "title": "OpenCode",
+            "aliases": ["opencode"],
+            "exe_names": ["opencode.exe"],
+            "protocol": "",
+            "web_url": ""
         }
     }
 
@@ -492,12 +506,25 @@ class WindowsAppDetector:
                 r"D:\Steam\steam.exe",
             ])
 
+        # PyCharm
+        if family_key == "pycharm" or "pycharm" in query:
+            import glob
+            for pat in [
+                r"C:\Program Files\JetBrains\PyCharm*\bin\pycharm64.exe",
+                r"C:\Program Files\JetBrains\PyCharm*\bin\pycharm.bat",
+                r"C:\Program Files\JetBrains\PyCharm*\bin\pycharm.BAT",
+                os.path.expandvars(r"%LOCALAPPDATA%\Programs\PyCharm*\bin\pycharm64.exe"),
+            ]:
+                for match in glob.glob(pat):
+                    if os.path.exists(match):
+                        paths.append(match)
+
         return paths
 
     def get_realtime_inventory_summary(self) -> str:
         """AI dvigateli uchun tizimda o'rnatilgan va ishlayotgan barcha asosiy dasturlar xulosasi"""
         results = []
-        checked_families = ["telegram", "ayugram", "chrome", "edge", "code", "discord", "brave", "spotify", "steam"]
+        checked_families = ["telegram", "ayugram", "chrome", "edge", "code", "pycharm", "opencode", "discord", "brave", "spotify", "steam", "cursor"]
         seen_names = set()
 
         for fam in checked_families:

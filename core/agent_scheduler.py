@@ -11,7 +11,8 @@ import threading
 from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Loyiha ildizi
+from core.common_paths import get_data_path, get_base_dir
+BASE_DIR = get_base_dir()
 
 
 class ScheduledTask:
@@ -106,7 +107,7 @@ class AgentScheduler:
     def __init__(self):
         self._lock = threading.RLock()
         self._tasks = {}  # {task_id: ScheduledTask}
-        self._file = os.path.join(BASE_DIR, "data", "scheduled_tasks.json")
+        self._file = get_data_path("scheduled_tasks.json")
         self._running = False
         self._stop_event = threading.Event()
         self._thread = None
@@ -361,6 +362,7 @@ class AgentScheduler:
     def _save(self):
         """Faylga saqlash"""
         try:
+            os.makedirs(os.path.dirname(os.path.abspath(self._file)), exist_ok=True)
             data = {
                 "counter": self._counter,
                 "tasks": [t.to_dict() for t in self._tasks.values()],

@@ -1,6 +1,6 @@
 {
   "app": {
-    "version": "9.0.0",
+    "version": "9.0.1",
     "name": "Misa AI",
     "debug": false
   },
@@ -14,7 +14,7 @@
     "vad_enabled": true,
     "vad_threshold": 0.015,
     "silence_duration": 1.2,
-    "tts_speed": 1.8,
+    "tts_speed": 1.0,
     "tts_engine": "edge_tts",
     "auto_speak": true
   },
@@ -23,7 +23,7 @@
     "color_scheme": "green",
     "compact_mode": true,
     "window_size": "1100x800",
-    "compact_window_size": "1072x700+26+26",
+    "compact_window_size": "1168x700+26+26",
     "font_family": "Segoe UI",
     "font_size": 12,
     "color": "green",
@@ -52,7 +52,7 @@
   },
   "user": {
     "name": "test",
-    "voice_type": "erkak",
+    "voice_type": "ayol",
     "avatar": "emerald",
     "role": "Dasturchi / Muhandis",
     "bio": "Misa AI shaxsiy sun'iy intellekt yordamchisi",
@@ -61,8 +61,10 @@
   "voice": {
     "tts_engine": "edge_tts",
     "silero_model": "uz-UZ-MadinaNeural",
-    "speed": 1.8,
-    "sample_rate": 44100
+    "speed": 1.0,
+    "sample_rate": 44100,
+    "fish_audio_model_anime": "d019b0d01cdb478e8f96df578942a552",
+    "fish_audio_model_yigit": "502b927ae6c44543a3b37eea8529b0a5"
   },
   "ai": {
     "model": "openrouter",
@@ -81,5 +83,42 @@
     "local_storage_only": true,
     "telemetry_disabled": true,
     "save_conversations": true
+  },
+  "providers": {
+    "groq": {
+      "enabled": true,
+      "priority": 96,
+      "timeout": 15.0,
+      "base_url": "https://api.groq.com/openai/v1",
+      "default_model": "qwen/qwen3.8-27b"
+    },
+    "cerebras": {
+      "enabled": true,
+      "priority": 94,
+      "timeout": 15.0,
+      "base_url": "https://api.cerebras.ai/v1",
+      "default_model": "qwen-3.8-27b"
+    },
+    "gemini": {
+      "enabled": true,
+      "priority": 95,
+      "timeout": 15.0,
+      "base_url": "https://generativelanguage.googleapis.com/v1beta",
+      "default_model": "gemini-flash-lite-latest"
+    },
+    "openrouter": {
+      "enabled": true,
+      "priority": 82,
+      "timeout": 20.0,
+      "base_url": "https://openrouter.ai/api/v1",
+      "default_model": "nvidia/nemotron-3.5-lightning:free"
+    },
+    "nvidia": {
+      "enabled": true,
+      "priority": 74,
+      "timeout": 20.0,
+      "base_url": "https://integrate.api.nvidia.com/v1",
+      "default_model": "meta/llama-3.3-70b-instruct"
+    }
   }
 }

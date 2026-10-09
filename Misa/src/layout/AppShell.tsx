@@ -14,7 +14,6 @@ import {
   LaptopIcon,
   TelegramIcon,
   SearchIcon,
-  MicIcon,
 } from "../components/icons/Icons";
 
 interface AppShellProps {
@@ -24,6 +23,7 @@ interface AppShellProps {
   onOpenCommandPalette?: () => void;
   userName?: string;
   avatarStyle?: string;
+  avatarUrl?: string;
 }
 
 const PRIMARY_NAV_ITEMS = [
@@ -39,7 +39,6 @@ const EXTRA_NAV_ITEMS = [
   { path: "/devices", label: "Qurilmalar", desc: "Ulangan kompyuterlar boshqaruvi", icon: LaptopIcon },
   { path: "/remote", label: "Masofaviy Boshqaruv", desc: "Ruxsatlar va xavfsizlik markazi", icon: RemoteControlIcon },
   { path: "/telegram", label: "Telegram Integratsiya", desc: "OTP ulanish va mobil agent", icon: TelegramIcon },
-  { path: "/voice", label: "Ovozli Muloqot", desc: "To'liq ekranli jonli ovoz rejimi", icon: MicIcon },
 ];
 
 export const AppShell: React.FC<AppShellProps> = ({
@@ -47,8 +46,9 @@ export const AppShell: React.FC<AppShellProps> = ({
   activePath,
   onNavigate,
   onOpenCommandPalette,
-  userName = "Ustoz",
-  avatarStyle = "cosmic",
+  userName = "Foydalanuvchi",
+  avatarStyle = "violet",
+  avatarUrl,
 }) => {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
@@ -552,7 +552,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                   fontSize: "12px",
                   fontWeight: 600,
                   color: "#F5F0FF",
-                  maxWidth: "85px",
+                  maxWidth: "160px",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
@@ -561,7 +561,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                 {userName}
               </span>
               <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-                <Avatar name={userName} size="sm" styleId={avatarStyle} />
+                <Avatar name={userName} size="sm" styleId={avatarStyle} avatarUrl={avatarUrl} />
                 <span
                   style={{
                     position: "absolute",

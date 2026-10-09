@@ -328,6 +328,17 @@ export const SchedulerPage: React.FC<SchedulerPageProps> = ({ onAskMisa }) => {
     }
   };
 
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsModalOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isModalOpen]);
+
   // Monthly Calendar Days Builder
   const monthlyCells = useMemo(() => {
     const year = selectedDate.getFullYear();
@@ -1662,6 +1673,7 @@ export const SchedulerPage: React.FC<SchedulerPageProps> = ({ onAskMisa }) => {
          ══════════════════════════════════════════════════════════════════ */}
       {isModalOpen && (
         <div
+          onClick={() => setIsModalOpen(false)}
           style={{
             position: "fixed",
             inset: 0,
@@ -1675,6 +1687,7 @@ export const SchedulerPage: React.FC<SchedulerPageProps> = ({ onAskMisa }) => {
           }}
         >
           <form
+            onClick={(e) => e.stopPropagation()}
             onSubmit={handleCreatePlan}
             className="misa-ultra-glass"
             style={{

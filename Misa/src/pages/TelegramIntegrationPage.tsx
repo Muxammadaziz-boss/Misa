@@ -379,7 +379,7 @@ export const TelegramIntegrationPage: React.FC<TelegramIntegrationPageProps> = (
                   fontWeight: 600,
                 }}
               >
-                v9.0.0 Ultra Glass
+                Telegram Gateway
               </span>
             </div>
             <p style={{ fontSize: "13px", color: "var(--text-muted, #94A3B8)", margin: "4px 0 0 0" }}>

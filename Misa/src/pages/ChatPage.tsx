@@ -14,11 +14,11 @@ import {
   RefreshIcon,
   SearchIcon,
   SettingsIcon,
-  GlobeIcon,
   CameraIcon,
 } from "../components/icons/Icons";
 import {
   backendService,
+  unwrapCleanResponse,
   VoiceState,
   BackendStatus,
   AgentPlanEvent,
@@ -49,15 +49,13 @@ interface ChatPageProps {
   onNavigate?: (path: string) => void;
 }
 
-type ComposerMode = "chat" | "web" | "image";
+type ComposerMode = "chat" | "image";
 
 const saveSessionsToStorage = (sessions: ChatSession[], activeId?: string) => {
   try {
     const raw = JSON.stringify(sessions);
     localStorage.setItem("misa_chat_sessions", raw);
-    localStorage.setItem("misa_chat_sessions", raw);
     if (activeId) {
-      localStorage.setItem("misa_active_session_id", activeId);
       localStorage.setItem("misa_active_session_id", activeId);
     }
   } catch {}
@@ -71,9 +69,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 }) => {
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
     try {
-      const raw =
-        localStorage.getItem("misa_chat_sessions") ||
-        localStorage.getItem("misa_chat_sessions");
+      const raw = localStorage.getItem("misa_chat_sessions");
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -83,11 +79,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   });
 
   const [activeSessionId, setActiveSessionId] = useState<string>(() => {
-    return (
-      localStorage.getItem("misa_active_session_id") ||
-      localStorage.getItem("misa_active_session_id") ||
-      "session_default"
-    );
+    return localStorage.getItem("misa_active_session_id") || "session_default";
   });
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -100,7 +92,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   const [sidebarTab, setSidebarTab] = useState<"chats" | "images">("chats");
   const [composerMode, setComposerMode] = useState<ComposerMode>("chat");
   const [sessionSearch, setSessionSearch] = useState("");
-  const [attachedFiles, setAttachedFiles] = useState<{ name: string; content?: string }[]>([]);
+  const [attachedFiles, setAttachedFiles] = useState<
+    { name: string; content?: string; dataUrl?: string; type?: "text" | "image" }[]
+  >([]);
   const [autoSpeak, setAutoSpeak] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem("misa_auto_speak");
@@ -181,16 +175,28 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     });
 
     const unsubTranscript = backendService.onTranscript((data) => {
+      const cleanText = (data.text || "").trim();
+      if (!cleanText) return;
       const senderNorm = data.sender === "user" ? "user" : "misa";
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `tr_${Date.now()}_${Math.random()}`,
-          sender: senderNorm,
-          text: data.text,
-          timestamp: formatNow(),
-        },
-      ]);
+      setMessages((prev) => {
+        const lastMsg = prev[prev.length - 1];
+        if (
+          lastMsg &&
+          lastMsg.sender === senderNorm &&
+          lastMsg.text.trim().toLowerCase() === cleanText.toLowerCase()
+        ) {
+          return prev;
+        }
+        return [
+          ...prev,
+          {
+            id: `tr_${Date.now()}_${Math.random()}`,
+            sender: senderNorm,
+            text: cleanText,
+            timestamp: formatNow(),
+          },
+        ];
+      });
     });
 
     return () => {
@@ -275,12 +281,17 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       if (idx === -1) return prev;
 
       const currentSession = prev[idx];
-      const firstUserMsg = messages.find((m) => m.sender === "user");
-      const newTitle = firstUserMsg
-        ? firstUserMsg.text.length > 30
-          ? firstUserMsg.text.slice(0, 30) + "..."
-          : firstUserMsg.text
-        : currentSession.title;
+      const userMsgs = messages.filter((m) => m.sender === "user");
+      const greetingWords = ["salom", "assalom", "assalomu alaykum", "qale", "hello", "hi", "salom misa"];
+      const meaningfulMsg = userMsgs.find(
+        (m) => !greetingWords.includes(m.text.trim().toLowerCase())
+      );
+      const chosenMsg = meaningfulMsg || userMsgs[0];
+      let newTitle = currentSession.title;
+      if (chosenMsg) {
+        const textClean = chosenMsg.text.replace(/^[📎\s]+/, "").trim();
+        newTitle = textClean.length > 28 ? textClean.slice(0, 28) + "..." : textClean;
+      }
 
       const updatedSession: ChatSession = {
         ...currentSession,
@@ -367,6 +378,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       return;
     }
 
+    const attachedImage = attachedFiles.find((f) => f.dataUrl || f.type === "image");
+    const imageToSend = attachedImage?.dataUrl;
+
     const attachmentSuffix =
       attachedFiles.length > 0
         ? "\n\n[Biriktirilgan fayl: " +
@@ -376,10 +390,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           "]"
         : "";
 
-    const effectiveQuery =
-      composerMode === "web" && !rawQuery.toLowerCase().includes("internet")
-        ? `[Internet qidiruvi orqali aniq ma'lumot topib javob ber]: ${rawQuery}${attachmentSuffix}`
-        : `${rawQuery}${attachmentSuffix}`;
+    const effectiveQuery = `${rawQuery}${attachmentSuffix}`;
 
     const userMsg: Message = {
       id: `u_${Date.now()}`,
@@ -396,12 +407,14 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     setActiveAgentPlan(null);
 
     try {
-      const response = await backendService.sendMessage(effectiveQuery, { speak: autoSpeak });
+      const response = await backendService.sendMessage(effectiveQuery, { speak: autoSpeak, image: imageToSend });
       const completedPlan = activeAgentPlanRef.current || undefined;
+      const rawText = response.reply || response.response || "Buyruq bajarildi.";
+      const aiText = unwrapCleanResponse(rawText);
       const aiMsg: Message = {
         id: `a_${Date.now()}`,
         sender: "misa",
-        text: response.reply || "Buyruq bajarildi.",
+        text: aiText,
         timestamp: formatNow(),
         agentPlan: completedPlan,
       };
@@ -524,7 +537,16 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     const files = e.target.files;
     if (!files || files.length === 0) return;
     Array.from(files).forEach((file) => {
-      if (
+      if (file.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name)) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          setAttachedFiles((prev) => [
+            ...prev,
+            { name: file.name, dataUrl: String(reader.result || ""), type: "image" },
+          ]);
+        };
+        reader.readAsDataURL(file);
+      } else if (
         file.size <= 256 * 1024 &&
         (file.type.startsWith("text/") ||
           /\.(txt|md|json|py|ts|tsx|js|csv|html|css|log)$/i.test(file.name))
@@ -533,7 +555,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         reader.onload = () => {
           setAttachedFiles((prev) => [
             ...prev,
-            { name: file.name, content: String(reader.result || "") },
+            { name: file.name, content: String(reader.result || ""), type: "text" },
           ]);
         };
         reader.readAsText(file);
@@ -551,7 +573,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   );
 
   const cycleComposerMode = () => {
-    setComposerMode((prev) => (prev === "chat" ? "web" : prev === "web" ? "image" : "chat"));
+    setComposerMode((prev) => (prev === "chat" ? "image" : "chat"));
   };
 
   return (
@@ -1030,7 +1052,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
               cursor: "pointer",
             }}
           >
-            <span>{isSidebarOpen ? "◧ Tarixni yashirish" : "◨ Tarixni ochish"}</span>
+            <span>{isSidebarOpen ? "◧ Yon panelni yashirish" : "◨ Yon panelni ko'rsatish"}</span>
           </button>
 
           <span
@@ -1268,19 +1290,51 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                           >
                             Misa
                           </span>
-                          <span
-                            style={{
-                              fontSize: "10px",
-                              fontWeight: 600,
-                              padding: "2px 8px",
-                              borderRadius: "999px",
-                              background: "rgba(147, 3, 197, 0.2)",
-                              color: "#E8B3FF",
-                              border: "1px solid rgba(192, 76, 253, 0.3)",
-                            }}
-                          >
-                            v9.0 Neural
-                          </span>
+                          {(() => {
+                            const isWarning = msg.text.includes("403") || msg.text.includes("429");
+                            const isOffline =
+                              msg.text.includes("offline") ||
+                              msg.text.includes("mahalliy yordamchi") ||
+                              msg.text.includes("Siz — **") ||
+                              msg.text.includes("Google Gemini API kaliti xatoligi");
+
+                            const badgeLabel = isWarning
+                              ? "v9.0 Ogohlantirish"
+                              : isOffline
+                              ? "v9.0 Mahalliy"
+                              : "v9.0 Neural";
+                            const badgeBg = isWarning
+                              ? "rgba(255, 171, 0, 0.18)"
+                              : isOffline
+                              ? "rgba(100, 116, 139, 0.2)"
+                              : "rgba(147, 3, 197, 0.2)";
+                            const badgeColor = isWarning
+                              ? "#FFD166"
+                              : isOffline
+                              ? "#CBD5E1"
+                              : "#E8B3FF";
+                            const badgeBorder = isWarning
+                              ? "1px solid rgba(255, 171, 0, 0.4)"
+                              : isOffline
+                              ? "1px solid rgba(148, 163, 184, 0.3)"
+                              : "1px solid rgba(192, 76, 253, 0.3)";
+
+                            return (
+                              <span
+                                style={{
+                                  fontSize: "10px",
+                                  fontWeight: 600,
+                                  padding: "2px 8px",
+                                  borderRadius: "999px",
+                                  background: badgeBg,
+                                  color: badgeColor,
+                                  border: badgeBorder,
+                                }}
+                              >
+                                {badgeLabel}
+                              </span>
+                            );
+                          })()}
                           <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                             • {msg.timestamp}
                           </span>
@@ -1549,7 +1603,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                       color: "#E8B3FF",
                     }}
                   >
-                    📎 {f.name}
+                    {f.type === "image" || f.dataUrl ? "🖼️" : "📎"} {f.name}
                     <button
                       type="button"
                       onClick={() => setAttachedFiles((p) => p.filter((_, idx) => idx !== i))}
@@ -1601,43 +1655,35 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                 <button
                   type="button"
                   onClick={cycleComposerMode}
-                  title="Qidiruv yoki tasvir rejimini almashtirish"
+                  title={
+                    composerMode === "image"
+                      ? "Tasvir yaratish rejimi (Faol) — Oddiy chatga qaytish"
+                      : "Tasvir yaratish rejimini yoqish"
+                  }
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
-                    gap: "6px",
-                    padding: "6px 12px",
+                    gap: "5px",
+                    padding: "6px 10px",
                     borderRadius: "9999px",
                     background:
-                      composerMode === "chat"
-                        ? "rgba(147, 3, 197, 0.18)"
-                        : composerMode === "web"
-                        ? "rgba(147, 3, 197, 0.34)"
-                        : "rgba(78, 222, 163, 0.18)",
+                      composerMode === "image"
+                        ? "rgba(78, 222, 163, 0.22)"
+                        : "rgba(255, 255, 255, 0.04)",
                     border:
                       composerMode === "image"
-                        ? "1px solid rgba(78, 222, 163, 0.4)"
-                        : "1px solid rgba(192, 76, 253, 0.35)",
-                    color: composerMode === "image" ? "#4EDEA3" : "#E8B3FF",
+                        ? "1px solid rgba(78, 222, 163, 0.45)"
+                        : "1px solid rgba(255, 255, 255, 0.08)",
+                    color: composerMode === "image" ? "#4EDEA3" : "var(--text-secondary)",
                     fontSize: "11.5px",
                     fontWeight: 600,
                     cursor: "pointer",
                     whiteSpace: "nowrap",
+                    transition: "all 0.15s ease",
                   }}
                 >
-                  {composerMode === "image" ? (
-                    <>
-                      <CameraIcon size={13} color="#4EDEA3" />
-                      <span>Tasvir yaratish</span>
-                    </>
-                  ) : (
-                    <>
-                      <GlobeIcon size={13} color="#E8B3FF" />
-                      <span>
-                        {composerMode === "web" ? "Internet qidiruvi: Yoqilgan" : "Internet qidiruvi"}
-                      </span>
-                    </>
-                  )}
+                  <CameraIcon size={13} color={composerMode === "image" ? "#4EDEA3" : "currentColor"} />
+                  <span>Tasvir</span>
                 </button>
 
                 <button
@@ -1648,7 +1694,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                     display: "inline-flex",
                     alignItems: "center",
                     gap: "5px",
-                    padding: "6px 10px",
+                    padding: "6px 9px",
                     borderRadius: "9999px",
                     background: autoSpeak ? "rgba(147, 3, 197, 0.28)" : "rgba(255, 255, 255, 0.05)",
                     border: autoSpeak ? "1px solid rgba(192, 76, 253, 0.45)" : "1px solid rgba(255, 255, 255, 0.1)",
@@ -1661,7 +1707,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                   }}
                 >
                   <VolumeIcon size={12} color={autoSpeak ? "#E8B3FF" : "currentColor"} />
-                  <span>{autoSpeak ? "Ovoz: Yoqilgan" : "Ovoz: O'chiq"}</span>
+                  <span>{autoSpeak ? "Ovoz" : "Ovozsiz"}</span>
                 </button>
               </div>
 

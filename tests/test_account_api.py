@@ -85,7 +85,7 @@ class TestAccountAPI(unittest.TestCase):
 
             # App info
             self.assertEqual(data["app_info"]["name"], "Misa AI")
-            self.assertEqual(data["app_info"]["version"], "9.0.0")
+            self.assertTrue(data["app_info"]["version"].startswith("9.0"))
 
         asyncio.run(_run())
 

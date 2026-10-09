@@ -299,6 +299,43 @@ class TestGoogleOAuthRedirectAndSecurity(AioHTTPTestCase):
         self.assertEqual(replay_resp.status, 404)
 
     @unittest_run_loop
+    async def test_oauth_pending_state_returns_200_pending(self):
+        """Pre-registered state while waiting for browser returns 200 with status pending (not 404)."""
+        pending_state = "oauth_pending_state_12345"
+        init_resp = await self.client.request(
+            "POST",
+            "/api/auth/callback/session",
+            json={"state": pending_state, "action": "init"},
+        )
+        self.assertEqual(init_resp.status, 200)
+
+        # Polling while pending must return 200 OK with status="pending", NOT 404
+        poll_resp = await self.client.request(
+            "GET",
+            f"/api/auth/callback/session?state={pending_state}",
+            headers={"Accept": "application/json"},
+        )
+        self.assertEqual(poll_resp.status, 200)
+        poll_data = await poll_resp.json()
+        self.assertFalse(poll_data.get("ok"))
+        self.assertEqual(poll_data.get("status"), "pending")
+        self.assertIsNone(poll_data.get("session"))
+
+    @unittest_run_loop
+    async def test_oauth_html_accept_serves_landing_page(self):
+        """Browser redirect to /api/auth/callback/session with Accept: text/html serves landing page."""
+        html_resp = await self.client.request(
+            "GET",
+            "/api/auth/callback/session?state=test_state_html",
+            headers={"Accept": "text/html,application/xhtml+xml"},
+        )
+        self.assertEqual(html_resp.status, 200)
+        self.assertIn("text/html", html_resp.headers.get("Content-Type", ""))
+        body = await html_resp.text()
+        self.assertIn("Misa AI", body)
+        self.assertIn("/api/auth/callback/session", body)
+
+    @unittest_run_loop
     async def test_oauth_invalid_or_expired_state_rejected(self):
         from core.api_server import _pending_oauth_sessions, _pending_oauth_lock
 

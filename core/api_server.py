@@ -15,38 +15,24 @@ from datetime import datetime
 from aiohttp import web
 from typing import Optional, Tuple, Any, Dict, List, Set
 import requests
+import re
 import socket
 import time
 import urllib.parse
 
 # Ishchi katalogni to'g'ri o'rnatish
-if getattr(sys, "frozen", False):
-    # PyInstaller muhiti (standalone bundled executable)
-    BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
-else:
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_curr_dir = os.path.dirname(os.path.abspath(__file__))
+_parent_dir = os.path.dirname(_curr_dir)
+for _p in (_curr_dir, _parent_dir):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+from core.common_paths import get_base_dir, get_data_dir
+from core.intelligence.text_cleaner import extract_clean_response_text
+
+BASE_DIR = get_base_dir()
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
-
-def get_data_dir() -> str:
-    """Xavfsiz ma'lumotlar papkasi yo'lini aniqlash (mahalliy data/ yoki %APPDATA%/MisaAI/data)."""
-    if custom := os.environ.get("MISA_DATA_DIR"):
-        os.makedirs(custom, exist_ok=True)
-        return custom
-    local_data = os.path.join(BASE_DIR, "data")
-    try:
-        os.makedirs(local_data, exist_ok=True)
-        test_file = os.path.join(local_data, ".write_test")
-        with open(test_file, "w") as f:
-            f.write("ok")
-        os.remove(test_file)
-        return local_data
-    except Exception:
-        pass
-    appdata = os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    safe_data = os.path.join(appdata, "MisaAI", "data")
-    os.makedirs(safe_data, exist_ok=True)
-    return safe_data
 
 DATA_DIR = get_data_dir()
 
@@ -74,6 +60,15 @@ _command_dispatcher = None
 _active_ws_clients = set()
 _voice_state = "idle"  # idle | listening | thinking | speaking
 _main_loop = None
+
+
+def get_app_version() -> str:
+    """Tizim versiyasini xavfsiz olish."""
+    try:
+        from core.v8.device import get_current_app_version
+        return get_current_app_version()
+    except Exception:
+        return "9.0.1"
 
 
 def load_runtime_dotenv() -> None:
@@ -257,19 +252,19 @@ def get_current_user_name() -> str:
 
 
 def get_current_voice_type() -> str:
-    """Ovoz turini olish (ayol yoki erkak)"""
+    """Ovoz turini olish (barcha qo'llab-quvvatlanadigan ovozlar)"""
     txt_file = os.path.join(BASE_DIR, "data", "ovoz_turi.txt")
     if os.path.exists(txt_file):
         try:
             with open(txt_file, "r", encoding="utf-8") as f:
                 voice = f.read().strip()
-                if voice in ["ayol", "erkak"]:
+                if voice:
                     return voice
         except Exception:
             pass
     cfg = _read_config()
     cfg_voice = cfg.get("user", {}).get("voice_type")
-    if cfg_voice in ["ayol", "erkak"]:
+    if cfg_voice:
         return cfg_voice
     return "ayol"
 
@@ -284,7 +279,7 @@ async def handle_status(request):
     return web.json_response({
         "status": "online",
         "app": "MISA AI",
-        "version": "9.0.0",
+        "version": "9.0.1",
         "user": user,
         "ai_available": ai_ok,
         "voice_state": _voice_state,
@@ -403,17 +398,30 @@ async def handle_system_metrics(request):
 
 
 # ========== 2. CHAT & VOICE HANDLERS ==========
-def execute_command_pipeline(text: str, user: str, ovoz: str, mode: str = "ask", user_id: Optional[str] = None) -> str:
+def execute_command_pipeline(text: str, user: str, ovoz: str, mode: str = "ask", user_id: Optional[str] = None, image: Optional[str] = None) -> str:
     """
     Misa AI 9.0.0 — Unified Command & AI Pipeline
     Mahalliy buyruqlarni darhol kompyuterda bajaradi, murakkab savollarni AI ga yo'naltiradi.
     """
-    clean_text = text.strip()
-    if not clean_text:
+    clean_text = text.strip() if text else ""
+    if not clean_text and not image:
         return "Bo'sh so'rov."
 
-
     m, ai, mem, _, _, dispatcher = get_modules()
+
+    # Agar rasm biriktirilgan bo'lsa, uni Gemini Vision orqali tahlil qilish
+    if image:
+        if ai and hasattr(ai, "rasm_tahlil"):
+            try:
+                logger.info(f"Rasm tahlil qilinmoqda (Gemini Vision), so'rov: '{clean_text[:60]}'")
+                prompt = clean_text or "Ushbu rasmni o'zbek tilida batafsil va aniq tahlil qilib ber."
+                res = ai.rasm_tahlil(image, prompt, user_id=user_id)
+                if res:
+                    return res
+                return "Kechirasiz, rasmni tahlil qilishda xatolik yuz berdi yoki AI Vision javob bermadi."
+            except Exception as e:
+                logger.error(f"Rasm tahlilida xatolik: {e}")
+                return f"Rasmni tahlil qilishda xatolik yuz berdi: {e}"
     last_gui_messages = []
 
     def _gui_collector(msg):
@@ -425,7 +433,7 @@ def execute_command_pipeline(text: str, user: str, ovoz: str, mode: str = "ask",
     # 1. Tezkor Mahalliy Buyruqlar Dispatcheri (command_dispatcher)
     if dispatcher:
         try:
-            handled, res_msg = dispatcher.dispatch_local(clean_text)
+            handled, res_msg = dispatcher.dispatch_local(clean_text, user_name=user)
             if handled and res_msg:
                 logger.info(f"CommandDispatcher bajardi: '{clean_text}' -> {res_msg}")
                 return res_msg
@@ -436,29 +444,32 @@ def execute_command_pipeline(text: str, user: str, ovoz: str, mode: str = "ask",
     try:
         from core.agent_tools import get_registry
         reg = get_registry()
+        supported_direct_tools = {"calculator", "weather", "app_check", "system_info", "notification", "currency"}
         candidate = clean_text.split()[0].lower() if " " in clean_text else clean_text.lower()
-        tool = reg.get(candidate)
-        if tool:
-            args_str = clean_text[len(candidate):].strip()
-            kwargs = {}
-            if candidate == "calculator" and args_str:
-                kwargs["expression"] = args_str
-            elif candidate == "weather" and args_str:
-                kwargs["city"] = args_str
-            elif candidate == "app_check" and args_str:
-                kwargs["app_name"] = args_str
-            elif candidate == "system_info" and args_str:
-                kwargs["category"] = args_str
-            elif candidate == "notification" and args_str:
-                kwargs["message"] = args_str
-            elif candidate == "currency" and args_str:
-                parts = args_str.split()
-                if len(parts) >= 2:
-                    kwargs["from_currency"], kwargs["to_currency"] = parts[0], parts[1]
-                elif len(parts) == 1:
-                    kwargs["from_currency"] = parts[0]
-            call_res = tool.call(**kwargs)
-            return format_tool_result(candidate, call_res)
+        if candidate in supported_direct_tools:
+            tool = reg.get(candidate)
+            if tool:
+                args_str = clean_text[len(candidate):].strip()
+                kwargs = {}
+                if candidate == "calculator" and args_str:
+                    kwargs["expression"] = args_str
+                elif candidate == "weather" and args_str:
+                    kwargs["city"] = args_str
+                elif candidate == "app_check" and args_str:
+                    kwargs["app_name"] = args_str
+                elif candidate == "system_info" and args_str:
+                    kwargs["category"] = args_str
+                elif candidate == "notification" and args_str:
+                    kwargs["message"] = args_str
+                elif candidate == "currency" and args_str:
+                    parts = args_str.split()
+                    if len(parts) >= 2:
+                        kwargs["from_currency"], kwargs["to_currency"] = parts[0], parts[1]
+                    elif len(parts) == 1:
+                        kwargs["from_currency"] = parts[0]
+                call_res = tool.call(**kwargs)
+                if call_res.get("success"):
+                    return format_tool_result(candidate, call_res)
     except Exception as e:
         logger.error(f"ToolRegistry chaqirishda xatolik: {e}")
 
@@ -557,15 +568,17 @@ def execute_command_pipeline(text: str, user: str, ovoz: str, mode: str = "ask",
                     except Exception as e:
                         logger.error(f"AI intent bajarishda xatolik: {e}")
                 
-                return ai_resp
+                return extract_clean_response_text(ai_resp)
 
             elif isinstance(reply, dict) and reply.get("type") in ("confirmation", "clarification"):
-                return reply.get("question") or reply.get("response") or "Iltimos, tasdiqlang yoki aniqlashtiring."
+                q_text = reply.get("question") or reply.get("response") or "Iltimos, tasdiqlang yoki aniqlashtiring."
+                return extract_clean_response_text(q_text)
 
             elif isinstance(reply, dict):
-                return reply.get("response") or reply.get("javob") or str(reply)
+                ans = reply.get("response") or reply.get("javob") or str(reply)
+                return extract_clean_response_text(ans)
             elif reply:
-                return str(reply)
+                return extract_clean_response_text(reply)
         except Exception as e:
             logger.error(f"AI savolida xatolik: {e}")
             return f"Xatolik yuz berdi: {e}"
@@ -584,6 +597,7 @@ async def handle_chat(request):
         return web.json_response({"ok": False, "error": "Noto'g'ri JSON formati"}, status=400)
 
     text = (body.get("text") or body.get("query") or "").strip()
+    image_data = body.get("image") or body.get("image_base64") or body.get("image_url")
     mode = body.get("mode", "ask")
     speak_param = body.get("speak")
     if speak_param is not None:
@@ -591,8 +605,11 @@ async def handle_chat(request):
     else:
         speak_out = True
 
-    if not text:
-        return web.json_response({"ok": False, "error": "Matn bo'sh bo'lishi mumkin emas"}, status=400)
+    if not text and image_data:
+        text = "Ushbu rasmni o'zbek tilida batafsil tahlil qilib ber."
+
+    if not text and not image_data:
+        return web.json_response({"ok": False, "error": "Matn yoki rasm bo'sh bo'lishi mumkin emas"}, status=400)
 
     m, _, mem, _, _, _ = get_modules()
     user_id, auth_user, session, _ = resolve_auth_identity(request, required=False)
@@ -608,7 +625,7 @@ async def handle_chat(request):
     def _execute():
         global _voice_state
         try:
-            reply_text = execute_command_pipeline(text, user, ovoz, mode, user_id=user_id)
+            reply_text = execute_command_pipeline(text, user, ovoz, mode, user_id=user_id, image=image_data)
 
             if mem:
                 try:
@@ -618,7 +635,15 @@ async def handle_chat(request):
 
             if speak_out:
                 sync_broadcast("voice_state", {"state": "speaking"}, loop)
-                speak_out_loud(reply_text)
+                try:
+                    from core.voice.voice_manager import get_voice_manager
+                    vm = get_voice_manager()
+                    def _chat_done(interrupted: bool):
+                        sync_broadcast("voice_state", {"state": "idle"}, loop)
+                    vm.speak(reply_text, voice_id=ovoz, on_complete=_chat_done)
+                except Exception as ve:
+                    logger.warning(f"VoiceManager orqali chat ijrosida xato: {ve}")
+                    speak_out_loud(reply_text, voice_type=ovoz)
 
             return reply_text
         except Exception as e:
@@ -630,6 +655,7 @@ async def handle_chat(request):
                 sync_broadcast("voice_state", {"state": "idle"}, loop)
 
     response_text = await loop.run_in_executor(None, _execute)
+    response_text = extract_clean_response_text(response_text)
     await broadcast_ws("ai_response", {"text": response_text, "mode": mode})
 
     return web.json_response({
@@ -642,7 +668,7 @@ async def handle_chat(request):
 
 
 async def handle_ai_test_key(request):
-    """POST /api/ai/test-key - Google Gemini API kalitini jonli sinovdan o'tkazish (ListModels + multi-model fallback)"""
+    """POST /api/ai/test-key - AI API kalitini jonli sinovdan o'tkazish (Gemini, Groq, Cerebras, OpenRouter, NVIDIA)"""
     if _is_production_mode():
         _, _, _, err_resp = resolve_auth_identity(request, required=True)
         if err_resp:
@@ -653,7 +679,9 @@ async def handle_ai_test_key(request):
     except Exception:
         body = {}
 
+    provider = str(body.get("provider") or "gemini").strip().lower()
     api_key = str(body.get("api_key") or body.get("key") or "").strip()
+
     if any(ch in api_key for ch in ("\n", "\r", "\x00")) or len(api_key) > 256:
         return web.json_response({
             "ok": False,
@@ -661,18 +689,42 @@ async def handle_ai_test_key(request):
             "error_code": "API_KEY_INVALID",
             "error": "API kaliti formati noto'g'ri."
         }, status=400)
-    if not api_key:
-        try:
-            from core.ai_engine import get_gemini_api_key
-            api_key = get_gemini_api_key()
-        except Exception:
-            api_key = os.getenv("GEMINI_API_KEY", "").strip() or os.getenv("GOOGLE_API_KEY", "").strip()
+
+    cfg_key = f"{provider}_api_key"
+    env_key = f"{provider.upper()}_API_KEY"
 
     if not api_key:
+        if provider == "gemini":
+            try:
+                from core.ai_engine import get_gemini_api_key
+                api_key = get_gemini_api_key()
+            except Exception:
+                api_key = os.getenv("GEMINI_API_KEY", "").strip() or os.getenv("GOOGLE_API_KEY", "").strip()
+        else:
+            api_key = os.getenv(env_key, "").strip()
+            if not api_key:
+                try:
+                    cfg_path = os.path.join(DATA_DIR, "config.json")
+                    if os.path.exists(cfg_path):
+                        with open(cfg_path, "r", encoding="utf-8") as f:
+                            cfg = json.load(f)
+                        api_key = str(cfg.get(cfg_key) or cfg.get("ai", {}).get(cfg_key) or "").strip()
+                except Exception:
+                    pass
+
+    if not api_key:
+        provider_names = {
+            "gemini": "Google Gemini",
+            "groq": "Groq Cloud",
+            "cerebras": "Cerebras AI",
+            "openrouter": "OpenRouter",
+            "nvidia": "NVIDIA NIM",
+        }
+        p_name = provider_names.get(provider, provider.capitalize())
         return web.json_response({
             "ok": False,
             "valid": False,
-            "error": "API kaliti kiritilmagan. Iltimos, Google Gemini API kalitini kiriting."
+            "error": f"API kaliti kiritilmagan. Iltimos, {p_name} API kalitini kiriting."
         })
 
     loop = asyncio.get_running_loop()
@@ -694,7 +746,6 @@ async def handle_ai_test_key(request):
                 except Exception:
                     pass
             elif list_resp.status_code in (400, 403):
-                # Aniq kalit xatosi (API_KEY_INVALID, PERMISSION_DENIED, LEAKED)
                 try:
                     err_json = list_resp.json().get("error", {})
                     msg = err_json.get("message", "API kaliti yaroqsiz.")
@@ -747,7 +798,6 @@ async def handle_ai_test_key(request):
                     working_model = model
                     break
                 elif resp.status_code == 429:
-                    # 429 - kvota limitiga yetgan, lekin kalit to'g'ri va tasdiqlangan
                     working_model = model
                     break
                 elif resp.status_code in (400, 403):
@@ -763,7 +813,6 @@ async def handle_ai_test_key(request):
                     except Exception:
                         pass
                 elif resp.status_code == 404:
-                    # Ushbu model topilmadi, keyingi modelga o'tish (xatolik deb hisoblanmaydi)
                     continue
             except Exception as ex:
                 last_error_msg = str(ex)
@@ -774,28 +823,86 @@ async def handle_ai_test_key(request):
 
         return False, last_error_reason, last_error_msg, []
 
-    is_valid, reason, msg, model_list = await loop.run_in_executor(None, _verify_gemini)
+    def _verify_openai_comp(url: str, fallback_model: str, name: str):
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "MisaAI/9.0",
+        }
+        try:
+            resp = requests.get(url, headers=headers, timeout=10)
+            if resp.status_code == 200:
+                try:
+                    data = resp.json()
+                    models = [m.get("id") for m in data.get("data", []) if isinstance(m, dict)]
+                    return True, "OK", f"{name} API kaliti faol va tasdiqlandi!", models[:5] or [fallback_model]
+                except Exception:
+                    return True, "OK", f"{name} API kaliti tasdiqlandi!", [fallback_model]
+            elif resp.status_code == 429:
+                return True, "OK", f"{name} API kaliti tasdiqlandi (kvota limiti mavjud).", [fallback_model]
+            elif resp.status_code in (401, 403):
+                return False, "API_KEY_INVALID", f"{name} API kaliti yaroqsiz (401/403).", []
+            else:
+                return False, f"HTTP_{resp.status_code}", f"{name} tekshiruvida xatolik: {resp.text[:120]}", []
+        except Exception as ex:
+            return False, "NETWORK_ERROR", f"{name} tarmog'iga ulanishda xato: {str(ex)[:120]}", []
+
+    def _verify_openrouter():
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "HTTP-Referer": "https://misa-ai.uz",
+            "X-Title": "Misa AI Assistant",
+        }
+        try:
+            resp = requests.get("https://openrouter.ai/api/v1/auth/key", headers=headers, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json().get("data", {})
+                label = data.get("label") or "Faol"
+                return True, "OK", f"OpenRouter API kaliti tasdiqlandi ({label})!", ["meta-llama/llama-3.3-70b-instruct:free"]
+            elif resp.status_code in (401, 403):
+                return False, "API_KEY_INVALID", "OpenRouter API kaliti yaroqsiz.", []
+            m_resp = requests.get("https://openrouter.ai/api/v1/models", headers=headers, timeout=10)
+            if m_resp.status_code == 200:
+                return True, "OK", "OpenRouter API kaliti faol!", ["meta-llama/llama-3.3-70b-instruct:free"]
+            return False, "API_KEY_INVALID", "OpenRouter kalitini tasdiqlab bo'lmadi.", []
+        except Exception as ex:
+            return False, "NETWORK_ERROR", f"OpenRouter tarmog'ida xatolik: {str(ex)[:120]}", []
+
+    def _verify_all():
+        if provider == "gemini":
+            return _verify_gemini()
+        elif provider == "groq":
+            return _verify_openai_comp("https://api.groq.com/openai/v1/models", "llama-3.3-70b-versatile", "Groq Cloud")
+        elif provider == "cerebras":
+            return _verify_openai_comp("https://api.cerebras.ai/v1/models", "llama-3.3-70b", "Cerebras AI")
+        elif provider == "openrouter":
+            return _verify_openrouter()
+        elif provider == "nvidia":
+            return _verify_openai_comp("https://integrate.api.nvidia.com/v1/models", "meta/llama-3.3-70b-instruct", "NVIDIA NIM")
+        else:
+            return False, "UNKNOWN_PROVIDER", f"Noma'lum provayder: {provider}", []
+
+    is_valid, reason, msg, model_list = await loop.run_in_executor(None, _verify_all)
 
     if is_valid:
-        # Kalit to'g'ri va ishlaydi!
-        os.environ["GEMINI_API_KEY"] = api_key
-        os.environ["GOOGLE_API_KEY"] = api_key
-        try:
-            from core import ai_engine
-            ai_engine.GOOGLE_API_KEY = api_key
-        except Exception:
-            pass
-        try:
-            from core.intelligence import get_orchestrator
-            orch = get_orchestrator()
-            if orch and hasattr(orch, "provider_manager"):
-                for p in orch.provider_manager._providers:
-                    if hasattr(p, "set_api_key"):
-                        p.set_api_key(api_key)
-        except Exception:
-            pass
+        os.environ[env_key] = api_key
+        if provider == "gemini":
+            os.environ["GOOGLE_API_KEY"] = api_key
+            try:
+                from core import ai_engine
+                ai_engine.GOOGLE_API_KEY = api_key
+            except Exception:
+                pass
+            try:
+                from core.intelligence import get_orchestrator
+                orch = get_orchestrator()
+                if orch and hasattr(orch, "provider_manager"):
+                    for p in orch.provider_manager._providers:
+                        if hasattr(p, "set_api_key"):
+                            p.set_api_key(api_key)
+            except Exception:
+                pass
 
-        # Shuningdek data/config.json ga avtomatik saqlash
         try:
             cfg_path = os.path.join(DATA_DIR, "config.json")
             if os.path.exists(cfg_path):
@@ -803,42 +910,52 @@ async def handle_ai_test_key(request):
                     cfg = json.load(f)
                 if "ai" not in cfg:
                     cfg["ai"] = {}
-                cfg["ai"]["gemini_api_key"] = api_key
-                cfg["gemini_api_key"] = api_key
+                cfg["ai"][cfg_key] = api_key
+                cfg[cfg_key] = api_key
                 with open(cfg_path, "w", encoding="utf-8") as f:
                     json.dump(cfg, f, ensure_ascii=False, indent=2)
         except Exception as ce:
             logger.warning(f"config.json ga API kalitni saqlashda xatolik: {ce}")
 
+        active_model = model_list[0] if model_list else None
         try:
             from core.v8.ai_key_manager import get_ai_key_manager
             mgr = get_ai_key_manager()
-            mgr.register_system_key("gemini", api_key, prepend=True)
-            if active_model:
+            mgr.register_system_key(provider, api_key, prepend=True)
+            if active_model and provider == "gemini":
                 mgr.set_preferred_model(active_model)
         except Exception:
             pass
 
-        active_model = model_list[0] if model_list else "gemini-3.1-flash-lite"
+        p_display = {
+            "gemini": "Google Gemini",
+            "groq": "Groq Cloud",
+            "cerebras": "Cerebras AI",
+            "openrouter": "OpenRouter",
+            "nvidia": "NVIDIA NIM",
+        }.get(provider, provider.capitalize())
+
         return web.json_response({
             "ok": True,
             "valid": True,
-            "message": f"Google Gemini API kaliti faol va tasdiqlangan! (Model: {active_model})",
+            "provider": provider,
+            "message": f"{p_display} API kaliti faol va tasdiqlandi! ✓",
             "model": active_model,
             "available_models": model_list[:5]
         })
 
-    logger.warning(f"[API_TEST_KEY] Gemini API tekshiruvi muvaffaqiyatsiz: reason={reason}, msg={msg}")
+    logger.warning(f"[API_TEST_KEY] {provider} API tekshiruvi muvaffaqiyatsiz: reason={reason}, msg={msg}")
     return web.json_response({
         "ok": False,
         "valid": False,
+        "provider": provider,
         "error_code": reason,
         "error": f"API kaliti yaroqsiz ({reason}): {msg}"
     })
 
 
 async def handle_ai_config_get(request):
-    """GET /api/ai/config - AI kalitlari va modellarining holatini olish (Sinxronizatsiya uchun)"""
+    """GET /api/ai/config - AI kalitlari, modellar va ko'p provayderli tizim holatini olish"""
     user_id, user, session, err = resolve_auth_identity(request, required=_is_production_mode())
     if err:
         return err
@@ -847,11 +964,19 @@ async def handle_ai_config_get(request):
     mgr = get_ai_key_manager()
     summary = mgr.get_status_summary()
 
+    multi_prov = {}
+    try:
+        from core.providers import get_provider_system
+        multi_prov = get_provider_system().get_status_summary()
+    except Exception as e:
+        logger.debug(f"Multi-provider summary olishda xatolik: {e}")
+
     response_data = {
         "ok": True,
         "config": summary,
         "user_id": user_id,
-        "has_user_key": bool(mgr.get_active_gemini_key(user_id=user_id) if user_id else False)
+        "has_user_key": bool(mgr.get_active_gemini_key(user_id=user_id) if user_id else False),
+        "multi_provider": multi_prov,
     }
 
     # Autentifikatsiyalangan foydalanuvchilar yoki desktop uchun faol kalitni (baza/serverdan) ulashish
@@ -866,7 +991,7 @@ async def handle_ai_config_get(request):
 
 
 async def handle_ai_config_set(request):
-    """POST /api/ai/config - AI kaliti yoki model sozlamalarini yangilash"""
+    """POST /api/ai/config - AI kaliti yoki model sozlamalarini yangilash (Groq, Cerebras, Gemini, OpenRouter, NVIDIA)"""
     user_id, user, session, err = resolve_auth_identity(request, required=True)
     if err:
         return err
@@ -876,7 +1001,16 @@ async def handle_ai_config_set(request):
     except Exception:
         return web.json_response({"ok": False, "error": "Noto'g'ri JSON formati"}, status=400)
 
-    gemini_key = str(body.get("gemini_api_key") or body.get("api_key") or "").strip()
+    input_key = str(
+        body.get("api_key")
+        or body.get("gemini_api_key")
+        or body.get("groq_api_key")
+        or body.get("cerebras_api_key")
+        or body.get("openrouter_api_key")
+        or body.get("nvidia_api_key")
+        or body.get("key")
+        or ""
+    ).strip()
     provider = str(body.get("provider") or "gemini").strip().lower()
     save_as_system = bool(body.get("is_system", False))
     preferred_model = str(body.get("preferred_model") or "").strip()
@@ -884,15 +1018,15 @@ async def handle_ai_config_set(request):
     from core.v8.ai_key_manager import get_ai_key_manager
     mgr = get_ai_key_manager()
 
-    if gemini_key:
+    if input_key:
         if save_as_system:
             if _is_production_mode() and (not session or session.role not in ("admin", "service_role")):
                 return web.json_response({"ok": False, "error": "Tizim kalitini faqat administrator o'zgartira oladi"}, status=403)
-            mgr.register_system_key(provider, gemini_key, prepend=True)
+            mgr.register_system_key(provider, input_key, prepend=True)
         else:
-            mgr.set_user_key(user_id, provider, gemini_key)
+            mgr.set_user_key(user_id, provider, input_key)
             if user and hasattr(user, "metadata") and isinstance(user.metadata, dict):
-                user.metadata["gemini_api_key"] = gemini_key
+                user.metadata[f"{provider}_api_key"] = input_key
                 try:
                     from core.v8 import AccountDeviceManager
                     AccountDeviceManager.get_default_instance().save()
@@ -900,13 +1034,48 @@ async def handle_ai_config_set(request):
                     pass
 
     if preferred_model:
-        mgr.set_preferred_model(preferred_model)
+        mgr.set_preferred_model(preferred_model, provider=provider)
 
     return web.json_response({
         "ok": True,
-        "message": "AI konfiguratsiyasi muvaffaqiyatli saqlandi",
+        "message": f"{provider.upper()} konfiguratsiyasi muvaffaqiyatli saqlandi",
         "config": mgr.get_status_summary()
     })
+
+
+async def handle_ai_providers_get(request):
+    """GET /api/ai/providers - Barcha LLM provayderlari, ularning salomatligi, kechikishi va modellari"""
+    try:
+        from core.providers import get_provider_system
+        summary = get_provider_system().get_status_summary()
+        return web.json_response({"ok": True, "data": summary})
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_ai_providers_toggle(request):
+    """POST /api/ai/providers/toggle - Provayderni yoqish yoki o'chirish"""
+    try:
+        body = await request.json()
+        provider = str(body.get("provider", "")).strip().lower()
+        enabled = bool(body.get("enabled", True))
+        from core.providers import get_provider_system
+        ps = get_provider_system()
+        ps.config_manager.set_provider_enabled(provider, enabled)
+        return web.json_response({"ok": True, "provider": provider, "enabled": enabled})
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=400)
+
+
+async def handle_ai_providers_discover(request):
+    """POST /api/ai/providers/discover - Provayderlardan yangi modellarni avtomatik kashf etish"""
+    try:
+        from core.providers import get_provider_system
+        ps = get_provider_system()
+        discovered = ps.discover_all_models()
+        return web.json_response({"ok": True, "discovered_models": discovered})
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 
 async def handle_ai_sync(request):
@@ -924,82 +1093,387 @@ async def handle_ai_sync(request):
 
 
 async def handle_voice_start(request):
-    """POST /api/voice/start - Ovozli tinglashni boshlash"""
+    """POST /api/voice/start - Ovozli tinglashni boshlash (Autonomous Conversational Voice Service)"""
     global _voice_state
-    m, _, _, _, _, _ = get_modules()
-    if not m:
-        return web.json_response({"ok": False, "error": "Backend moduli yuklanmagan"}, status=500)
-
     loop = asyncio.get_running_loop()
-    _voice_state = "listening"
-    await broadcast_ws("voice_state", {"state": "listening"})
 
-    def _voice_callback(msg):
-        import re
-        msg_str = str(msg).strip()
-        sync_broadcast("voice_event", {"message": msg_str}, loop)
+    try:
+        from core.voice.service import get_conversational_voice_service
+        from core.voice.voice_manager import get_voice_manager
+        service = get_conversational_voice_service()
 
-        # 1. Foydalanuvchi gapirganini aniqlash
-        if "🗣️ Siz:" in msg_str:
-            user_text = msg_str.split("🗣️ Siz:", 1)[1].strip()
-            sync_broadcast("voice_state", {"state": "thinking"}, loop)
-            sync_broadcast("voice_transcript", {"text": user_text, "sender": "user"}, loop)
-        # 2. Agent yoki AI javobi
-        elif any(marker in msg_str for marker in ["🤖 Agent:", "🤖 AI:", "✨", "✅", "👋 Salom"]):
-            clean_reply = re.sub(r"^[🤖✨✅⚠️❌]\s*(?:Agent:|AI:)?\s*", "", msg_str).strip()
-            sync_broadcast("voice_state", {"state": "speaking"}, loop)
-            sync_broadcast("ai_response", {"text": clean_reply, "mode": "voice"}, loop)
-            sync_broadcast("voice_transcript", {"text": clean_reply, "sender": "misa"}, loop)
-        # 3. Tinglash holatiga qaytish
-        elif "🎙️ Tinglash boshlandi" in msg_str or "Tinglash davom" in msg_str:
-            sync_broadcast("voice_state", {"state": "listening"}, loop)
-        elif "🛑 Tinglash to'xtatildi" in msg_str:
-            sync_broadcast("voice_state", {"state": "idle"}, loop)
+        # Tanlangan ovozni yangilash
+        service.voice_id = get_current_voice_type() or "ayol"
 
-    def _listen():
-        global _voice_state
-        try:
-            user = get_current_user_name()
-            ovoz = get_current_voice_type()
+        # WebSocket signallarini ulab qo'yish
+        service.add_state_callback(lambda st: sync_broadcast("voice_state", {"state": st}, loop))
+        service.add_transcript_callback(lambda txt, sender: sync_broadcast("voice_transcript", {"text": txt, "sender": sender}, loop))
+        service.add_response_callback(lambda resp: sync_broadcast("ai_response", {"text": resp, "mode": "voice"}, loop))
+        service.add_audio_level_callback(lambda lvl: sync_broadcast("audio_level", {"level": lvl}, loop))
+        service.add_wake_callback(lambda data: sync_broadcast("wake_word_detected", data, loop))
+
+        # AudioQueue holatlarini MisaAperture ga sinxron uzatish
+        get_voice_manager().register_state_callback(lambda st: sync_broadcast("voice_state", {"state": st}, loop))
+
+        service.start()
+
+        m, _, _, _, _, _ = get_modules()
+        if m and hasattr(m, "global_state"):
             m.global_state.tinglash_faol = True
             m.global_state.gapirmoqda = False
-            m.fon_xizmat(user, ovoz, _voice_callback)
-        except Exception as e:
-            logger.error(f"Ovozli tinglashda xato: {e}")
-        finally:
-            _voice_state = "idle"
-            sync_broadcast("voice_state", {"state": "idle"}, loop)
 
-    t = threading.Thread(target=_listen, daemon=True, name="ApiVoiceThread")
-    t.start()
-    return web.json_response({"ok": True, "status": "listening"})
+        _voice_state = "listening"
+        await broadcast_ws("voice_state", {"state": "listening"})
+        ww_status = service.wake_detector.get_status()
+        return web.json_response({
+            "ok": True,
+            "status": "listening",
+            "mode": "autonomous_conversational",
+            "wake_word": ww_status.get("phrase", "Salom Misa"),
+            "active_engine": ww_status.get("active_engine", "acoustic_fallback"),
+            "openwakeword": ww_status.get("openwakeword", {}),
+            "barge_in": "enabled"
+        })
+    except Exception as e:
+        logger.error(f"Conversational voice service start xatosi: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 
 async def handle_voice_stop(request):
     """POST /api/voice/stop - Ovozli tinglashni to'xtatish"""
     global _voice_state
+    try:
+        from core.voice.service import get_conversational_voice_service
+        from core.voice.voice_manager import get_voice_manager
+
+        service = get_conversational_voice_service()
+        service.stop()
+
+        vm = get_voice_manager()
+        vm.interrupt()
+    except Exception as e:
+        logger.warning(f"Voice service to'xtatishda ogohlantirish: {e}")
+
     m, _, _, _, _, _ = get_modules()
-    if m:
+    if m and hasattr(m, "global_state"):
         m.global_state.tinglash_faol = False
         m.global_state.gapirmoqda = False
+
     _voice_state = "idle"
     await broadcast_ws("voice_state", {"state": "idle"})
     return web.json_response({"ok": True, "status": "stopped"})
 
 
-def speak_out_loud(text: str) -> bool:
-    """Misa ovozli ijro chaqiruvi — main.py orqali yoki to'g'ridan-to'g'ri mustaqil fallback"""
-    m, _, _, _, _, _ = get_modules()
-    if m and hasattr(m, "ovoz_chiqar_tez"):
-        try:
-            m.ovoz_chiqar_tez(text)
-            return True
-        except Exception as e:
-            logger.warning(f"m.ovoz_chiqar_tez chaqirishda xato: {e}")
+async def handle_wake_word_status(request):
+    """GET /api/voice/wakeword/status - openWakeWord va lokal uyg'otuvchi so'z tizimi holati"""
+    try:
+        from core.voice.service import get_conversational_voice_service
+        service = get_conversational_voice_service()
+        status = service.wake_detector.get_status()
+        return web.json_response({"ok": True, "data": status})
+    except Exception as e:
+        logger.error(f"Wake word status olishda xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_wake_word_configure(request):
+    """POST /api/voice/wakeword/configure - Uyg'otuvchi so'z sezuvchanligi va parametrlarini yangilash"""
+    try:
+        body = await request.json()
+        from core.voice.service import get_conversational_voice_service
+        service = get_conversational_voice_service()
+        updated_status = service.wake_detector.configure(
+            sensitivity=body.get("sensitivity"),
+            model_path=body.get("model_path"),
+            cooldown=body.get("cooldown")
+        )
+        return web.json_response({"ok": True, "data": updated_status})
+    except Exception as e:
+        logger.error(f"Wake word sozlashda xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_voice_devices_get(request):
+    """GET /api/voice/devices - Barcha Windows audio kirish (input/capture) qurilmalarini ro'yxati"""
+    try:
+        from core.voice.devices import MicrophoneManager
+        mgr = MicrophoneManager.get_instance()
+        force_refresh = request.query.get("refresh", "").lower() in ["true", "1"]
+        if force_refresh:
+            devices = mgr.refresh_devices()
+        else:
+            devices = mgr.get_input_devices()
+        idx, dev_info, fallback_used, status_msg = mgr.resolve_selected_device()
+        return web.json_response({
+            "ok": True,
+            "devices": devices,
+            "selected_device_id": mgr._selected_device_id or "default",
+            "selected_device_name": mgr._selected_device_name or "Tizim standarti (Windows Default)",
+            "active_device": dev_info,
+            "resolved_index": idx,
+            "fallback_used": fallback_used,
+            "status": status_msg,
+            "message": status_msg
+        })
+    except Exception as e:
+        logger.error(f"Ovoz qurilmalarini olishda xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_voice_devices_refresh(request):
+    """POST /api/voice/devices/refresh - PortAudio hot-plug re-scan va yangilangan qurilmalar ro'yxati"""
+    try:
+        from core.voice.devices import MicrophoneManager
+        mgr = MicrophoneManager.get_instance()
+        devices = mgr.refresh_devices()
+        idx, dev_info, fallback_used, status_msg = mgr.resolve_selected_device()
+        return web.json_response({
+            "ok": True,
+            "devices": devices,
+            "selected_device_id": mgr._selected_device_id or "default",
+            "selected_device_name": mgr._selected_device_name or "Tizim standarti (Windows Default)",
+            "active_device": dev_info,
+            "resolved_index": idx,
+            "fallback_used": fallback_used,
+            "status": status_msg,
+            "message": status_msg
+        })
+    except Exception as e:
+        logger.error(f"Ovoz qurilmalarini yangilashda xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_voice_device_select(request):
+    """POST /api/voice/devices/select - Foydalanuvchi tanlagan mikrofonni saqlash va oqimni yangilash"""
+    try:
+        data = await request.json()
+        device_id = str(data.get("device_id") or "default").strip()
+        device_name = str(data.get("device_name") or "").strip() or None
+
+        from core.voice.service import get_conversational_voice_service
+        service = get_conversational_voice_service()
+        res = service.set_microphone(device_id, device_name)
+
+        # WebSocket orqali interfeysga xabar berish
+        await broadcast_ws("microphone_changed", res)
+        return web.json_response(res)
+    except Exception as e:
+        logger.error(f"Mikrofonni tanlashda xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_voice_device_test(request):
+    """POST /api/voice/devices/test - Tanlangan mikrofondan real apparat audio signali va darajasini tekshirish"""
+    try:
+        device_id = None
+        if request.method == "POST":
+            try:
+                data = await request.json()
+                device_id = data.get("device_id")
+            except Exception:
+                pass
+        if not device_id:
+            device_id = request.query.get("device_id")
+
+        from core.voice.devices import MicrophoneManager
+        mgr = MicrophoneManager.get_instance()
+        res = mgr.test_microphone(device_id=device_id, duration_s=1.0)
+        return web.json_response(res)
+    except Exception as e:
+        logger.error(f"Mikrofon testida xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_voice_device_monitor_start(request):
+    """POST /api/voice/devices/monitor/start - Real-time apparat mikrofon monitoringi va loopbackni boshlash"""
+    try:
+        data = {}
+        if request.method == "POST":
+            try:
+                data = await request.json()
+            except Exception:
+                data = {}
+        device_id = data.get("device_id") or request.query.get("device_id")
+        enable_loopback = data.get("loopback", True)
+        if isinstance(enable_loopback, str):
+            enable_loopback = enable_loopback.lower() in ("true", "1", "yes")
+
+        from core.voice.devices import MicrophoneManager
+        mgr = MicrophoneManager.get_instance()
+
+        loop = asyncio.get_running_loop()
+        def _broadcast(payload):
+            sync_broadcast("mic_monitor_level", payload, loop)
+
+        res = mgr.start_realtime_monitor(
+            device_id=device_id,
+            enable_loopback=enable_loopback,
+            broadcast_cb=_broadcast,
+        )
+        return web.json_response(res)
+    except Exception as e:
+        logger.error(f"Mikrofon monitoringini boshlashda xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_voice_device_monitor_stop(request):
+    """POST /api/voice/devices/monitor/stop - Mikrofon monitoringini to'xtatish"""
+    try:
+        from core.voice.devices import MicrophoneManager
+        mgr = MicrophoneManager.get_instance()
+        res = mgr.stop_realtime_monitor()
+        return web.json_response(res)
+    except Exception as e:
+        logger.error(f"Mikrofon monitoringini to'xtatishda xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_voice_device_monitor_status(request):
+    """GET /api/voice/devices/monitor/status - Mikrofon monitoringining real holati"""
+    try:
+        from core.voice.devices import MicrophoneManager
+        mgr = MicrophoneManager.get_instance()
+        res = mgr.get_realtime_monitor_status()
+        return web.json_response(res)
+    except Exception as e:
+        logger.error(f"Mikrofon monitoringi holatini olishda xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_voice_preview(request):
+    """POST /api/voice/preview - AI Ovoz modellarining 'Tinglab ko'rish' sintezatori"""
+    try:
+        data = {}
+        if request.method == "POST":
+            try:
+                data = await request.json()
+            except Exception:
+                data = {}
+        voice_id = (data.get("voice_id") or request.query.get("voice_id") or "ayol").strip().lower()
+        text = data.get("text") or request.query.get("text")
+        if not text:
+            text = "Salom. Men Misa, sizning sun’iy intellekt yordamchingizman."
+
+        from core.voice.voice_registry import get_voice_registry
+        from core.voice.voice_manager import get_voice_manager
+
+        reg = get_voice_registry()
+        vm = get_voice_manager()
+
+        v_info = reg.get_voice_info(voice_id) or {}
+        provider = v_info.get("provider", "edge_tts")
+        is_fallback = False
+        fallback_reason = ""
+
+        # Provider mavjudligini halol tekshirish
+        if provider == "rvc":
+            rvc_stat = reg.rvc_provider.get_voice_status(voice_id)
+            if not rvc_stat.get("runtime_ready"):
+                is_fallback = True
+                fallback_reason = rvc_stat.get("reason", "Lokal RVC model runtime o'rnatilmagan")
+        elif provider == "fish_audio":
+            if not reg.fish_provider.is_available():
+                is_fallback = True
+                fallback_reason = "Fish Audio bulut xizmati faol emas yoki API kalit kiritilmagan"
+
+        # Haqiqiy TTS sintezi (backend audio fayl yaratadi)
+        loop = asyncio.get_running_loop()
+        audio_path = await loop.run_in_executor(None, vm.synthesize, text, voice_id)
+
+        if not audio_path or not os.path.exists(audio_path):
+            return web.json_response({
+                "ok": False,
+                "error": "Ovoz faylini yaratib bo'lmadi",
+                "voice_id": voice_id,
+                "provider": provider,
+            }, status=500)
+
+        # Base64 data URI formatida frontend ga uzatish
+        with open(audio_path, "rb") as f:
+            audio_bytes = f.read()
+
+        import base64
+        b64_str = base64.b64encode(audio_bytes).decode("ascii")
+        audio_data_uri = f"data:audio/mp3;base64,{b64_str}"
+
+        return web.json_response({
+            "ok": True,
+            "voice_id": voice_id,
+            "voice_name": v_info.get("name", voice_id),
+            "provider": provider,
+            "is_fallback": is_fallback,
+            "fallback_reason": fallback_reason,
+            "audio_data": audio_data_uri,
+            "sample_rate": 24000 if provider == "edge_tts" else 44100,
+            "text": text,
+            "message": "Ovoz muvaffaqiyatli sintez qilindi",
+        })
+    except Exception as e:
+        logger.error(f"[VOICE] Preview sintezida xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_voice_diagnostic(request):
+    """GET /api/voice/diagnostic - Haqiqiy ovoz tizimi va mikrofon telemetriyasi"""
+    try:
+        from core.voice.service import get_conversational_voice_service
+        from core.voice.devices import MicrophoneManager
+
+        service = get_conversational_voice_service()
+        mgr = MicrophoneManager.get_instance()
+
+        score = getattr(service.wake_detector, "last_wake_score", 0.0)
+        thresh = getattr(service.wake_detector, "last_threshold", 0.56)
+        is_running = getattr(service, "_is_running", False)
+
+        idx, dev_info, fallback_used, status_msg = mgr.resolve_selected_device()
+        dev_name = dev_info.get("name", "Noma'lum mikrofon")
+        dev_idx = idx if idx is not None else -1
+        mic_status = "CONNECTED" if (idx is not None and idx >= 0) else "DISCONNECTED"
+
+        stream_status = "ACTIVE" if is_running else "INACTIVE"
+        detector_status = "RUNNING" if is_running else "STOPPED"
+
+        return web.json_response({
+            "ok": True,
+            "Microphone": mic_status,
+            "Stream": stream_status,
+            "Wake detector": detector_status,
+            "Current wake score": round(score, 2),
+            "Threshold": round(thresh, 2),
+            "device_name": dev_name,
+            "device_index": dev_idx,
+            "selected_device_id": mgr._selected_device_id or "default",
+            "selected_device_name": mgr._selected_device_name or "Tizim standarti (Windows Default)",
+            "fallback_used": fallback_used,
+            "microphone_status": status_msg,
+            "state": service.state,
+            "voice_id": service.voice_id
+        })
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+def speak_out_loud(text: str, voice_type: Optional[str] = None) -> bool:
+    """Misa ovozli ijro chaqiruvi — Unified VoiceManager (AudioQueue, Non-overlapping, Barge-in)"""
+    vt = voice_type or get_current_voice_type() or "ayol"
+    try:
+        from core.voice.voice_manager import get_voice_manager
+        vm = get_voice_manager()
+        return vm.speak(text, voice_id=vt)
+    except Exception as e:
+        logger.warning(f"VoiceManager orqali ijroda xatolik: {e}")
+
+    try:
+        from core.voice_engine import play_speech_async
+        play_speech_async(text, voice_type=vt)
+        return True
+    except Exception as e:
+        logger.warning(f"VoiceEngine orqali ovoz chiqarishda xato: {e}")
 
     try:
         from main import ovoz_chiqar_tez
-        ovoz_chiqar_tez(text)
+        ovoz_chiqar_tez(text, ovoz_turi=vt)
         return True
     except Exception:
         pass
@@ -1007,9 +1481,20 @@ def speak_out_loud(text: str) -> bool:
     def _standalone_speak():
         try:
             import edge_tts, ctypes, tempfile, uuid
+            vt = (voice_type or get_current_voice_type() or "ayol").lower()
             voice = "uz-UZ-MadinaNeural"
-            if get_current_voice_type() == "erkak":
+            pitch_str = "+0Hz"
+            if vt in ("erkak", "sardor", "uz-uz-sardorneural"):
                 voice = "uz-UZ-SardorNeural"
+            elif vt in ("ashley", "ashley_clayson"):
+                voice = "uz-UZ-MadinaNeural"
+                pitch_str = "-14Hz"
+            elif vt in ("yukari", "discordjp"):
+                voice = "uz-UZ-MadinaNeural"
+                pitch_str = "+60Hz"
+            elif vt in ("ayol", "madina", "uz-uz-madinaneural"):
+                voice = "uz-UZ-MadinaNeural"
+                pitch_str = "+3Hz"
             clean_text = re.sub(r"\[.*?\]\(.*?\)", "", text)
             clean_text = re.sub(r"```[\s\S]*?```", "", clean_text)
             clean_text = re.sub(r"`.*?`", "", clean_text)
@@ -1018,14 +1503,53 @@ def speak_out_loud(text: str) -> bool:
             if not clean_text:
                 return
             fn = os.path.join(tempfile.gettempdir(), f"misa_sa_{uuid.uuid4().hex}.mp3")
-            asyncio.run(edge_tts.Communicate(clean_text, voice).save(fn))
-            alias = f"sa_{uuid.uuid4().hex[:8]}"
-            winmm = ctypes.windll.winmm
-            if winmm.mciSendStringW(f'open "{fn}" type mpegvideo alias {alias}', None, 0, 0) == 0:
-                winmm.mciSendStringW(f'play {alias} wait', None, 0, 0)
-                winmm.mciSendStringW(f'close {alias}', None, 0, 0)
-            if os.path.exists(fn):
-                os.remove(fn)
+            try:
+                speed_mult = 1.0
+                try:
+                    from config import get_config
+                    cfg_speed = get_config("audio.tts_speed")
+                    if cfg_speed is not None:
+                        speed_mult = float(cfg_speed)
+                except Exception:
+                    speed_mult = 1.0
+                if vt in ("yukari", "discordjp"):
+                    speed_mult *= 1.15
+                elif vt in ("ashley", "ashley_clayson"):
+                    speed_mult *= 0.97
+                speed_pct = int((speed_mult - 1.0) * 100)
+                sign = "+" if speed_pct >= 0 else ""
+                rate_str = f"{sign}{speed_pct}%"
+                asyncio.run(edge_tts.Communicate(clean_text, voice, rate=rate_str, pitch=pitch_str).save(fn))
+                played = False
+                alias = f"sa_{uuid.uuid4().hex[:8]}"
+                try:
+                    winmm = ctypes.windll.winmm
+                    if winmm.mciSendStringW(f'open "{fn}" type mpegvideo alias {alias}', None, 0, 0) == 0:
+                        winmm.mciSendStringW(f'play {alias} wait', None, 0, 0)
+                        winmm.mciSendStringW(f'close {alias}', None, 0, 0)
+                        played = True
+                except Exception:
+                    pass
+
+                if not played:
+                    try:
+                        import pygame
+                        if not pygame.mixer.get_init():
+                            pygame.mixer.init()
+                        pygame.mixer.music.load(fn)
+                        pygame.mixer.music.play()
+                        while pygame.mixer.music.get_busy():
+                            time.sleep(0.05)
+                        pygame.mixer.music.unload()
+                        played = True
+                    except Exception:
+                        pass
+            finally:
+                try:
+                    if os.path.exists(fn):
+                        os.remove(fn)
+                except Exception:
+                    pass
         except Exception as err:
             logger.error(f"Mustaqil ovoz ijrosida xato: {err}")
 
@@ -1034,20 +1558,59 @@ def speak_out_loud(text: str) -> bool:
 
 
 async def handle_voice_speak(request):
-    """POST /api/voice/speak - Istalgan matnni ovoz chiqarib o'qish"""
+    """POST /api/voice/speak - Istalgan matnni ovoz chiqarib o'qish yoki To'xtatish"""
     try:
         body = await request.json()
     except Exception:
         return web.json_response({"ok": False, "error": "Noto'g'ri JSON formati"}, status=400)
 
     text = body.get("text", "").strip()
+    voice_type = body.get("voice_type") or body.get("voice")
     if not text:
         return web.json_response({"ok": False, "error": "Matn kiritilmadi"}, status=400)
 
     loop = asyncio.get_running_loop()
+
+    # Fast-path Barge-in: "To'xta" / "Stop" bo'lsa darhol to'xtatish
+    from core.voice.barge_in import BargeInDetector
+    barge = BargeInDetector()
+    if barge.is_stop_command(text):
+        from core.voice.voice_manager import get_voice_manager
+        count = get_voice_manager().interrupt()
+        sync_broadcast("voice_state", {"state": "idle"}, loop)
+        return web.json_response({"ok": True, "message": "Ovoz darhol to'xtatildi (Barge-in)", "cancelled_tracks": count})
+
     sync_broadcast("voice_state", {"state": "speaking"}, loop)
-    speak_out_loud(text)
+
+    from core.voice.voice_manager import get_voice_manager
+    vm = get_voice_manager()
+
+    def _on_done(interrupted: bool):
+        sync_broadcast("voice_state", {"state": "idle"}, loop)
+
+    success = vm.speak(text, voice_id=voice_type, on_complete=_on_done)
+    if not success:
+        # Fallback
+        speak_out_loud(text, voice_type=voice_type)
+
     return web.json_response({"ok": True, "message": "Ovoz chiqarilmoqda"})
+
+
+async def handle_get_voices(request):
+    """GET /api/voice/voices - Barcha ovozlar ro'yxati va joriy faol ovozni olish"""
+    try:
+        from core.voice.voice_registry import get_voice_registry
+        from core.voice_engine import get_active_voice_id
+        registry = get_voice_registry()
+        active_id = get_active_voice_id()
+        catalog = registry.get_catalog()
+        return web.json_response({
+            "ok": True,
+            "active_voice": active_id,
+            "voices": catalog
+        })
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 
 async def handle_chat_clear(request):
@@ -1059,6 +1622,113 @@ async def handle_chat_clear(request):
         mem.clear_context()
     await broadcast_ws("chat_cleared", {})
     return web.json_response({"ok": True, "message": "Suhbat tarixi tozalandi"})
+
+
+async def handle_chat_feedback(request):
+    """POST /api/chat/feedback - Foydalanuvchi fikr-mulohazasi (like/dislike/rating)"""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    def _save():
+        try:
+            feedback_file = os.path.join(DATA_DIR, "chat_feedback.json")
+            existing = []
+            if os.path.exists(feedback_file):
+                with open(feedback_file, "r", encoding="utf-8") as f:
+                    try:
+                        existing = json.load(f)
+                    except Exception:
+                        existing = []
+            if not isinstance(existing, list):
+                existing = []
+            entry = {
+                "timestamp": datetime.now().isoformat(),
+                "query": body.get("query"),
+                "response": body.get("response"),
+                "rating": body.get("rating"),
+                "message_id": body.get("message_id")
+            }
+            existing.append(entry)
+            if len(existing) > 500:
+                existing = existing[-500:]
+            with open(feedback_file, "w", encoding="utf-8") as f:
+                json.dump(existing, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.warning(f"Feedback saqlashda xatolik: {e}")
+
+    await asyncio.to_thread(_save)
+    return web.json_response({"ok": True, "message": "Fikr-mulohaza qabul qilindi"})
+
+
+async def handle_images_list(request):
+    """GET /api/images - Yaratilgan yoki saqlangan tasvirlar ro'yxati"""
+    def _load():
+        images_dir = os.path.join(DATA_DIR, "images")
+        os.makedirs(images_dir, exist_ok=True)
+        items = []
+        valid_exts = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+        try:
+            for f in sorted(os.listdir(images_dir), reverse=True):
+                ext = os.path.splitext(f)[1].lower()
+                if ext in valid_exts:
+                    full_p = os.path.join(images_dir, f)
+                    mtime = os.path.getmtime(full_p)
+                    items.append({
+                        "filename": f,
+                        "url": f"/api/images/{f}",
+                        "created_at": datetime.fromtimestamp(mtime).isoformat(),
+                        "prompt": os.path.splitext(f)[0].replace("_", " ")
+                    })
+        except Exception as e:
+            logger.warning(f"Tasvirlar ro'yxatini olishda xatolik: {e}")
+        return items
+
+    images = await asyncio.to_thread(_load)
+    return web.json_response({"ok": True, "images": images})
+
+
+async def handle_images_serve(request):
+    """GET /api/images/{filename} - Tasvir faylini xavfsiz uzatish"""
+    filename = request.match_info.get("filename", "")
+    safe_name = os.path.basename(filename)
+    if not safe_name or safe_name != filename or safe_name.startswith("."):
+        return web.Response(text="Noto'g'ri fayl nomi", status=400)
+
+    file_path = os.path.join(DATA_DIR, "images", safe_name)
+    if not os.path.isfile(file_path):
+        return web.Response(text="Tasvir topilmadi", status=404)
+
+    ext = os.path.splitext(safe_name)[1].lower()
+    content_types = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".gif": "image/gif"
+    }
+    ct = content_types.get(ext, "application/octet-stream")
+    return web.FileResponse(file_path, headers={"Content-Type": ct, "Cache-Control": "public, max-age=86400"})
+
+
+async def handle_images_generate(request):
+    """POST /api/images/generate - Tasvir generatsiyasi so'rovi"""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    prompt = str(body.get("prompt") or "").strip()
+    if not prompt:
+        return web.json_response({"ok": False, "error": "Prompt kiritilmagan"}, status=400)
+
+    images_dir = os.path.join(DATA_DIR, "images")
+    os.makedirs(images_dir, exist_ok=True)
+    return web.json_response({
+        "ok": True,
+        "message": f"'{prompt}' bo'yicha so'rov qabul qilindi.",
+        "prompt": prompt,
+    })
 
 
 def format_tool_result(name: str, res: dict) -> str:
@@ -2098,41 +2768,88 @@ async def handle_account_get(request):
     sess_mgr = SessionManager.get_default_instance()
     account_summary = adm.get_user_account_summary(user_id, tg_identity_mgr=tg_mgr, session_mgr=sess_mgr)
 
-    name = user_name or user_cfg.get("name") or mem_profile.get("ism", "Ustoz")
-    avatar = user_cfg.get("avatar") or mem_profile.get("avatar", "emerald")
-    role = user_cfg.get("role") or mem_profile.get("kasb", "Dasturchi / Muhandis")
+    auth_email = getattr(user, "email", "") if user else ""
+    auth_display_name = (getattr(user, "display_name", "") or getattr(user, "username", "")) if user else ""
+    auth_avatar_url = getattr(user, "avatar_url", "") if user else ""
+
+    first_name = user_cfg.get("first_name") or getattr(user, "first_name", "") or ""
+    last_name = user_cfg.get("last_name") or getattr(user, "last_name", "") or ""
+    name = user_cfg.get("name") or auth_display_name or user_name or mem_profile.get("ism", "")
+
+    # Agar first_name va last_name alohida kiritilmagan bo'lsa, mavjud ismdan ajratish
+    if (not first_name and not last_name) and name:
+        parts = name.strip().split(" ", 1)
+        first_name = parts[0] if parts else ""
+        last_name = parts[1] if len(parts) > 1 else ""
+
+    email = user_cfg.get("email") or auth_email or ""
+    avatar = user_cfg.get("avatar") or mem_profile.get("avatar", "violet")
+    avatar_url = user_cfg.get("avatar_url") or auth_avatar_url or ""
+    role = user_cfg.get("role") or mem_profile.get("kasb", "")
     phone = user_cfg.get("phone") or mem_profile.get("telefon", "")
-    bio = user_cfg.get("bio") or mem_profile.get("bio", "Misa AI shaxsiy sun'iy intellekt yordamchisi")
+    bio = user_cfg.get("bio") or mem_profile.get("bio", "")
     language = user_cfg.get("language") or mem_profile.get("til", "uz")
 
-    masked_key = ""
+    ai_keys = {}
     try:
         from core.v8.ai_key_manager import get_ai_key_manager
         ai_mgr = get_ai_key_manager()
+        status_sum = ai_mgr.get_status_summary()
+        active_keys = status_sum.get("active_keys", {})
+        for prov in ("gemini", "groq", "cerebras", "openrouter", "nvidia"):
+            k = active_keys.get(prov) or ""
+            has_k = bool(k)
+            masked = (k[:6] + "..." + k[-4:]) if (has_k and len(k) > 10) else ("●●●●●●" if has_k else "")
+            ai_keys[prov] = {
+                "has_key": has_k,
+                "masked_key": masked,
+            }
         active_key = ai_mgr.get_active_gemini_key(user_id=user_id)
         has_gemini = bool(active_key)
         if has_gemini and len(active_key) > 12:
             masked_key = active_key[:8] + "..." + active_key[-4:]
     except Exception:
         has_gemini = bool(os.environ.get("GEMINI_API_KEY") or ai_cfg.get("gemini_api_key"))
+        for prov in ("gemini", "groq", "cerebras", "openrouter", "nvidia"):
+            k = os.environ.get(f"{prov.upper()}_API_KEY") or ai_cfg.get(f"{prov}_api_key") or ""
+            has_k = bool(k)
+            masked = (k[:6] + "..." + k[-4:]) if (has_k and len(k) > 10) else ("●●●●●●" if has_k else "")
+            ai_keys[prov] = {
+                "has_key": has_k,
+                "masked_key": masked,
+            }
+
+    fish_audio_key = os.environ.get("FISH_AUDIO_API_KEY", "")
+    if not fish_audio_key:
+        try:
+            from core.voice_engine import get_fish_audio_api_key
+            fish_audio_key = get_fish_audio_api_key()
+        except Exception:
+            fish_audio_key = cfg.get("voice", {}).get("fish_audio_api_key", "")
 
     return web.json_response({
         "ok": True,
         "user_id": user_id,
+        "ai_keys": ai_keys,
         "account": account_summary,
         "devices_count": account_summary["devices_count"],
         "active_sessions_count": account_summary["active_sessions_count"],
         "selected_device": account_summary["selected_device"],
         "telegram_linked": account_summary["telegram_linked"],
         "telegram_identity": account_summary["telegram_identity"],
+        "first_name": first_name,
+        "last_name": last_name,
         "name": name,
+        "email": email,
         "avatar": avatar,
+        "avatar_url": avatar_url,
         "role": role,
         "phone": phone,
         "bio": bio,
         "language": language,
         "voice_type": voice_type or user_cfg.get("voice_type", "ayol"),
-        "tts_speed": float(audio_cfg.get("tts_speed", 2.0)),
+        "fish_audio_api_key": fish_audio_key,
+        "tts_speed": float(audio_cfg.get("tts_speed", 1.0)),
         "tts_engine": audio_cfg.get("tts_engine", "edge_tts"),
         "auto_speak": audio_cfg.get("auto_speak", True),
         "vad_enabled": audio_cfg.get("vad_enabled", True),
@@ -2147,11 +2864,11 @@ async def handle_account_get(request):
         "has_gemini_key": has_gemini,
         "api_key_masked": masked_key,
         "ai_status": "ready" if has_gemini else "missing_key",
-        "version": "9.0.0",
+        "version": get_app_version(),
 
         "app_info": {
             "name": "Misa AI",
-            "version": "9.0.0",
+            "version": get_app_version(),
             "codename": "Quiet Intelligence",
             "engine": "Tauri 2.0 (Native Rust) + Python 3.11+",
             "architecture": "Windows x64 Native Desktop",
@@ -2169,20 +2886,7 @@ async def handle_account_get(request):
             "telemetry_disabled": priv_cfg.get("telemetry_disabled", True),
             "save_conversations": priv_cfg.get("save_conversations", True)
         },
-        "voices_available": [
-            {
-                "id": "ayol",
-                "name": "Madina (Ayol)",
-                "lang": "uz-UZ-MadinaNeural",
-                "desc": "Yumshoq, muloyim va tabiiy intonatsiya"
-            },
-            {
-                "id": "erkak",
-                "name": "Sardor (Erkak)",
-                "lang": "uz-UZ-SardorNeural",
-                "desc": "Jiddiy, ishonchli va chuqur tembr"
-            }
-        ],
+        "voices_available": (lambda: __import__("core.voice_engine", fromlist=["VOICE_CATALOG"]).VOICE_CATALOG)(),
         "ai_models_available": [
             {
                 "id": "gemini",
@@ -2228,12 +2932,24 @@ async def handle_account_update(request):
     m, ai, mem, _, _, _ = get_modules()
 
     # 1. User & Profil
+    new_first_name = body.get("first_name", "").strip() if "first_name" in body and body["first_name"] is not None else None
+    new_last_name = body.get("last_name", "").strip() if "last_name" in body and body["last_name"] is not None else None
     new_name = body.get("name", "").strip() if "name" in body and body["name"] is not None else None
+    if (new_first_name or new_last_name) and not new_name:
+        new_name = f"{new_first_name or ''} {new_last_name or ''}".strip()
+
+    new_email = body.get("email", "").strip() if "email" in body and body["email"] is not None else None
     new_avatar = body.get("avatar", "").strip() if "avatar" in body and body["avatar"] is not None else None
+    new_avatar_url = body.get("avatar_url", "").strip() if "avatar_url" in body and body["avatar_url"] is not None else None
     new_role = body.get("role", "").strip() if "role" in body and body["role"] is not None else None
     new_phone = body.get("phone", "").strip() if "phone" in body and body["phone"] is not None else None
     new_bio = body.get("bio", "").strip() if "bio" in body and body["bio"] is not None else None
     new_lang = body.get("language", "").strip() if "language" in body and body["language"] is not None else None
+
+    if new_first_name is not None:
+        cfg["user"]["first_name"] = new_first_name
+    if new_last_name is not None:
+        cfg["user"]["last_name"] = new_last_name
 
     if new_name:
         cfg["user"]["name"] = new_name
@@ -2248,6 +2964,9 @@ async def handle_account_update(request):
             except Exception:
                 pass
 
+    if new_email:
+        cfg["user"]["email"] = new_email
+
     if new_avatar:
         cfg["user"]["avatar"] = new_avatar
         if mem:
@@ -2255,6 +2974,26 @@ async def handle_account_update(request):
                 mem.set_profile("avatar", new_avatar)
             except Exception:
                 pass
+
+    if new_avatar_url is not None:
+        cfg["user"]["avatar_url"] = new_avatar_url
+
+    if user_id:
+        try:
+            from core.v8 import AccountDeviceManager
+            adm = AccountDeviceManager.get_default_instance()
+            u = adm.get_user(user_id)
+            if u:
+                if new_name:
+                    u.display_name = new_name
+                if new_email:
+                    u.email = new_email
+                if new_avatar_url:
+                    u.avatar_url = new_avatar_url
+                u.updated_at = time.time()
+                adm.save_state()
+        except Exception:
+            pass
 
     if new_role is not None:
         cfg["user"]["role"] = new_role
@@ -2290,7 +3029,7 @@ async def handle_account_update(request):
 
     # 2. Voice & Ovoz
     new_voice = body.get("voice_type", "").strip() if "voice_type" in body and body["voice_type"] is not None else None
-    if new_voice in ["ayol", "erkak"]:
+    if new_voice:
         cfg["user"]["voice_type"] = new_voice
         try:
             with open(VOICE_TYPE_FILE, "w", encoding="utf-8") as f:
@@ -2302,6 +3041,26 @@ async def handle_account_update(request):
                 mem.set_profile("ovoz_turi", new_voice)
             except Exception:
                 pass
+
+    if "fish_audio_api_key" in body and body["fish_audio_api_key"] is not None:
+        fish_key = str(body["fish_audio_api_key"]).strip()
+        os.environ["FISH_AUDIO_API_KEY"] = fish_key
+        # config.json dan olib tashlash (xavfsizlik uchun, maxfiy kalit .env da saqlanadi)
+        if "voice" in cfg and "fish_audio_api_key" in cfg["voice"]:
+            cfg["voice"].pop("fish_audio_api_key", None)
+        try:
+            env_path = os.path.join(BASE_DIR, ".env")
+            env_lines = []
+            if os.path.exists(env_path):
+                with open(env_path, "r", encoding="utf-8") as f:
+                    env_lines = f.readlines()
+            new_env_lines = [l for l in env_lines if not l.strip().startswith("FISH_AUDIO_API_KEY=")]
+            if fish_key:
+                new_env_lines.append(f"FISH_AUDIO_API_KEY={fish_key}\n")
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.writelines(new_env_lines)
+        except Exception as e:
+            logger.warning(f".env ga FISH_AUDIO_API_KEY saqlashda xato: {e}")
 
     if "tts_speed" in body and body["tts_speed"] is not None:
         try:
@@ -2336,35 +3095,43 @@ async def handle_account_update(request):
         cfg["ai"]["mode"] = str(body["ai_mode"])
     if "thinking_enabled" in body:
         cfg["ai"]["thinking_enabled"] = bool(body["thinking_enabled"])
-    if "gemini_api_key" in body and body["gemini_api_key"] is not None:
-        key = str(body["gemini_api_key"]).strip()
-        if key:
-            cfg["ai"]["gemini_api_key"] = key
-            cfg["gemini_api_key"] = key
-            os.environ["GEMINI_API_KEY"] = key
-            os.environ["GOOGLE_API_KEY"] = key
-            try:
-                from core import ai_engine
-                ai_engine.GOOGLE_API_KEY = key
-            except Exception:
-                pass
-            try:
-                from core.intelligence import get_orchestrator
-                orch = get_orchestrator()
-                if orch and hasattr(orch, "provider_manager"):
-                    for p in orch.provider_manager._providers:
-                        if hasattr(p, "set_api_key"):
-                            p.set_api_key(key)
-            except Exception:
-                pass
-            try:
-                from core.v8.ai_key_manager import get_ai_key_manager
-                ai_mgr = get_ai_key_manager()
-                if user_id:
-                    ai_mgr.set_user_key(user_id, "gemini", key)
-                ai_mgr.register_system_key("gemini", key, prepend=True)
-            except Exception:
-                pass
+    # Multi-provider kalitlarini to'liq saqlash (Gemini, Groq, Cerebras, OpenRouter, NVIDIA)
+    for prov in ("gemini", "groq", "cerebras", "openrouter", "nvidia"):
+        param_name = f"{prov}_api_key"
+        if param_name in body and body[param_name] is not None:
+            key = str(body[param_name]).strip()
+            if key:
+                if "ai" not in cfg:
+                    cfg["ai"] = {}
+                cfg["ai"][param_name] = key
+                if prov == "gemini":
+                    cfg["gemini_api_key"] = key
+                    os.environ["GEMINI_API_KEY"] = key
+                    os.environ["GOOGLE_API_KEY"] = key
+                    try:
+                        from core import ai_engine
+                        ai_engine.GOOGLE_API_KEY = key
+                    except Exception:
+                        pass
+                else:
+                    os.environ[f"{prov.upper()}_API_KEY"] = key
+
+                try:
+                    from core.v8.ai_key_manager import get_ai_key_manager
+                    ai_mgr = get_ai_key_manager()
+                    if user_id:
+                        ai_mgr.set_user_key(user_id, prov, key)
+                    ai_mgr.register_system_key(prov, key, prepend=True)
+                except Exception:
+                    pass
+
+                try:
+                    from core.providers import get_provider_system
+                    ps = get_provider_system()
+                    if prov in ps._providers and hasattr(ps._providers[prov], "set_api_key"):
+                        ps._providers[prov].set_api_key(key)
+                except Exception:
+                    pass
 
             try:
                 env_path = os.path.join(BASE_DIR, ".env")
@@ -2404,12 +3171,16 @@ async def handle_account_update(request):
     saved_user = new_name or get_current_user_name()
     saved_avatar = cfg["user"].get("avatar", "emerald")
     saved_voice = new_voice or get_current_voice_type()
-    saved_speed = cfg["audio"].get("tts_speed", 2.0)
-    saved_theme = cfg["gui"].get("theme", "dark")
+    saved_speed = cfg["audio"].get("tts_speed", 1.0)
+    saved_email = cfg["user"].get("email", "")
+    saved_avatar_url = cfg["user"].get("avatar_url", "")
+    saved_theme = cfg.get("gui", {}).get("theme", "dark")
 
     await broadcast_ws("account_updated", {
         "name": saved_user,
+        "email": saved_email,
         "avatar": saved_avatar,
+        "avatar_url": saved_avatar_url,
         "voice_type": saved_voice,
         "tts_speed": saved_speed,
         "theme": saved_theme
@@ -2419,7 +3190,9 @@ async def handle_account_update(request):
         "ok": True,
         "message": "Sozlamalar muvaffaqiyatli saqlandi",
         "name": saved_user,
+        "email": saved_email,
         "avatar": saved_avatar,
+        "avatar_url": saved_avatar_url,
         "voice_type": saved_voice,
         "tts_speed": saved_speed,
         "theme": saved_theme
@@ -2503,6 +3276,17 @@ async def handle_remote_devices(request):
             or (local_ident.local_ip if is_local and local_ident else "127.0.0.1")
         )
         state_val = "online" if (is_local or d.status == "online") else d.status
+        agent_ver = (
+            local_ident.agent_version
+            if (is_local and local_ident and local_ident.agent_version)
+            else (d.agent_version or (local_ident.agent_version if local_ident else "9.0.1"))
+        )
+        if is_local and local_ident and d.agent_version != local_ident.agent_version:
+            d.agent_version = local_ident.agent_version
+            try:
+                adm.save()
+            except Exception:
+                pass
         devices.append({
             "device_id": d.device_id,
             "name": d.name,
@@ -2511,7 +3295,7 @@ async def handle_remote_devices(request):
             "mac_address": mac_str,
             "local_ip": ip_str,
             "state": state_val,
-            "agent_version": d.agent_version or "9.0.0",
+            "agent_version": agent_ver,
             "is_paired": bool(tg_paired or legacy_paired),
             "telegram_user_id": tg_uid_str or (link.telegram_user_id if link else None),
         })
@@ -3584,7 +4368,7 @@ async def handle_devices_sync(request):
         dev_name = str(item.get("name") or item.get("hostname") or "Kompyuter").strip()
         hostname = str(item.get("hostname") or dev_name).strip()
         platform_str = str(item.get("platform") or "windows").strip().lower()
-        agent_ver = str(item.get("agent_version") or "9.0.0").strip()
+        agent_ver = str(item.get("agent_version") or get_app_version()).strip()
         status_str = str(item.get("status") or "online").strip().lower()
         meta = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
 
@@ -4561,6 +5345,11 @@ async def handle_oauth_session_save(request):
 
 async def handle_oauth_session_get(request):
     """GET /api/auth/callback/session - Desktop ilova uchun kutilayotgan sessiyani state orqali bir martalik olish"""
+    # 1. Agar brauzer to'g'ridan-to'g'ri HTML qabul qiluvchi sifatida kelsa (masalan, Supabase redirect)
+    accept_hdr = request.headers.get("Accept", "")
+    if "text/html" in accept_hdr:
+        return await handle_oauth_callback(request)
+
     _clean_expired_oauth_sessions()
     req_state = request.query.get("state", "").strip()
 
@@ -4648,9 +5437,19 @@ async def handle_oauth_session_get(request):
             headers=_oauth_security_headers(),
         )
 
+    # Agar ro'yxatga olingan state hali tasdiqlanish jarayonida bo'lsa (pending polling):
+    if is_still_pending:
+        return web.json_response({
+            "ok": False,
+            "status": "pending",
+            "session": None,
+            "message": "OAuth sessiyasi kutilmoqda"
+        }, status=200, headers=_oauth_security_headers())
+
+    # State topilmagan, muddati o'tgan yoki allaqachon olingan (one-time replay himoyasi)
     return web.json_response({
         "ok": False,
-        "status": "pending" if is_still_pending else "not_found",
+        "status": "not_found",
         "session": None,
         "error": "Sessiya topilmadi yoki muddati o'tgan"
     }, status=404, headers=_oauth_security_headers())
@@ -5097,7 +5896,7 @@ async def handle_device_heartbeat(request):
     except Exception:
         body = {}
 
-    agent_version = str(body.get("agent_version", "9.0.0"))
+    agent_version = str(body.get("agent_version", get_app_version()))
     state_str = str(body.get("state", "online")).lower()
     metrics = body.get("metrics", {})
 
@@ -5659,7 +6458,7 @@ async def handle_ws(request):
         "data": {
             "status": "online",
             "voice_state": _voice_state,
-            "version": "9.0.0"
+            "version": get_app_version()
         },
         "timestamp": datetime.now().isoformat()
     }))
@@ -5901,14 +6700,35 @@ def create_app():
     # AI Chat va Ovoz
     app.router.add_post("/api/chat", handle_chat)
     app.router.add_post("/api/chat/clear", handle_chat_clear)
+    app.router.add_post("/api/chat/feedback", handle_chat_feedback)
+    app.router.add_get("/api/images", handle_images_list)
+    app.router.add_get("/api/images/{filename}", handle_images_serve)
+    app.router.add_post("/api/images/generate", handle_images_generate)
     app.router.add_get("/api/ai/config", handle_ai_config_get)
     app.router.add_post("/api/ai/config", handle_ai_config_set)
+    app.router.add_get("/api/ai/providers", handle_ai_providers_get)
+    app.router.add_post("/api/ai/providers/toggle", handle_ai_providers_toggle)
+    app.router.add_post("/api/ai/providers/discover", handle_ai_providers_discover)
     app.router.add_post("/api/ai/sync", handle_ai_sync)
     app.router.add_post("/api/ai/test-key", handle_ai_test_key)
     app.router.add_post("/api/account/test-api-key", handle_ai_test_key)
     app.router.add_post("/api/voice/start", handle_voice_start)
     app.router.add_post("/api/voice/stop", handle_voice_stop)
+    app.router.add_get("/api/voice/wakeword/status", handle_wake_word_status)
+    app.router.add_post("/api/voice/wakeword/configure", handle_wake_word_configure)
     app.router.add_post("/api/voice/speak", handle_voice_speak)
+    app.router.add_get("/api/voice/voices", handle_get_voices)
+    app.router.add_get("/api/voice/diagnostic", handle_voice_diagnostic)
+    app.router.add_get("/api/voice/devices", handle_voice_devices_get)
+    app.router.add_post("/api/voice/devices/refresh", handle_voice_devices_refresh)
+    app.router.add_post("/api/voice/devices/select", handle_voice_device_select)
+    app.router.add_post("/api/voice/devices/test", handle_voice_device_test)
+    app.router.add_get("/api/voice/devices/test", handle_voice_device_test)
+    app.router.add_post("/api/voice/devices/monitor/start", handle_voice_device_monitor_start)
+    app.router.add_post("/api/voice/devices/monitor/stop", handle_voice_device_monitor_stop)
+    app.router.add_get("/api/voice/devices/monitor/status", handle_voice_device_monitor_status)
+    app.router.add_post("/api/voice/preview", handle_voice_preview)
+    app.router.add_get("/api/voice/preview", handle_voice_preview)
 
 
     # Buyruqlar (Commands)
@@ -6095,12 +6915,39 @@ def run_server(host=None, port=None):
         global _main_loop
         import signal
         _main_loop = asyncio.get_running_loop()
+
+        # VoiceManager holatini (speaking/idle) avtomatik ravishda barcha WS ulanishlarga tarqatish
+        try:
+            from core.voice.voice_manager import get_voice_manager
+            get_voice_manager().register_state_callback(
+                lambda st: sync_broadcast("voice_state", {"state": st}, _main_loop)
+            )
+        except Exception as ve:
+            logger.debug(f"VoiceManager callback ulanishda ogohlantirish: {ve}")
+
         runner = web.AppRunner(app)
         await runner.setup()
 
         primary_site = web.TCPSite(runner, resolved_host, resolved_port)
         await primary_site.start()
         logger.info(f"Asosiy API server ishga tushdi: http://{resolved_host}:{resolved_port}")
+
+        # Desktop rejimida avtonom lokal ovoz xizmatini (Wake-word "Misa") avtomatik ishga tushirish
+        if not _is_headless_server_mode():
+            try:
+                from core.voice.service import get_conversational_voice_service
+                service = get_conversational_voice_service()
+                service.voice_id = get_current_voice_type() or "ayol"
+
+                service.add_state_callback(lambda st: sync_broadcast("voice_state", {"state": st}, _main_loop))
+                service.add_transcript_callback(lambda txt, sender: sync_broadcast("voice_transcript", {"text": txt, "sender": sender}, _main_loop))
+                service.add_response_callback(lambda resp: sync_broadcast("ai_response", {"text": resp, "mode": "voice"}, _main_loop))
+                service.add_audio_level_callback(lambda lvl: sync_broadcast("audio_level", {"level": lvl}, _main_loop))
+
+                service.start()
+                logger.info("[VOICE] ConversationalVoiceService avtomatik ishga tushirildi (Boot auto-listen)")
+            except Exception as ve:
+                logger.error(f"[VOICE] ConversationalVoiceService avtomatik start xatosi: {ve}")
 
         # Auxiliary ports (1420, 140) - local desktop OAuth fallback only (never on cloud/Railway)
         is_cloud = bool(os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("RAILWAY_PROJECT_ID"))

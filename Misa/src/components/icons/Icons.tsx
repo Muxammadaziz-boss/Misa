@@ -527,3 +527,10 @@ export const ImageIcon: React.FC<IconProps> = ({ size = 16, color = "currentColo
     <polyline points="21 15 16 10 5 21" />
   </svg>
 );
+
+export const StopIcon: React.FC<IconProps> = ({ size = 16, color = "currentColor", className = "" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={color} className={className}>
+    <rect x="5" y="5" width="14" height="14" rx="2" />
+  </svg>
+);
+

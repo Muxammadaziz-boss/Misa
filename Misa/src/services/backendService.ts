@@ -48,6 +48,50 @@ export function scrubUrlOAuthTokens(win?: any): void {
   }
 }
 
+export function unwrapCleanResponse(text: any): string {
+  if (!text) return "";
+  if (typeof text !== "string") {
+    if (typeof text === "object") {
+      return unwrapCleanResponse(text.response || text.content || text.javob || text.message || text.question || "");
+    }
+    return String(text);
+  }
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("{") && !trimmed.includes('"response":') && !trimmed.includes('"type":')) {
+    return trimmed;
+  }
+  // 1. To'g'ridan-to'g'ri JSON parsing
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === "object") {
+      const inner = parsed.response || parsed.content || parsed.javob || parsed.question || parsed.message;
+      if (inner !== undefined) {
+        return unwrapCleanResponse(inner);
+      }
+    }
+  } catch {}
+
+  // 2. Uzilib qolgan yoki xato formatdagi JSON ("response": "...")
+  const match = trimmed.match(/"(?:response|content|javob|question|message)"\s*:\s*"([\s\S]*)/);
+  if (match) {
+    let raw = match[1].replace(/"\s*\}?\s*$/, "");
+    raw = raw.replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '');
+    return unwrapCleanResponse(raw.trim());
+  }
+
+  // 3. {"type": ...} qobig'ini kesib olish
+  const stripped = trimmed
+    .replace(/^\s*\{\s*["']type["']\s*:\s*["'][^"']+["']\s*,\s*["'](?:response|content|javob)["']\s*:\s*["']?/, "")
+    .replace(/["']?\s*\}?\s*$/, "")
+    .replace(/\\"/g, '"')
+    .replace(/\\n/g, '\n');
+  if (stripped && !stripped.startsWith("{")) {
+    return stripped.trim();
+  }
+
+  return trimmed;
+}
+
 export function formatAuthError(err: any): string {
   const rawMsg = (err && (err.message || String(err))) || "";
   const msg = redactSensitiveTokens(rawMsg);
@@ -376,12 +420,17 @@ export interface AccountAppInfo {
 export interface AccountSettings {
   ok: boolean;
   name: string;
+  first_name?: string;
+  last_name?: string;
   email?: string;
   avatar?: string;
+  avatar_url?: string;
   role?: string;
+  phone?: string;
   bio?: string;
   language?: string;
-  voice_type: "ayol" | "erkak";
+  voice_type: string;
+  fish_audio_api_key?: string;
   tts_speed: number;
   tts_engine?: string;
   auto_speak?: boolean;
@@ -396,6 +445,11 @@ export interface AccountSettings {
   thinking_enabled?: boolean;
   has_gemini_key?: boolean;
   api_key_masked?: string;
+  ai_keys?: Record<string, { has_key: boolean; masked_key: string }>;
+  groq_api_key?: string;
+  cerebras_api_key?: string;
+  openrouter_api_key?: string;
+  nvidia_api_key?: string;
   settings?: Record<string, any>;
   version: string;
   app_info?: AccountAppInfo;
@@ -407,6 +461,8 @@ export interface AccountSettings {
 
 export type VoiceState =
   | "idle"
+  | "wake_detected"
+  | "acknowledging"
   | "listening"
   | "thinking"
   | "planning"
@@ -724,6 +780,32 @@ export function resolveOAuthRedirectUrl(
 const API_BASE = resolveApiBase();
 const WS_BASE = (import.meta.env.VITE_WS_URL || API_BASE.replace(/^http/, "ws")) + "/api/ws";
 
+export function normalizeApiError(error: any, fallbackMessage: string = "Xatolik yuz berdi"): string {
+  if (!error) return fallbackMessage;
+  const msg = String(error?.message || error || "").trim();
+  const lower = msg.toLowerCase();
+
+  if (
+    lower.includes("failed to fetch") ||
+    lower.includes("networkerror") ||
+    lower.includes("connection refused") ||
+    lower.includes("econnrefused") ||
+    lower.includes("load failed")
+  ) {
+    return "Backend xizmati bilan aloqa yo'q (127.0.0.1:18420 da xizmat ishga tushmagan yoki yuklanmoqda).";
+  }
+  if (lower.includes("timeout") || lower.includes("aborted") || lower.includes("aborterror")) {
+    return "So'rov vaqti tugadi (Timeout). Server juda sekin javob berdi.";
+  }
+  if (lower.includes("permission") || lower.includes("notallowederror")) {
+    return "Mikrofon ruxsati berilmagan. Audio capture ruxsatini tekshiring.";
+  }
+  if (lower.includes("notfounderror") || lower.includes("devicesnotfound")) {
+    return "Audio kirish qurilmasi (mikrofon) topilmadi.";
+  }
+  return msg || fallbackMessage;
+}
+
 class BackendService {
   private ws: WebSocket | null = null;
   private wsReconnectTimer: number | null = null;
@@ -736,6 +818,8 @@ class BackendService {
   private responseListeners: Set<(data: { text: string; mode: string }) => void> = new Set();
   private alarmListeners: Set<(data: { id: string; text: string; type: string }) => void> = new Set();
   private transcriptListeners: Set<(data: { text: string; sender: "user" | "mikasa" }) => void> = new Set();
+  private wakeWordListeners: Set<(data: { phrase: string; engine: string; score: number }) => void> = new Set();
+  private audioLevelListeners: Set<(data: { level: number }) => void> = new Set();
   private accountListeners: Set<(data: any) => void> = new Set();
   private agentListeners: Set<(event: AgentEventData) => void> = new Set();
   private metricsListeners: Set<(metrics: SystemMetrics) => void> = new Set();
@@ -814,6 +898,16 @@ class BackendService {
     return () => this.voiceStateListeners.delete(cb);
   }
 
+  public onWakeWordDetected(cb: (data: { phrase: string; engine: string; score: number }) => void): () => void {
+    this.wakeWordListeners.add(cb);
+    return () => this.wakeWordListeners.delete(cb);
+  }
+
+  public onAudioLevel(cb: (data: { level: number }) => void): () => void {
+    this.audioLevelListeners.add(cb);
+    return () => this.audioLevelListeners.delete(cb);
+  }
+
   public onResponse(cb: (data: { text: string; mode: string }) => void): () => void {
     this.responseListeners.add(cb);
     return () => this.responseListeners.delete(cb);
@@ -871,6 +965,16 @@ class BackendService {
     });
   }
 
+  private notifyWakeWordDetected(data: { phrase: string; engine: string; score: number }) {
+    this.wakeWordListeners.forEach((cb) => {
+      try {
+        cb(data);
+      } catch (err) {
+        console.error("Error in wake word listener", err);
+      }
+    });
+  }
+
   // ========== WebSocket Connection ==========
   private connectWs() {
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
@@ -898,6 +1002,16 @@ class BackendService {
           });
           if (payload.type === "voice_state" && payload.data?.state) {
             this.notifyVoiceState(payload.data.state);
+          } else if (payload.type === "wake_word_detected" && payload.data) {
+            this.notifyWakeWordDetected(payload.data);
+          } else if (payload.type === "audio_level" && payload.data && typeof payload.data.level === "number") {
+            this.audioLevelListeners.forEach((cb) => {
+              try {
+                cb(payload.data);
+              } catch (e) {
+                console.error("Error in audio_level listener", e);
+              }
+            });
           } else if (payload.type === "ai_response" && payload.data?.text) {
             this.responseListeners.forEach((cb) => {
               try {
@@ -1060,20 +1174,31 @@ class BackendService {
   public async sendChat(
     text: string,
     mode: "ask" | "command" | "summary" = "ask",
-    speak: boolean = true
+    speak: boolean = true,
+    image?: string
   ): Promise<ChatResponse> {
     this.notifyVoiceState("thinking");
     try {
+      const payload: any = { text, mode, speak };
+      if (image) {
+        payload.image = image;
+      }
       const res = await fetch(`${API_BASE}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, mode, speak }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const errText = await res.text();
         throw new Error(errText || "Chat xatoligi: " + res.status);
       }
       const data: ChatResponse = await res.json();
+      if (data.response) {
+        data.response = unwrapCleanResponse(data.response);
+      }
+      if (data.reply) {
+        data.reply = unwrapCleanResponse(data.reply);
+      }
       this.notifyVoiceState("idle");
       return data;
     } catch (err: any) {
@@ -1086,7 +1211,18 @@ class BackendService {
     }
   }
 
+  public stopClientVoiceOnly(): void {
+    if (this.clientVoiceStopFn) {
+      try {
+        this.clientVoiceStopFn();
+      } catch {}
+      this.clientVoiceStopFn = null;
+    }
+  }
+
   public async startVoice(): Promise<boolean> {
+    // Brauzer SpeechRecognition va AudioContext mikrofonni bo'shatishi shart
+    this.stopClientVoiceOnly();
     try {
       const res = await fetch(`${API_BASE}/api/voice/start`, { method: "POST" });
       if (res.ok) {
@@ -1109,6 +1245,214 @@ class BackendService {
       return false;
     } catch {
       return false;
+    }
+  }
+
+  public async getWakeWordStatus(): Promise<{
+    ok: boolean;
+    data?: any;
+    error?: string;
+  }> {
+    try {
+      const res = await fetch(`${API_BASE}/api/voice/wakeword/status`);
+      return await res.json();
+    } catch (e: any) {
+      return { ok: false, error: e?.message || "Failed to fetch wake word status" };
+    }
+  }
+
+  public async configureWakeWord(params: {
+    sensitivity?: number;
+    model_path?: string;
+    cooldown?: number;
+  }): Promise<{ ok: boolean; data?: any; error?: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/api/voice/wakeword/configure`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      });
+      return await res.json();
+    } catch (e: any) {
+      return { ok: false, error: e?.message || "Failed to configure wake word" };
+    }
+  }
+
+  // ========== Real Microphone Device Management ==========
+  public async getAudioInputDevices(refresh: boolean = false): Promise<AudioDevicesResponse> {
+    try {
+      const url = refresh ? `${API_BASE}/api/voice/devices?refresh=true` : `${API_BASE}/api/voice/devices`;
+      const res = await fetch(url);
+      if (res.ok) {
+        return await res.json();
+      }
+      return { ok: false, devices: [], selected_device_id: "default", selected_device_name: "Default", error: `HTTP ${res.status}` };
+    } catch (e: any) {
+      return { ok: false, devices: [], selected_device_id: "default", selected_device_name: "Default", error: String(e) };
+    }
+  }
+
+  public async refreshAudioInputDevices(): Promise<AudioDevicesResponse> {
+    try {
+      const res = await fetch(`${API_BASE}/api/voice/devices/refresh`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      return await this.getAudioInputDevices(true);
+    } catch (e: any) {
+      return await this.getAudioInputDevices(true);
+    }
+  }
+
+  public async selectAudioInputDevice(
+    deviceId: string,
+    deviceName?: string
+  ): Promise<{ ok: boolean; selected_device_id?: string; fallback_used?: boolean; status?: string; message?: string; error?: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/api/voice/devices/select`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ device_id: deviceId, device_name: deviceName }),
+      });
+      return await res.json();
+    } catch (e: any) {
+      return { ok: false, error: String(e) };
+    }
+  }
+
+  public async testMicrophone(deviceId?: string, duration: number = 1.5): Promise<MicrophoneTestResult> {
+    try {
+      const res = await fetch(`${API_BASE}/api/voice/devices/test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ device_id: deviceId, duration }),
+      });
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        return {
+          ok: false,
+          working: false,
+          level: 0,
+          status: "error",
+          message: normalizeApiError(errText, `Server xatosi (HTTP ${res.status})`),
+          error: `HTTP ${res.status}`,
+        };
+      }
+      return await res.json();
+    } catch (e: any) {
+      const normMsg = normalizeApiError(e, "Mikrofonni ochib bo'lmadi");
+      return { ok: false, working: false, level: 0, status: "error", message: normMsg, error: String(e) };
+    }
+  }
+
+  // ========== Real-Time Microphone Hardware Monitor & Loopback ==========
+  public async startMicrophoneMonitor(
+    deviceId?: string,
+    loopback: boolean = true
+  ): Promise<{ ok: boolean; status?: string; message?: string; device_name?: string; loopback?: boolean; error?: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/api/voice/devices/monitor/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ device_id: deviceId, loopback }),
+      });
+      if (!res.ok) {
+        return { ok: false, message: `HTTP xatosi ${res.status}`, error: `HTTP ${res.status}` };
+      }
+      return await res.json();
+    } catch (e: any) {
+      return { ok: false, message: normalizeApiError(e, "Monitoringni boshlab bo'lmadi"), error: String(e) };
+    }
+  }
+
+  public async stopMicrophoneMonitor(): Promise<{ ok: boolean; status?: string; message?: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/api/voice/devices/monitor/stop`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) return { ok: false, message: `HTTP ${res.status}` };
+      return await res.json();
+    } catch (e: any) {
+      return { ok: false, message: normalizeApiError(e, "Monitoringni to'xtatib bo'lmadi") };
+    }
+  }
+
+  public async getMicrophoneMonitorStatus(): Promise<{
+    active: boolean;
+    level: number;
+    rms: number;
+    peak: number;
+    status: string;
+    device_name?: string;
+    loopback?: boolean;
+    sample_rate?: number;
+  }> {
+    try {
+      const res = await fetch(`${API_BASE}/api/voice/devices/monitor/status`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) {
+        return { active: false, level: 0, rms: 0, peak: 0, status: `HTTP ${res.status}` };
+      }
+      return await res.json();
+    } catch (e: any) {
+      return { active: false, level: 0, rms: 0, peak: 0, status: normalizeApiError(e, "Status olinmadi") };
+    }
+  }
+
+  public onMicMonitorLevel(
+    cb: (data: { rms: number; peak: number; level: number; status: string; device_name?: string; loopback?: boolean; stopped?: boolean }) => void
+  ): () => void {
+    const handler = (event: any) => {
+      if (event && event.type === "mic_monitor_level" && event.data) {
+        cb(event.data);
+      }
+    };
+    return this.subscribe(handler);
+  }
+
+  // ========== AI Voice Preview (Tinglab ko'rish) ==========
+  public async previewVoice(
+    voiceId: string,
+    text?: string
+  ): Promise<{
+    ok: boolean;
+    audio_data?: string;
+    voice_id?: string;
+    voice_name?: string;
+    provider?: string;
+    is_fallback?: boolean;
+    fallback_reason?: string;
+    message?: string;
+    error?: string;
+  }> {
+    try {
+      const res = await fetch(`${API_BASE}/api/voice/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          voice_id: voiceId,
+          text: text || "Salom. Men Misa, sizning sun’iy intellekt yordamchingizman.",
+        }),
+      });
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        return {
+          ok: false,
+          error: normalizeApiError(errText, `Ovoz sintez qilib bo'lmadi (HTTP ${res.status})`),
+        };
+      }
+      return await res.json();
+    } catch (e: any) {
+      return {
+        ok: false,
+        error: normalizeApiError(e, "Ovoz serveriga ulanib bo'lmadi"),
+      };
     }
   }
 
@@ -1760,28 +2104,42 @@ class BackendService {
         name: cachedName,
         voice_type: "ayol",
         theme: "dark",
-        tts_speed: 2.0,
+        tts_speed: 1.0,
         ai_model: "gemini",
-        version: "9.0.0",
+        version: "9.0.1",
         voices_available: [
           { id: "ayol", name: "Madina (Ayol)", lang: "uz-UZ-MadinaNeural" },
           { id: "erkak", name: "Sardor (Erkak)", lang: "uz-UZ-SardorNeural" },
+          { id: "fish_yigit", name: "Yosh Dinamik (Aziz)", lang: "Fish Audio S2.1 Pro" },
+          { id: "fish_anime", name: "Anime Drama 3", lang: "Fish Audio Drama 3" },
+          { id: "ashley", name: "Ashley Clayson", lang: "Cyber Manhunt Neural Voice" },
+          { id: "yukari", name: "Yukari", lang: "Anime DiscordJP Neural" },
         ],
       };
     }
   }
 
-  public async speakText(text: string): Promise<boolean> {
+  public async speakText(text: string, voiceType?: string): Promise<boolean> {
     try {
       const res = await fetch(`${API_BASE}/api/voice/speak`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, voice_type: voiceType }),
       });
       return res.ok;
     } catch {
       return false;
     }
+  }
+
+  public async getVoices(): Promise<{ ok: boolean; active_voice: string; voices: any[] }> {
+    try {
+      const res = await fetch(`${API_BASE}/api/voice/voices`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {}
+    return { ok: false, active_voice: "ayol", voices: [] };
   }
 
   public async updateAccount(
@@ -1825,20 +2183,27 @@ class BackendService {
     }
   }
 
-  public async testGeminiApiKey(
-    apiKey?: string
+  public async testApiKey(
+    apiKey?: string,
+    provider: string = "gemini"
   ): Promise<{ ok: boolean; valid?: boolean; message?: string; error?: string; error_code?: string; status_code?: number }> {
     try {
       const authHeaders = await this.getFreshAuthHeaders();
       const res = await fetch(`${API_BASE}/api/ai/test-key`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
-        body: JSON.stringify({ api_key: apiKey || "" }),
+        body: JSON.stringify({ api_key: apiKey || "", provider }),
       });
       return await res.json();
     } catch (err: any) {
       return { ok: false, valid: false, error: err.message || "Serverga ulanishda xatolik yuz berdi" };
     }
+  }
+
+  public async testGeminiApiKey(
+    apiKey?: string
+  ): Promise<{ ok: boolean; valid?: boolean; message?: string; error?: string; error_code?: string; status_code?: number }> {
+    return this.testApiKey(apiKey, "gemini");
   }
 
   public async getAiConfig(): Promise<{
@@ -2537,6 +2902,8 @@ class BackendService {
   public async register(payload: {
     username: string;
     password: string;
+    first_name?: string;
+    last_name?: string;
     email?: string;
     confirm_password?: string;
   }): Promise<AuthResponse> {
@@ -2548,13 +2915,17 @@ class BackendService {
     }
     try {
       const email = payload.email || `${payload.username.toLowerCase()}@misa.local`;
+      const fullName = `${payload.first_name || ""} ${payload.last_name || ""}`.trim() || payload.username;
       const { data, error } = await supabase.auth.signUp({
         email: email,
         password: payload.password,
         options: {
           data: {
             username: payload.username,
-            display_name: payload.username,
+            first_name: payload.first_name || "",
+            last_name: payload.last_name || "",
+            full_name: fullName,
+            display_name: fullName,
           },
         },
       });
@@ -2566,6 +2937,15 @@ class BackendService {
       const sessionToken = data.session?.access_token || "";
       if (sessionToken) {
         this.setAuthToken(sessionToken);
+      }
+
+      // Backend profiliga ism va familiyani sinxronlash
+      if (payload.first_name || payload.last_name) {
+        this.updateAccount({
+          first_name: payload.first_name,
+          last_name: payload.last_name,
+          name: fullName,
+        }).catch(() => {});
       }
 
       const user: MikasaAuthUser | undefined = data.user
@@ -2845,6 +3225,9 @@ class BackendService {
         if (data?.ok && data?.session) {
           clearStoredOAuthState();
           return data;
+        }
+        if (data?.status === "pending") {
+          return { ok: false };
         }
       } else if (res.status === 400) {
         const errData = await res.json().catch(() => ({}));
@@ -3418,14 +3801,17 @@ class BackendService {
 
   public async sendMessage(
     text: string,
-    options?: { mode?: "ask" | "command" | "summary" | string; speak?: boolean; [key: string]: any }
+    options?: { mode?: "ask" | "command" | "summary" | string; speak?: boolean; image?: string; [key: string]: any }
   ): Promise<ChatResponse> {
     const mode = (options?.mode === "command" || options?.mode === "summary" ? options.mode : "ask") as "ask" | "command" | "summary";
     const speak = options?.speak !== undefined ? Boolean(options.speak) : true;
-    const res = await this.sendChat(text, mode, speak);
+    const res = await this.sendChat(text, mode, speak, options?.image);
+    const rawReply = res.reply || res.response || "";
+    const cleanReply = unwrapCleanResponse(rawReply);
     return {
       ...res,
-      reply: res.reply || res.response,
+      response: cleanReply,
+      reply: cleanReply,
     };
   }
 
@@ -3536,15 +3922,6 @@ class BackendService {
   public async saveGithubToken(token: string): Promise<{ ok: boolean; message?: string; error?: string }> {
     this.setGitHubToken(token || null);
     return { ok: true, message: "GitHub token saqlandi" };
-  }
-
-  public async testApiKey(apiKey?: string): Promise<{
-    ok: boolean;
-    valid?: boolean;
-    message?: string;
-    error?: string;
-  }> {
-    return this.testGeminiApiKey(apiKey);
   }
 
   public async getAuditTraces(): Promise<{
@@ -3920,6 +4297,44 @@ export interface SecurityWarningPayload {
   warning_text: string;
   policy_version: string;
   expires_in: number;
+}
+
+export interface AudioInputDevice {
+  id: string;
+  name: string;
+  type: "input";
+  available: boolean;
+  is_default: boolean;
+  index?: number | null;
+  channels?: number;
+  sample_rate?: number;
+}
+
+export interface AudioDevicesResponse {
+  ok: boolean;
+  devices: AudioInputDevice[];
+  selected_device_id: string;
+  selected_device_name: string;
+  active_device?: AudioInputDevice;
+  resolved_index?: number;
+  fallback_used?: boolean;
+  status?: string;
+  message?: string;
+  error?: string;
+}
+
+export interface MicrophoneTestResult {
+  ok: boolean;
+  working: boolean;
+  level: number;
+  rms?: number;
+  peak?: number;
+  status: "connected" | "warning" | "error" | "disconnected";
+  message: string;
+  device_name?: string;
+  device_id?: string;
+  sample_rate?: number;
+  error?: string;
 }
 
 export const backendService = new BackendService();

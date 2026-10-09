@@ -29,6 +29,19 @@ if (!fs.existsSync(releaseVersionDir)) {
   fs.mkdirSync(releaseVersionDir, { recursive: true });
 }
 
+// Security: never ship .env in release folder
+const envReleaseFile = path.join(releaseVersionDir, ".env");
+if (fs.existsSync(envReleaseFile)) {
+  try { fs.unlinkSync(envReleaseFile); } catch {}
+}
+const legacyCands = ["misa-7.exe", "Misa.exe"];
+for (const leg of legacyCands) {
+  const p = path.join(releaseVersionDir, leg);
+  if (fs.existsSync(p)) {
+    try { fs.unlinkSync(p); } catch {}
+  }
+}
+
 // 3. Locate built binaries
 const tauriReleaseDir = path.resolve(__dirname, "../src-tauri/target/release");
 const tauriBundleDir = path.join(tauriReleaseDir, "bundle");
@@ -101,10 +114,11 @@ copyFileWithLog(dllSource, dllTarget, "WebView2 Loader DLL");
 
 // 4.2 Copy Bundled Backend Runtime (if exists)
 const backendSrcCandidates = [
+  path.join(projectRoot, "dist/backend_build/misa_backend"),
   path.resolve(__dirname, "../src-tauri/backend"),
-  path.join(projectRoot, "release", "v8.0.0", "backend"),
-  path.join(projectRoot, "dist/backend_build/mikasa_backend"),
   path.join(releaseVersionDir, "backend"),
+  path.join(projectRoot, "dist/backend_build/mikasa_backend"),
+  path.join(projectRoot, "release", "v8.0.0", "backend"),
 ];
 let backendSourceDir = null;
 for (const cand of backendSrcCandidates) {
@@ -173,7 +187,7 @@ echo   MISA AI ${versionName} - Launching Portable Desktop...
 echo ========================================================
 
 REM 1. Check if backend is already listening on port 18420
-powershell -NoProfile -Command "$conn = Test-NetConnection -ComputerName 127.0.0.1 -Port 18420 -WarningAction SilentlyContinue -InformationLevel Quiet; if (-not $conn) { Write-Host 'Starting Misa Backend Service (127.0.0.1:18420)...' -ForegroundColor Cyan; $bExe = if (Test-Path '.\\\\backend\\\\misa_backend.exe') { '.\\\\backend\\\\misa_backend.exe' } elseif (Test-Path '.\\\\backend\\\\mikasa_backend.exe') { '.\\\\backend\\\\mikasa_backend.exe' } else { $null }; if ($bExe) { Start-Process -FilePath $bExe -WorkingDirectory '.\\\\backend' -WindowStyle Hidden; Start-Sleep -Milliseconds 1500 } else { $workDir = if (Test-Path '.\\\\core\\\\api_server.py') { (Resolve-Path '.').Path } elseif (Test-Path '..\\\\..\\\\core\\\\api_server.py') { (Resolve-Path '..\\\\..').Path } else { (Resolve-Path '.').Path }; $cands = @('.\\\\python\\\\python.exe', '.\\\\runtime\\\\python.exe', (Join-Path $workDir '.venv\\\\Scripts\\\\python.exe'), 'python'); $chosen = 'python'; foreach ($c in $cands) { if ($c -eq 'python') { $chosen = 'python'; break } elseif (Test-Path $c) { $chosen = (Resolve-Path $c).Path; break } } Start-Process -FilePath $chosen -ArgumentList 'core\\\\api_server.py' -WorkingDirectory $workDir -WindowStyle Hidden; Start-Sleep -Seconds 2 } }"
+powershell -NoProfile -Command "$conn = Test-NetConnection -ComputerName 127.0.0.1 -Port 18420 -WarningAction SilentlyContinue -InformationLevel Quiet; if (-not $conn) { Write-Host 'Starting Misa Backend Service (127.0.0.1:18420)...' -ForegroundColor Cyan; $bExe = if (Test-Path '.\\\\backend\\\\misa_backend.exe') { '.\\\\backend\\\\misa_backend.exe' } elseif (Test-Path '.\\\\backend\\\\mikasa_backend.exe') { '.\\\\backend\\\\mikasa_backend.exe' } else { $null }; if ($bExe) { Start-Process -FilePath $bExe -WorkingDirectory '.\\\\backend' -WindowStyle Hidden; Start-Sleep -Milliseconds 1500 } else { $workDir = if (Test-Path '.\\\\core\\\\api_server.py') { (Resolve-Path '.').Path } elseif (Test-Path '..\\\\..\\\\core\\\\api_server.py') { (Resolve-Path '..\\\\..').Path } else { (Resolve-Path '.').Path }; $cands = @('.\\\\python\\\\python.exe', '.\\\\runtime\\\\python.exe', (Join-Path $workDir '.venv\\\\Scripts\\\\python.exe'), (Join-Path $workDir '..\\\\.venv\\\\Scripts\\\\python.exe'), (Join-Path $workDir '..\\\\..\\\\.venv\\\\Scripts\\\\python.exe'), 'python'); $chosen = 'python'; foreach ($c in $cands) { if ($c -eq 'python') { $chosen = 'python'; break } elseif (Test-Path $c) { $chosen = (Resolve-Path $c).Path; break } } Start-Process -FilePath $chosen -ArgumentList 'core\\\\api_server.py' -WorkingDirectory $workDir -WindowStyle Hidden; Start-Sleep -Seconds 2 } }"
 
 REM 2. Start Desktop App
 start "" "Misa-AI-${versionName}.exe"
@@ -219,11 +233,8 @@ with zipfile.ZipFile(dst, 'w', zipfile.ZIP_DEFLATED) as zf:
 `;
   const pyScript = path.join(releaseVersionDir, "_make_zip.py");
   fs.writeFileSync(pyScript, pyCode, "utf-8");
-  const pyExe = fs.existsSync("d:\\\\Ishchi stoli\\\\Misa\\\\.venv\\\\Scripts\\\\python.exe")
-    ? '"d:\\\\Ishchi stoli\\\\Misa\\\\.venv\\\\Scripts\\\\python.exe"'
-    : fs.existsSync("d:\\\\Ishchi stoli\\\\Mikasa\\\\.venv\\\\Scripts\\\\python.exe")
-    ? '"d:\\\\Ishchi stoli\\\\Mikasa\\\\.venv\\\\Scripts\\\\python.exe"'
-    : "python";
+  const venvPy = path.join(projectRoot, ".venv", "Scripts", "python.exe");
+  const pyExe = fs.existsSync(venvPy) ? `"${venvPy}"` : "python";
   const { execSync } = require("child_process");
   execSync(`${pyExe} "${pyScript}" "${tempZipStaging}" "${zipTarget}"`, { stdio: "inherit" });
   if (fs.existsSync(pyScript)) fs.unlinkSync(pyScript);

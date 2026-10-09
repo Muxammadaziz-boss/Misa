@@ -2,6 +2,18 @@
 
 Barcha o'zgarishlar va relizlar Semantic Versioning (SemVer) qoidalariga muvofiq yuritiladi.
 
+## [9.0.1] — 2026-10-05 (Security Hardening, AI Models & Desktop Launcher Fixes)
+
+- **Ovozli Muloqot va Ijro Sinxronizatsiyasi (Voice & TTS Fix)**: Ovoz tugmasi bosilganda 1 soniyadan so'ng o'chib qolish muammosi tuzatildi (`continuous = true`, sukut taymeri va suhbat to'liq yakunlanishini kutish). Edge-TTS audio oqimi va brauzer sintezi Misa yuzi/orb holati bilan to'liq sinxronlashtirildi (gapirayotganda `speaking` holatida bo'lishi ta'minlandi).
+- **"Misa ..." Chaqiruv Mexanizmi (Wake-Word / Hotword)**: Foydalanuvchi "Misa ...", "Salom Misa", "Hey Misa" deb murojaat qilganda yordamchi darhol javob berib, buyruqni qabul qiladi. Faqat nomi chaqirilganda esa *"Labbay Ustoz! Sizni tinglayapman, marhamat buyuring."* deb ovozli javob qaytaradi.
+- **Ilova Ochilganda Tizim Holati Xabarnomasi (Startup Briefing)**: Misa ochilganda avtomatik ravishda server ulanishi, Gemini AI kaliti holati va barcha tizim modullari diagnostikasini o'tkazadi hamda ovozli va vizual tarzda foydalanuvchiga to'liq hisobot beradi.
+- **Xavfsizlikni kuchaytirish (Security Hardening)**: `.env` faylidagi maxfiy kalitlar tozalab olindi. `core/sandbox.py` da AST-darajasidagi chuqur tekshiruv (forbidden modules, builtins, dunder introspection taqiqlari) o'rnatildi.
+- **Xavfsiz Shell ijrosi**: `core/command_dispatcher.py` dagi `os.system` chaqiruvlari Windows `os.startfile` va `subprocess.Popen(..., shell=False)` ga o'tkazildi. `core/agent_tools.py` da PowerShell bildirishnomasi base64 orqali inyeksiyalardan to'liq himoyalandi.
+- **AI Modellari va Kechikishni tuzatish**: `gemini_provider.py` va `ai_engine.py` dagi soxta modellar olib tashlanib, amaldagi rasmiy `gemini-2.0-flash`, `gemini-2.0-flash-lite`, `gemini-1.5-flash` modellari o'rnatildi (har bir so'rovdagi 1-3 soniyalik 404 kechikish bartaraf etildi).
+- **Desktop Launcher & Portativlik**: `run_desktop.bat` va `run_desktop.ps1` skriptlari 18420-portdagi Python backendni avtomatik tekshirib, ishga tushiradigan qilindi. Rust `lib.rs` dagi qattiq kodlangan yo'llar dinamik nisbiy qidiruvga almashtirildi.
+- **Frontend Code Splitting**: `Misa/src/App.tsx` barcha 12 ta sahifasi `React.lazy()` va `<Suspense>` ga o'tkazilib, boshlang'ich yuklanish hajmi 70 KB gacha qisqartirildi.
+- **Python 3.13+ mosligi**: `requirements.txt` ga `audioop-lts` qo'shildi va keraksiz 2.5 GB `torch` kutubxonalari majburiy ro'yxatdan chiqarildi.
+
 ---
 
 ## [9.0.0] — 2026-09-29 (Misa AI Rebranding & Level 9 Foundation)

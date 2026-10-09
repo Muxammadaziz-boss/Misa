@@ -22,11 +22,13 @@ class CompatibilityAdapter:
         """
         Frontend REST API (/api/chat) va WebSocket uchun to'liq mos keluvchi javob
         """
+        from core.intelligence.text_cleaner import extract_clean_response_text
+        clean_content = extract_clean_response_text(intel_resp.content)
         is_ok = intel_resp.verified if intel_resp.type != "error" else False
         
         return {
             "ok": is_ok,
-            "response": intel_resp.content,
+            "response": clean_content,
             "type": intel_resp.type,
             "intent": intel_resp.intent,
             "params": intel_resp.params or {},
@@ -36,7 +38,7 @@ class CompatibilityAdapter:
             "provider": intel_resp.provider,
             "model": intel_resp.model,
             "timestamp": datetime.datetime.now().isoformat(),
-            "error": intel_resp.content if not is_ok else None,
+            "error": clean_content if not is_ok else None,
         }
 
     @staticmethod
@@ -51,26 +53,29 @@ class CompatibilityAdapter:
         if not intel_resp:
             return None
 
+        from core.intelligence.text_cleaner import extract_clean_response_text
+        clean_content = extract_clean_response_text(intel_resp.content)
+
         if intel_resp.type == "command":
             return {
                 "type": "command",
                 "intent": intel_resp.intent,
                 "params": intel_resp.params or {},
-                "response": intel_resp.content,
+                "response": clean_content,
             }
         elif intel_resp.type == "confirmation":
             return {
                 "type": "confirmation",
                 "intent": intel_resp.intent,
-                "question": intel_resp.content,
-                "response": intel_resp.content,
+                "question": clean_content,
+                "response": clean_content,
                 "params": intel_resp.params or {},
             }
         elif intel_resp.type == "clarification":
             return {
                 "type": "clarification",
-                "question": intel_resp.content,
-                "response": intel_resp.content,
+                "question": clean_content,
+                "response": clean_content,
                 "params": intel_resp.params or {},
             }
         elif intel_resp.type == "tool":
@@ -78,16 +83,16 @@ class CompatibilityAdapter:
                 "type": "command",
                 "intent": intel_resp.tool_executed or intel_resp.intent,
                 "params": intel_resp.params or {},
-                "response": intel_resp.content,
+                "response": clean_content,
             }
         elif intel_resp.type == "error":
             return {
                 "type": "answer",
-                "response": intel_resp.content,
+                "response": clean_content,
                 "error": True,
             }
         else:
             return {
                 "type": "answer",
-                "response": intel_resp.content,
+                "response": clean_content,
             }

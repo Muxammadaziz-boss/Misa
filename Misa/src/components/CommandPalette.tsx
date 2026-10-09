@@ -6,7 +6,6 @@ import {
   SearchIcon,
   HomeIcon,
   ChatIcon,
-  MicIcon,
   CommandsIcon,
   DatabaseIcon,
   SchedulerIcon,
@@ -181,17 +180,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         icon: <TelegramIcon size={15} />,
         action: () => {
           onNavigate("/telegram");
-          onClose();
-        },
-      },
-      {
-        id: "nav_voice",
-        title: "Ovozli Muloqot Rejimi",
-        subtitle: "To'liq ekranli jonli ovozli yordamchi",
-        category: "Navigatsiya",
-        icon: <MicIcon size={15} />,
-        action: () => {
-          onNavigate("/voice");
           onClose();
         },
       },

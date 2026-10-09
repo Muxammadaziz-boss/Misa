@@ -3,6 +3,7 @@
 # Provider Abstraction & Deterministic Fallback Mechanism
 
 import abc
+import re
 import logging
 from typing import List, Optional, Dict, Any
 from core.intelligence.types import AIRequest, AIResponse
@@ -33,12 +34,28 @@ class AIProvider(abc.ABC):
 class ProviderManager:
     """AI provayderlarini boshqarish va deterministik fallback mexanizmi"""
 
-    def __init__(self, providers: Optional[List[AIProvider]] = None):
-        self._providers: List[AIProvider] = providers or []
+    def __init__(self, providers: Optional[List[AIProvider]] = None, router=None):
+        self._custom_providers = providers is not None
+        self._router = router
+        if providers is not None:
+            self._providers: List[AIProvider] = list(providers)
+        else:
+            try:
+                from core.providers import get_provider_system
+                ps = get_provider_system()
+                self._providers = list(ps._providers.values())
+                self._router = ps.router
+            except Exception:
+                self._providers = []
 
     def register_provider(self, provider: AIProvider):
         """Yangi provayder ro'yxatdan o'tkazish"""
         self._providers.append(provider)
+        if self._router and hasattr(self._router, "register_provider") and hasattr(provider, "name"):
+            try:
+                self._router.register_provider(provider)
+            except Exception:
+                pass
 
     def get_available_providers(self) -> List[str]:
         """Faol va kalitlari sozlangan provayderlar ro'yxati"""
@@ -50,22 +67,35 @@ class ProviderManager:
 
     def generate_with_fallback(self, request: AIRequest) -> AIResponse:
         """
-        Deterministik zanjir orqali javob olish:
-        Provayder 1 (Gemini) -> xatolik? -> Provayder 2 (OpenRouter) -> xatolik? -> AI_PROVIDER_UNAVAILABLE
+        Deterministik zanjir yoki Intellektual Router orqali javob olish:
+        Groq -> Cerebras -> Gemini -> OpenRouter -> NVIDIA NIM -> Offline Assistant
         """
+        if self._router and not self._custom_providers and self.is_any_available():
+            try:
+                routed_resp = self._router.route_and_generate(request)
+                if routed_resp and routed_resp.success:
+                    return routed_resp
+            except Exception as e:
+                logger.warning(f"[ProviderManager] Router orqali chaqirishda xatolik: {e}, an'anaviy oqimga o'tilmoqda...")
+
         available_providers = [p for p in self._providers if p.is_available()]
         
         if not available_providers:
             logger.warning("Hech qanday AI provayder sozlanmagan (API kalitlar mavjud emas). Mahalliy offline rejim ishga tushadi.")
             query_str = getattr(request, "message", None) or getattr(request, "query", "") or ""
             query_lower = str(query_str).lower().strip()
+            query_words = set(re.findall(r"\b\w+\b", query_lower))
+            req_user = getattr(request, "user_name", None) or getattr(request, "user", None) or (request.metadata.get("user_name") if hasattr(request, "metadata") and isinstance(request.metadata, dict) else None) or "Foydalanuvchi"
 
-            if any(w in query_lower for w in ["salom", "qodir", "nima", "qila ol", "kim", "yordam", "imkon"]):
+            # 1. Foydalanuvchi o'zi haqida so'raganda
+            if any(p in query_lower for p in ["men kimman", "men kimmam", "men kim", "ismim nima", "mening ismim", "otim nima", "men haqimda"]):
+                resp_text = f"Siz — **{req_user}**siz. Misa AI tizimida shaxsiy profilingiz faol holatda."
+            elif any(p in query_lower for p in ["sen kimsan", "misa kimsan", "o'zing haqingda", "nimalar qila olasan", "imkoniyating"]) or any(w in query_words for w in ["salom", "assalom", "assalomu"]):
                 resp_text = (
                     "Assalomu alaykum! Men Misa — sizning shaxsiy sun'iy intellekt yordamchingizman.\n\n"
-                    "Men quyidagi asosiy vazifalarni bajara olaman:\n"
+                    "Men quyidagi asosiy vazifalarni mustaqil bajara olaman:\n"
                     "• 💻 Kompyuterni boshqarish (dasturlarni ochish, oynalar va skrinshot)\n"
-                    "• 📊 Tizim holati (CPU, RAM va real vaqtdagi harorat monitoringi)\n"
+                    "• 📊 Tizim holati (CPU, RAM va real vaqtdagi parametrlar)\n"
                     "• ⏰ Vazifalar va eslatmalarni rejalashtirish\n"
                     "• 🎵 Musiqa va videolarni boshqarish\n\n"
                     "💡 Kengaytirilgan chuqur muloqot va erkin suhbat uchun Sozlamalar bo'limidan Google Gemini API kalitini kiritishingiz mumkin."
@@ -107,9 +137,32 @@ class ProviderManager:
         
         query_str = getattr(request, "message", None) or getattr(request, "query", "") or ""
         query_lower = str(query_str).lower().strip()
-        is_quota = "429" in str(last_error) or "quota" in str(last_error).lower() or "resource_exhausted" in str(last_error).lower()
+        query_words = set(re.findall(r"\b\w+\b", query_lower))
+        req_user = getattr(request, "user_name", None) or getattr(request, "user", None) or "Foydalanuvchi"
 
-        if any(w in query_lower for w in ["salom", "qodir", "nima", "qila ol", "kim", "yordam", "imkon", "assalom", "qale"]):
+        is_quota = "429" in str(last_error) or "quota" in str(last_error).lower() or "resource_exhausted" in str(last_error).lower()
+        is_auth_error = any(k in str(last_error).lower() for k in ["403", "permission_denied", "leaked", "unregistered_callers", "api_key_invalid"])
+
+        # 1. Foydalanuvchi o'zi haqida so'raganda
+        if any(p in query_lower for p in ["men kimman", "men kimmam", "men kim", "ismim nima", "mening ismim", "otim nima", "men haqimda"]):
+            fallback_text = f"Siz — **{req_user}**siz. Misa AI tizimida shaxsiy profilingiz faol holatda."
+        elif is_auth_error:
+            fallback_text = (
+                "⚠️ **Google Gemini API kaliti xatoligi (403 Permission Denied / Leaked Key)**\n\n"
+                "Tizimga ulangan API kaliti Google xavfsizlik filtri tomonidan bekor qilingan (ochiq tarmoqqa sizib chiqqan deb topilgan).\n\n"
+                "**Yechim:**\n"
+                "1. [Google AI Studio](https://aistudio.google.com/app/apikey) sahifasidan bepul yangi shaxsiy API kalit oling.\n"
+                "2. Yuqori o'ng burchakdagi **Profil / Hisob sozlamalari** bo'limiga kirib, yangi kalitni kiriting.\n\n"
+                "💻 Hozirda barcha mahalliy kompyuter buyruqlari, dasturlarni ochish va tizim ma'lumotlari to'liq ishlamoqda!"
+            )
+        elif is_quota:
+            fallback_text = (
+                "⚠️ Sun'iy intellekt (Gemini) so'rovlar limiti vaqtincha to'ldi (429 Quota Exceeded).\n\n"
+                "Tizim avtomatik zaxira kalitlarga o'tmoqda yoki administrator yangi kalit yuklashini kutishingiz mumkin. "
+                "Shuningdek, o'zingizning shaxsiy Google Gemini API kalitingizni Hisob bo'limiga kiritishingiz mumkin.\n\n"
+                "Men kompyuteringizdagi barcha mahalliy buyruqlarni bajarishga tayyorman!"
+            )
+        elif any(p in query_lower for p in ["sen kimsan", "misa kimsan", "o'zing haqingda", "nimalar qila olasan", "imkoniyat"]) or any(w in query_words for w in ["salom", "assalom", "assalomu"]):
             fallback_text = (
                 "Assalomu alaykum! Men Misa — sizning shaxsiy sun'iy intellekt yordamchingizman.\n\n"
                 "Men quyidagi vazifalarni mustaqil bajara olaman:\n"
@@ -119,13 +172,6 @@ class ProviderManager:
                 "• 📱 Telegram bot orqali masofaviy boshqaruv\n\n"
                 "💡 Kengaytirilgan tahlil va suhbatlar uchun Hisob sozlamalaridan Gemini API kalitini kiritishingiz mumkin."
             )
-        elif is_quota:
-            fallback_text = (
-                "⚠️ Sun'iy intellekt (Gemini) so'rovlar limiti vaqtincha to'ldi (429 Quota Exceeded).\n\n"
-                "Tizim avtomatik zaxira kalitlarga o'tmoqda yoki administrator yangi kalit yuklashini kutishingiz mumkin. "
-                "Shuningdek, o'zingizning shaxsiy Google Gemini API kalitingizni Hisob bo'limiga kiritishingiz mumkin.\n\n"
-                "Men kompyuteringizdagi barcha mahalliy buyruqlarni bajarishga tayyorman!"
-            )
         else:
             fallback_text = (
                 "Tashqi AI serveri bilan vaqtinchalik aloqa uzildi. "
@@ -133,11 +179,12 @@ class ProviderManager:
             )
 
         return AIResponse(
-            provider="local",
-            model="misa-offline-core",
-            type="answer",
-            content=fallback_text,
-            success=True,
-            metadata={"last_error": last_error, "offline_fallback": True}
+            provider="none",
+            model="none",
+            type="error",
+            content=fallback_text if (is_auth_error or is_quota) else "Barcha AI provayderlar bilan bog'lanishda vaqtinchalik xatolik yuz berdi. Iltimos, keyinroq qayta urinib ko'ring.",
+            success=False,
+            error_code="AI_PROVIDER_UNAVAILABLE",
+            metadata={"last_error": last_error, "offline_fallback": True, "fallback_content": fallback_text}
         )
 

@@ -39,11 +39,16 @@ class AIKeyManager:
             "gemini": [],
             "openrouter": [],
             "groq": [],
+            "cerebras": [],
+            "nvidia": [],
         }
         self._user_keys: Dict[str, Dict[str, str]] = {}  # user_id -> {provider: key}
         self._active_models: Dict[str, str] = {
-            "gemini": "gemini-3.1-flash-lite",
-            "openrouter": "google/gemini-2.0-flash-exp:free",
+            "gemini": "gemini-2.0-flash",
+            "groq": "llama-3.3-70b-versatile",
+            "cerebras": "llama-3.3-70b",
+            "openrouter": "meta-llama/llama-3.3-70b-instruct:free",
+            "nvidia": "meta/llama-3.3-70b-instruct",
         }
         self._key_cooldowns: Dict[str, float] = {}  # key -> cooldown_until_timestamp
         self._last_sync_time: float = 0
@@ -61,7 +66,7 @@ class AIKeyManager:
             if CACHE_FILE.exists():
                 with open(CACHE_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    for prov in ("gemini", "openrouter", "groq"):
+                    for prov in ("gemini", "openrouter", "groq", "cerebras", "nvidia"):
                         keys = data.get(prov, [])
                         if isinstance(keys, list):
                             self._system_keys[prov] = [str(k).strip() for k in keys if k and str(k).strip()]
@@ -80,6 +85,8 @@ class AIKeyManager:
                 "gemini": self._system_keys.get("gemini", []),
                 "openrouter": self._system_keys.get("openrouter", []),
                 "groq": self._system_keys.get("groq", []),
+                "cerebras": self._system_keys.get("cerebras", []),
+                "nvidia": self._system_keys.get("nvidia", []),
                 "active_models": self._active_models,
                 "updated_at": time.time(),
             }
@@ -123,82 +130,102 @@ class AIKeyManager:
         self._key_cooldowns[key] = time.time() + cooldown_seconds
         logger.warning(f"AI kaliti vaqtinchalik sovutishga olindi: {key[:8]}... ({cooldown_seconds}s)")
 
-    def get_active_gemini_key(self, user_id: Optional[str] = None) -> str:
-        """Deterministik ustuvorlik tartibida faol Gemini API kalitini olish:
-        1. Joriy foydalanuvchining shaxsiy kaliti (user_id bo'yicha)
-        2. Supabase bazasi / Cloud dan sinxronlangan tizim kalitlari
-        3. Environment o'zgaruvchilari (GEMINI_API_KEY, GOOGLE_API_KEY)
-        4. data/config.json
+    def get_active_key(self, provider: str, user_id: Optional[str] = None) -> str:
+        """Istalgan provayder uchun deterministik ustuvorlikda faol API kalitini olish:
+        1. User shaxsiy kaliti
+        2. Tizim kalitlari (cooldown dagi kalitlarni o'tkazib yuborish)
+        3. Environment (MISA_<PROV>_API_KEY, <PROV>_API_KEY)
+        4. Maxsus taxalluslar (masalan GEMINI -> GOOGLE_API_KEY)
+        5. data/config.json
         """
+        p = provider.lower()
         now = time.time()
 
         # 1. User shaxsiy kaliti
         if user_id and user_id in self._user_keys:
-            ukey = self._user_keys[user_id].get("gemini")
+            ukey = self._user_keys[user_id].get(p)
             if ukey and now >= self._key_cooldowns.get(ukey, 0):
                 return ukey
 
-        # 2. Bazadan/keshdan olingan tizim kalitlari (cooldown dagi kalitlarni o'tkazib yuborish)
-        for k in self._system_keys.get("gemini", []):
-            if k and now >= self._key_cooldowns.get(k, 0):
+        # 2. Environment o'zgaruvchilari (MISA_<PROV>_API_KEY doimo ustuvor!)
+        misa_env = os.getenv(f"MISA_{p.upper()}_API_KEY", "").strip()
+        if misa_env and now >= self._key_cooldowns.get(misa_env, 0):
+            return misa_env
+
+        std_env = os.getenv(f"{p.upper()}_API_KEY", "").strip()
+        if std_env and now >= self._key_cooldowns.get(std_env, 0):
+            return std_env
+
+        if p == "gemini":
+            g_env = os.getenv("GOOGLE_API_KEY", "").strip()
+            if g_env and now >= self._key_cooldowns.get(g_env, 0):
+                return g_env
+
+        # 3. Tizim kalitlari (test kalitlari e'tiborsiz qoldiriladi)
+        for k in self._system_keys.get(p, []):
+            if k and "test" not in k.lower() and now >= self._key_cooldowns.get(k, 0):
                 return k
 
-        # 3. Environment o'zgaruvchisi
-        env_key = os.getenv("GEMINI_API_KEY", "").strip() or os.getenv("GOOGLE_API_KEY", "").strip()
-        if env_key and now >= self._key_cooldowns.get(env_key, 0):
-            return env_key
-
-        # 4. data/config.json fallback
+        # 5. data/config.json
         try:
             cfg_path = REPO_ROOT / "data" / "config.json"
             if cfg_path.exists():
                 with open(cfg_path, "r", encoding="utf-8") as f:
                     cfg = json.load(f)
                     ck = (
-                        cfg.get("gemini_api_key")
-                        or cfg.get("google_api_key")
-                        or cfg.get("ai", {}).get("gemini_api_key")
+                        cfg.get(f"{p}_api_key")
+                        or cfg.get("ai", {}).get(f"{p}_api_key")
+                        or cfg.get("providers", {}).get(p, {}).get("api_key")
                     )
+                    if p == "gemini" and not ck:
+                        ck = cfg.get("google_api_key") or cfg.get("ai", {}).get("gemini_api_key")
                     if ck and str(ck).strip() and now >= self._key_cooldowns.get(str(ck).strip(), 0):
                         return str(ck).strip()
         except Exception:
             pass
 
-        # Cooldown da bo'lsa ham oxirgi chora sifatida har qanday mavjud kalitni qaytarish
-        if self._system_keys.get("gemini"):
-            return self._system_keys["gemini"][0]
-        if env_key:
-            return env_key
+        # Cooldown da bo'lsa ham oxirgi chora sifatida ro'yxatdagisini qaytarish
+        if self._system_keys.get(p):
+            return self._system_keys[p][0]
 
-        return ""
+        return misa_env or std_env or ""
+
+    def get_active_gemini_key(self, user_id: Optional[str] = None) -> str:
+        """Deterministik ustuvorlik tartibida faol Gemini API kalitini olish"""
+        return self.get_active_key("gemini", user_id=user_id)
 
     def get_active_openrouter_key(self, user_id: Optional[str] = None) -> str:
         """OpenRouter API kalitini olish"""
-        if user_id and user_id in self._user_keys:
-            ukey = self._user_keys[user_id].get("openrouter")
-            if ukey:
-                return ukey
-        for k in self._system_keys.get("openrouter", []):
-            if k:
-                return k
-        return os.getenv("OPENROUTER_API_KEY", "").strip()
+        return self.get_active_key("openrouter", user_id=user_id)
+
+    def get_active_groq_key(self, user_id: Optional[str] = None) -> str:
+        """Groq API kalitini olish"""
+        return self.get_active_key("groq", user_id=user_id)
+
+    def get_active_cerebras_key(self, user_id: Optional[str] = None) -> str:
+        """Cerebras API kalitini olish"""
+        return self.get_active_key("cerebras", user_id=user_id)
+
+    def get_active_nvidia_key(self, user_id: Optional[str] = None) -> str:
+        """NVIDIA NIM API kalitini olish"""
+        return self.get_active_key("nvidia", user_id=user_id)
 
     def sync_from_user_session(self, user_id: str, metadata: Dict[str, Any]):
         """Foydalanuvchi akkaunti bilan tizimga kirganda ma'lumotlarni avtomatik sinxronlash"""
         if not metadata:
             return
         # Foydalanuvchi metadata ichida kalit bormi?
-        g_key = (
-            metadata.get("gemini_api_key")
-            or metadata.get("google_api_key")
-            or metadata.get("ai_key")
-            or metadata.get("custom_gemini_key")
-        )
-        if g_key and str(g_key).strip():
-            self.set_user_key(user_id, "gemini", str(g_key).strip())
-            logger.info(f"Foydalanuvchi {user_id} uchun shaxsiy Gemini kaliti yuklandi.")
+        for prov in ("gemini", "groq", "cerebras", "openrouter", "nvidia"):
+            k = (
+                metadata.get(f"{prov}_api_key")
+                or metadata.get(f"custom_{prov}_key")
+            )
+            if prov == "gemini" and not k:
+                k = metadata.get("google_api_key") or metadata.get("ai_key")
+            if k and str(k).strip():
+                self.set_user_key(user_id, prov, str(k).strip())
+                logger.info(f"Foydalanuvchi {user_id} uchun shaxsiy {prov} kaliti yuklandi.")
 
-        # Agar foydalanuvchida maxsus model sozlangan bo'lsa
         custom_model = metadata.get("preferred_model") or metadata.get("ai_model")
         if custom_model:
             self._active_models["gemini"] = str(custom_model).strip()
@@ -236,7 +263,6 @@ class AIKeyManager:
                     "apikey": anon_key,
                     "Authorization": f"Bearer {auth_token or anon_key}"
                 }
-                # profiles yoki system_config jadvalini tekshirish
                 resp = requests.get(f"{supa_url}/rest/v1/system_ai_keys?is_active=eq.true&select=*&order=priority.asc", headers=supa_headers, timeout=4)
                 if resp.status_code == 200:
                     records = resp.json()
@@ -260,7 +286,7 @@ class AIKeyManager:
 
     def get_preferred_model(self, provider: str = "gemini") -> str:
         """Joriy afzal ko'rilgan AI modelini olish"""
-        return self._active_models.get(provider.lower(), "gemini-3.1-flash-lite")
+        return self._active_models.get(provider.lower(), "gemini-2.0-flash")
 
     def get_status_summary(self) -> Dict[str, Any]:
         """Tizim va UI uchun kalitlar holatini xavfsiz qaytarish (kalitlar maskalangan)"""
@@ -268,14 +294,33 @@ class AIKeyManager:
         has_gemini = bool(active_gemini)
         masked_gemini = (active_gemini[:8] + "..." + active_gemini[-4:]) if has_gemini and len(active_gemini) > 12 else ""
 
+        providers_status = {}
+        for prov in ("gemini", "groq", "cerebras", "openrouter", "nvidia"):
+            k = self.get_active_key(prov)
+            has_k = bool(k)
+            masked_k = (k[:4] + "..." + k[-4:]) if has_k and len(k) > 8 else ""
+            providers_status[prov] = {
+                "configured": has_k,
+                "masked_key": masked_k,
+                "preferred_model": self.get_preferred_model(prov),
+                "system_keys_count": len(self._system_keys.get(prov, [])),
+            }
+
+        any_configured = any(p["configured"] for p in providers_status.values())
+
         return {
             "gemini_configured": has_gemini,
+            "groq_configured": bool(self.get_active_groq_key()),
+            "cerebras_configured": bool(self.get_active_cerebras_key()),
+            "openrouter_configured": bool(self.get_active_openrouter_key()),
+            "nvidia_configured": bool(self.get_active_nvidia_key()),
             "masked_key": masked_gemini,
             "system_keys_count": len(self._system_keys.get("gemini", [])),
             "preferred_model": self.get_preferred_model("gemini"),
             "supported_models": DEFAULT_GEMINI_MODELS,
             "last_sync": self._last_sync_time,
-            "status": "ready" if has_gemini else "missing_key",
+            "status": "ready" if any_configured else "missing_key",
+            "providers": providers_status,
         }
 
 

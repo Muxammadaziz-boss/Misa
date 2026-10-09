@@ -21,7 +21,7 @@ class Config:
 
         # Standart konfiguratsiya
         self.default_config = {
-            "app": {"version": "9.0.0", "name": "Misa AI", "debug": False},
+            "app": {"version": "9.0.1", "name": "Misa AI", "debug": False},
             "audio": {
                 "sample_rate": 16000,
                 "duration": 5,

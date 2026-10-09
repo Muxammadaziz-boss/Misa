@@ -1,0 +1,27 @@
+{
+  "user": {
+    "voice_type": "fish_yigit",
+    "name": "Mxamadaliyev Muxammadaziz (Dr4x1l)",
+    "email": "anosvoldigort47@gmail.com",
+    "avatar": "violet",
+    "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLWWvX8lXKW_UVdUl2eM4Uq14wDkBM29TQ3m4pMH9f3SyfLrDZ2=s96-c",
+    "role": "Dasturchi / Foydalanuvchi",
+    "phone": "+998 90 123 45 67",
+    "bio": "Misa AI shaxsiy sun'iy intellekt yordamchisi"
+  },
+  "audio": {
+    "tts_speed": 1.5,
+    "auto_speak": true,
+    "vad_enabled": true
+  },
+  "voice": {
+    "speed": 1.5
+  },
+  "gui": {},
+  "ai": {
+    "model": "gemini",
+    "thinking_enabled": true
+  },
+  "notifications": {},
+  "privacy": {}
+}
