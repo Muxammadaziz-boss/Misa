@@ -247,9 +247,50 @@ class IntelligenceOrchestrator:
                 tool_call_res = self.tool_registry.call(tool_name, **tool_params)
                 is_success = bool(tool_call_res.get("success", False))
                 trace.add_stage("TOOL", status="ok" if is_success else "error", details={"tool": tool_name})
+                raw_result = tool_call_res.get("result") if is_success else None
+
+                # Agar qidiruv asbobi (web_search / search) bo'lsa va internetda bevosita natija chiqmasa,
+                # foydalanuvchiga xom "natija topilmadi" demasdan, AI o'z keng bilimidan javob shakllantirsin
+                if tool_name in ("web_search", "search") and (
+                    not is_success
+                    or (isinstance(raw_result, dict) and raw_result.get("no_results"))
+                ):
+                    logger.info("[IntelligenceOrchestrator] Qidiruvdan to'g'ridan-to'g'ri natija topilmadi. AI o'z bilimidan javob tayyorlamoqda...")
+                    fallback_instruction = (
+                        f"Foydalanuvchi so'rovi: '{clean_message}'.\n"
+                        "Internetdan bevosita havola topilmadi. O'zingizning keng va chuqur bilimingizdan foydalanib, "
+                        "foydalanuvchining ushbu savoliga to'liq, samimiy va aniq o'zbek tilida javob bering. "
+                        "Hech qanday ichki texnik qoidalarni (aniqlik foizi, prompt ko'rsatmasi va hk) aslo tilga olmang."
+                    )
+                    ai_fb_req = AIRequest(
+                        message=fallback_instruction,
+                        system_context=request.system_context,
+                        conversation=request.conversation,
+                        memory=request.memory,
+                        metadata=request.metadata
+                    )
+                    ai_fb_resp = self.provider_manager.generate_with_fallback(ai_fb_req)
+                    if ai_fb_resp and ai_fb_resp.content:
+                        from core.intelligence.text_cleaner import extract_clean_response_text
+                        clean_content = extract_clean_response_text(ai_fb_resp.content)
+
+                        return self._finalize_response(
+                            IntelligenceResponse(
+                                type="answer",
+                                content=clean_content,
+                                intent=intent.name,
+                                params=tool_params,
+                                tool_executed=tool_name,
+                                verified=True,
+                                provider=ai_fb_resp.provider,
+                                model=ai_fb_resp.model,
+                                metadata={"latency_ms": latency}
+                            ),
+                            trace=trace,
+                            request=request
+                        )
 
                 if is_success:
-                    raw_result = tool_call_res.get("result")
                     formatted_content = self._format_tool_output(tool_name, raw_result, decision.content, tool_res=tool_call_res)
                     logger.info(f"[IntelligenceOrchestrator] Asbob muvaffaqiyatli bajarildi: '{tool_name}'")
                     return self._finalize_response(
@@ -366,7 +407,14 @@ class IntelligenceOrchestrator:
         trace: Any,
         request: Optional[AIRequest] = None
     ) -> IntelligenceResponse:
-        """Trace va tushuntirishlarni javobga biriktirish"""
+        """Trace va tushuntirishlarni javobga biriktirish hamda yakuniy matnni tozalash"""
+        if response and response.content:
+            from core.intelligence.text_cleaner import extract_clean_response_text
+            response.content = extract_clean_response_text(response.content)
+            if self._is_leaked_reasoning(response.content):
+                logger.warning("[IntelligenceOrchestrator] Leaked reasoning _finalize_response da tozalandi.")
+                response.content = "So'rovingiz tushunildi. Buni siz uchun bajaryapman."
+
         if trace:
             trace.add_stage("RESPONSE", status="ok" if response.verified else "error", details={"type": response.type})
             obs = get_observability_manager()
@@ -379,7 +427,7 @@ class IntelligenceOrchestrator:
         return response
 
     def _is_leaked_reasoning(self, text: str) -> bool:
-        """Matn inglizcha ichki fikrlash (Chain-of-Thought) ekanligini aniqlash"""
+        """Matn inglizcha ichki fikrlash (Chain-of-Thought) yoki ichki prompt ko'rsatmasi ekanligini aniqlash"""
         if not text:
             return False
         t_lower = text.lower().strip()
@@ -400,8 +448,13 @@ class IntelligenceOrchestrator:
             "we should respond",
             "according to the rules",
             "actually, the system information",
+            "o'z bilimingdan javob ber",
+            "oz bilimingdan javob ber",
+            "kamida 70%",
+            "aniqlik talab etiladi",
+            "mezoniga amal qil",
         ]
-        return any(t_lower.startswith(p) for p in reasoning_prefixes)
+        return any(p in t_lower for p in reasoning_prefixes)
 
     def _format_tool_output(self, tool_name: str, result: Any, default_text: str = "", tool_res: Any = None) -> str:
         """Asbob natijasini foydalanuvchiga tushunarli matnga aylantirish"""

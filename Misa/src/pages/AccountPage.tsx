@@ -3,7 +3,7 @@
 // Refined Ultra Glass Edition: Toza 4-tabli arxitektura, jonli Ovoz/AI selektori,
 // Google Avatar integratsiyasi va to'liq ma'lumotlar sinxronizatsiyasi.
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Avatar } from "../components/Avatar";
 import {
   UserIcon,
@@ -19,6 +19,9 @@ import {
   TelegramIcon,
   LaptopIcon,
   RefreshIcon,
+  PlayIcon,
+  PauseIcon,
+  StopIcon,
 } from "../components/icons/Icons";
 import {
   backendService,
@@ -27,6 +30,7 @@ import {
   UserDevice,
   AudioInputDevice,
   MicrophoneTestResult,
+  normalizeApiError,
 } from "../services/backendService";
 import { UpdateCheckResponse } from "../services/updateService";
 import { supabase } from "../services/supabaseClient";
@@ -130,14 +134,23 @@ export const AccountPage: React.FC<AccountPageProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<ProfileTab>("profile");
 
-  // 1. Shaxsiy Ma'lumotlar Holati
-  const [fullName, setFullName] = useState<string>(
-    () =>
-      currentUser?.username ||
-      currentUser?.email?.split("@")[0] ||
-      localStorage.getItem("misa_user_name") ||
-      "Foydalanuvchi"
-  );
+  // 1. Shaxsiy Ma'lumotlar Holati (Ism, Familiya, Email, Telefon, Bio)
+  const [firstName, setFirstName] = useState<string>(() => {
+    const storedFirst = localStorage.getItem("misa_user_first_name");
+    if (storedFirst) return storedFirst;
+    const full = currentUser?.username || localStorage.getItem("misa_user_name") || "";
+    return full.split(" ")[0] || "";
+  });
+  const [lastName, setLastName] = useState<string>(() => {
+    const storedLast = localStorage.getItem("misa_user_last_name");
+    if (storedLast) return storedLast;
+    const full = currentUser?.username || localStorage.getItem("misa_user_name") || "";
+    const parts = full.split(" ");
+    return parts.length > 1 ? parts.slice(1).join(" ") : "";
+  });
+
+  const fullName = `${firstName} ${lastName}`.trim() || currentUser?.username || "Foydalanuvchi";
+
   const [email, setEmail] = useState<string>(
     () => currentUser?.email || localStorage.getItem("misa_user_email") || ""
   );
@@ -145,12 +158,10 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     () => localStorage.getItem("misa_user_phone") || ""
   );
   const [roleTitle, setRoleTitle] = useState<string>(
-    () => localStorage.getItem("misa_user_role") || "Dasturchi / Foydalanuvchi"
+    () => localStorage.getItem("misa_user_role") || ""
   );
   const [bio, setBio] = useState<string>(
-    () =>
-      localStorage.getItem("misa_user_bio") ||
-      "Misa AI yordamida kundalik vazifalar va loyihalarni avtomatlashtiraman."
+    () => localStorage.getItem("misa_user_bio") || ""
   );
   const [avatarStyle, setAvatarStyle] = useState<string>(
     () => localStorage.getItem("misa_user_avatar") || "violet"
@@ -160,7 +171,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   );
 
   // 2. Ovoz va AI Holati
-  // 2.1 Mikrofon Holati (Audio Input Device)
+  // 2.1 Mikrofon Holati (Audio Input Device & Real-time Monitor)
   const [audioDevices, setAudioDevices] = useState<AudioInputDevice[]>([]);
   const [selectedMicId, setSelectedMicId] = useState<string>("default");
   const [selectedMicName, setSelectedMicName] = useState<string>("Tizim standarti");
@@ -170,6 +181,23 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   const [micRefreshing, setMicRefreshing] = useState<boolean>(false);
   const [micTestLevel, setMicTestLevel] = useState<number>(0);
   const [micTestResult, setMicTestResult] = useState<MicrophoneTestResult | null>(null);
+
+  // Real-time apparat audio monitor holati
+  const [micMonitorActive, setMicMonitorActive] = useState<boolean>(false);
+  const [micLoopbackEnabled, setMicLoopbackEnabled] = useState<boolean>(false);
+  const [micMonitorRms, setMicMonitorRms] = useState<number>(0);
+  const [micMonitorPeak, setMicMonitorPeak] = useState<number>(0);
+  const [micMonitorError, setMicMonitorError] = useState<string | null>(null);
+
+  // 2.2 Jonli AI ovoz sinovi (Real TTS Audio Player)
+  const [previewVoiceId, setPreviewVoiceId] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState<boolean>(false);
+  const [previewPlaying, setPreviewPlaying] = useState<boolean>(false);
+  const [previewCurrentTime, setPreviewCurrentTime] = useState<number>(0);
+  const [previewDuration, setPreviewDuration] = useState<number>(0);
+  const [previewVolume, setPreviewVolume] = useState<number>(1.0);
+  const [previewFallbackNotice, setPreviewFallbackNotice] = useState<string | null>(null);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const [voiceType, setVoiceType] = useState<string>("ayol");
   const [fishAudioApiKey, setFishAudioApiKey] = useState<string>("");
@@ -206,7 +234,6 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     nvidia: { configured: false, masked: "" },
   });
   const [testingKey, setTestingKey] = useState<boolean>(false);
-  const [testingVoiceId, setTestingVoiceId] = useState<string | null>(null);
 
   // 3. Tashqi Ko'rinish Holati
   const [themeMode, setThemeMode] = useState<"dark" | "light" | "system">("dark");
@@ -242,12 +269,38 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       setEmail(currentUser.email);
     }
     if (currentUser?.username) {
-      setFullName(currentUser.username);
+      const parts = currentUser.username.trim().split(" ");
+      if (!firstName && parts[0]) setFirstName(parts[0]);
+      if (!lastName && parts.length > 1) setLastName(parts.slice(1).join(" "));
     }
     if (currentUser?.avatar_url) {
       setAvatarUrl(currentUser.avatar_url);
     }
   }, [currentUser]);
+
+  // Real-time audio monitor WebSocket obunachisi
+  useEffect(() => {
+    const unsubscribe = backendService.onMicMonitorLevel((data) => {
+      if (data) {
+        setMicMonitorRms(typeof data.rms === "number" ? data.rms : 0);
+        setMicMonitorPeak(typeof data.peak === "number" ? data.peak : 0);
+        if (data.stopped) {
+          setMicMonitorActive(false);
+        } else if (data.status === "listening" || data.status === "running") {
+          setMicMonitorActive(true);
+        }
+      }
+    });
+
+    return () => {
+      unsubscribe();
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause();
+        previewAudioRef.current = null;
+      }
+      backendService.stopMicrophoneMonitor().catch(() => {});
+    };
+  }, []);
 
   // Initial load
   useEffect(() => {
@@ -268,11 +321,23 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       .getAccount()
       .then((data: any) => {
         if (data.ok) {
-          if (data.name) setFullName(data.name);
+          if (data.first_name) {
+            setFirstName(data.first_name);
+            localStorage.setItem("misa_user_first_name", data.first_name);
+          }
+          if (data.last_name) {
+            setLastName(data.last_name);
+            localStorage.setItem("misa_user_last_name", data.last_name);
+          }
+          if (data.name && !data.first_name) {
+            const parts = data.name.trim().split(" ");
+            setFirstName(parts[0] || "");
+            setLastName(parts.slice(1).join(" ") || "");
+          }
           if (data.email) setEmail(data.email);
           if (data.phone) setPhone(data.phone);
-          if (data.role) setRoleTitle(data.role);
-          if (data.bio) setBio(data.bio);
+          if (data.role !== undefined) setRoleTitle(data.role || "");
+          if (data.bio !== undefined) setBio(data.bio || "");
           if (data.avatar) setAvatarStyle(data.avatar);
           if (data.avatar_url) setAvatarUrl(data.avatar_url);
           if (data.voice_type) setVoiceType(data.voice_type);
@@ -438,7 +503,11 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     if (e) e.preventDefault();
     setSavingProfile(true);
     try {
-      const cleanName = fullName.trim() || currentUser?.username || "Foydalanuvchi";
+      const cleanFirst = firstName.trim();
+      const cleanLast = lastName.trim();
+      const cleanName = `${cleanFirst} ${cleanLast}`.trim() || currentUser?.username || "Foydalanuvchi";
+      localStorage.setItem("misa_user_first_name", cleanFirst);
+      localStorage.setItem("misa_user_last_name", cleanLast);
       localStorage.setItem("misa_user_name", cleanName);
       localStorage.setItem("misa_user_email", email.trim());
       localStorage.setItem("misa_user_phone", phone.trim());
@@ -447,6 +516,8 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       localStorage.setItem("misa_user_avatar", avatarStyle);
 
       await backendService.updateAccount({
+        first_name: cleanFirst,
+        last_name: cleanLast,
         name: cleanName,
         email: email.trim(),
         phone: phone.trim(),
@@ -472,6 +543,16 @@ export const AccountPage: React.FC<AccountPageProps> = ({
           theme: themeMode,
         },
       } as any);
+
+      try {
+        await supabase.auth.updateUser({
+          data: {
+            first_name: cleanFirst,
+            last_name: cleanLast,
+            full_name: cleanName,
+          },
+        });
+      } catch {}
 
       if (fishAudioApiKey.trim()) {
         const masked = fishAudioApiKey.trim().slice(0, 7) + "..." + fishAudioApiKey.trim().slice(-4);
@@ -523,31 +604,150 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     }
   };
 
-  // Ovozni jonli sinab ko'rish (Barcha 6 ta ovoz: Edge-TTS, Fish Audio, RVC)
-  const handleTestVoiceAudio = async (voiceId: string) => {
-    setTestingVoiceId(voiceId);
+  // Jonli apparat audio monitor boshqaruvi
+  const handleToggleMicMonitor = async () => {
+    if (micMonitorActive) {
+      try {
+        await backendService.stopMicrophoneMonitor();
+        setMicMonitorActive(false);
+        setMicMonitorRms(0);
+        setMicMonitorPeak(0);
+        setMicMonitorError(null);
+        showToast("Mikrofon monitori to'xtatildi");
+      } catch (err: any) {
+        showToast(normalizeApiError(err, "Monitorni to'xtatishda xatolik"));
+      }
+    } else {
+      setMicMonitorError(null);
+      try {
+        const res = await backendService.startMicrophoneMonitor(selectedMicId, micLoopbackEnabled);
+        if (res.ok) {
+          setMicMonitorActive(true);
+          showToast(res.message || "Jonli apparat monitori faollashtirildi 🎙");
+        } else {
+          const errMsg = res.error || "Mikrofon monitorini ishga tushirib bo'lmadi";
+          setMicMonitorError(errMsg);
+          showToast(errMsg);
+        }
+      } catch (err: any) {
+        const errMsg = normalizeApiError(err, "Mikrofon monitoriga ulanib bo'lmadi");
+        setMicMonitorError(errMsg);
+        showToast(errMsg);
+      }
+    }
+  };
+
+  const handleToggleLoopback = async () => {
+    const next = !micLoopbackEnabled;
+    setMicLoopbackEnabled(next);
+    if (micMonitorActive) {
+      try {
+        await backendService.startMicrophoneMonitor(selectedMicId, next);
+        showToast(next ? "O'z ovozingizni eshitish yoqildi 🎧" : "O'z ovozingizni eshitish o'chirildi");
+      } catch (err: any) {
+        showToast(normalizeApiError(err, "Loopback holatini o'zgartirishda xatolik"));
+      }
+    }
+  };
+
+  // 6 ta ovoz modeli uchun jonli AI audio sinovi (Real TTS Audio Player)
+  const handlePlayVoicePreview = async (voiceId: string) => {
+    // Agar ayni ovoz ijro etilayotgan bo'lsa - pauza/davom ettirish
+    if (previewVoiceId === voiceId && previewAudioRef.current) {
+      if (previewPlaying) {
+        previewAudioRef.current.pause();
+        setPreviewPlaying(false);
+      } else {
+        previewAudioRef.current
+          .play()
+          .then(() => setPreviewPlaying(true))
+          .catch(() => {});
+      }
+      return;
+    }
+
+    // Mavjud ijroni to'xtatish
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause();
+      previewAudioRef.current = null;
+    }
+
+    setPreviewVoiceId(voiceId);
+    setPreviewLoading(true);
+    setPreviewPlaying(false);
+    setPreviewCurrentTime(0);
+    setPreviewDuration(0);
+    setPreviewFallbackNotice(null);
+
     try {
-      // Ovoz turini o'rnatish
-      setVoiceType(voiceId);
-      await backendService.updateAccount({ voice_type: voiceId, tts_speed: ttsSpeed } as any);
+      const phrase = "Salom. Men Misa, sizning sun’iy intellekt yordamchingizman.";
+      const res = await backendService.previewVoice(voiceId, phrase);
 
-      const samplePhrases: Record<string, string> = {
-        ayol: "Salom! Men Madina, Misa AI ning ovozli yordamchisiman.",
-        erkak: "Assalomu alaykum! Men Sardor, sizning intellektual yordamchingizman.",
-        fish_yigit: "Assalomu alaykum! Ishlar qalay, bugun qanday vazifalarni bajaramiz?",
-        fish_anime: "Salom! Men siz bilan doim birgaman, birgalikda ajoyib natijalarga erishamiz!",
-        ashley: "Salom! Men Ashley, tizim sizning barcha buyruqlaringizga tayyor.",
-        yukari: "Assalomu alaykum! Men Yukari, birgalikda zo'r ishlar qilamiz!",
-      };
+      if (res.ok && res.audio_data) {
+        if (res.is_fallback) {
+          setPreviewFallbackNotice(
+            res.fallback_reason || "Madina (Edge-TTS) zaxira ovozi ishlatildi — Fish Audio / RVC sozlanmagan"
+          );
+        }
 
-      const phrase = samplePhrases[voiceId] || "Salom! Misa AI ovozi faollashtirildi.";
-      await backendService.speakText(phrase, voiceId);
-      const voiceObj = VOICE_OPTIONS.find((v) => v.id === voiceId);
-      showToast(`${voiceObj ? voiceObj.name : voiceId} ovozi yangradi 🔊`);
-    } catch {
-      showToast("Ovoz sinovida xatolik");
+        const audio = new Audio(res.audio_data);
+        audio.volume = previewVolume;
+
+        audio.addEventListener("loadedmetadata", () => {
+          setPreviewDuration(audio.duration || 0);
+        });
+
+        audio.addEventListener("timeupdate", () => {
+          setPreviewCurrentTime(audio.currentTime || 0);
+        });
+
+        audio.addEventListener("ended", () => {
+          setPreviewPlaying(false);
+          setPreviewCurrentTime(0);
+        });
+
+        audio.addEventListener("error", () => {
+          setPreviewPlaying(false);
+          setPreviewLoading(false);
+          showToast("Audio faylni ijro etishda xatolik yuz berdi");
+        });
+
+        previewAudioRef.current = audio;
+        await audio.play();
+        setPreviewPlaying(true);
+
+        const voiceObj = VOICE_OPTIONS.find((v) => v.id === voiceId);
+        showToast(`${voiceObj ? voiceObj.name : voiceId} ovozi ijro etilmoqda 🔊`);
+      } else {
+        showToast(res.error || "Ovoz sinovi yaratib bo'lmadi");
+      }
+    } catch (err: any) {
+      showToast(normalizeApiError(err, "Ovoz sinovida xatolik yuz berdi"));
     } finally {
-      setTestingVoiceId(null);
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleStopVoicePreview = () => {
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause();
+      previewAudioRef.current.currentTime = 0;
+      setPreviewPlaying(false);
+      setPreviewCurrentTime(0);
+    }
+  };
+
+  const handleSeekVoicePreview = (time: number) => {
+    if (previewAudioRef.current) {
+      previewAudioRef.current.currentTime = time;
+      setPreviewCurrentTime(time);
+    }
+  };
+
+  const handleVolumeChange = (vol: number) => {
+    setPreviewVolume(vol);
+    if (previewAudioRef.current) {
+      previewAudioRef.current.volume = vol;
     }
   };
 
@@ -740,12 +940,12 @@ export const AccountPage: React.FC<AccountPageProps> = ({
             >
               {email && <span>✉ {email}</span>}
               {email && <span>•</span>}
-              <span>💼 {roleTitle}</span>
+              <span>💼 {roleTitle || "Foydalanuvchi"}</span>
               <span>•</span>
               <span style={{ color: "#4EDEA3" }}>● Misa AI v9.0.1</span>
             </div>
 
-            {bio && (
+            {bio ? (
               <p
                 style={{
                   fontSize: "12px",
@@ -757,6 +957,20 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                 }}
               >
                 {bio}
+              </p>
+            ) : (
+              <p
+                style={{
+                  fontSize: "12px",
+                  color: "rgba(255, 255, 255, 0.35)",
+                  fontStyle: "italic",
+                  marginTop: "6px",
+                  marginBottom: 0,
+                  lineHeight: 1.4,
+                  maxWidth: "580px",
+                }}
+              >
+                Bio hali kiritilmagan
               </p>
             )}
           </div>
@@ -884,13 +1098,27 @@ export const AccountPage: React.FC<AccountPageProps> = ({
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
               <div>
                 <label style={{ display: "block", fontSize: "12px", color: "var(--text-secondary)", marginBottom: "6px" }}>
-                  To'liq ism
+                  Ism
                 </label>
                 <input
                   type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
                   placeholder="Ismingizni kiriting"
+                  className="misa-glass-input"
+                  style={{ width: "100%", padding: "10px 14px", borderRadius: "12px", fontSize: "13px" }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "12px", color: "var(--text-secondary)", marginBottom: "6px" }}>
+                  Familiya
+                </label>
+                <input
+                  type="text"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Familiyangizni kiriting"
                   className="misa-glass-input"
                   style={{ width: "100%", padding: "10px 14px", borderRadius: "12px", fontSize: "13px" }}
                 />
@@ -918,20 +1146,43 @@ export const AccountPage: React.FC<AccountPageProps> = ({
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: "12px", color: "var(--text-secondary)", marginBottom: "6px" }}>
-                  Telefon raqami
-                </label>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+                  <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                    Telefon raqami
+                  </label>
+                  <span
+                    style={{
+                      fontSize: "10.5px",
+                      padding: "2px 7px",
+                      borderRadius: "6px",
+                      background: "rgba(245, 158, 11, 0.15)",
+                      color: "#FBBF24",
+                      border: "1px solid rgba(245, 158, 11, 0.3)",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Tez kunda
+                  </span>
+                </div>
                 <input
                   type="tel"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+998 90 123 45 67"
+                  disabled={true}
+                  readOnly={true}
+                  placeholder="+998 (__) ___ -- -- (Tez kunda)"
                   className="misa-glass-input"
-                  style={{ width: "100%", padding: "10px 14px", borderRadius: "12px", fontSize: "13px" }}
+                  style={{
+                    width: "100%",
+                    padding: "10px 14px",
+                    borderRadius: "12px",
+                    fontSize: "13px",
+                    opacity: 0.6,
+                    cursor: "not-allowed",
+                  }}
                 />
               </div>
 
-              <div>
+              <div style={{ gridColumn: "1 / -1" }}>
                 <label style={{ display: "block", fontSize: "12px", color: "var(--text-secondary)", marginBottom: "6px" }}>
                   Kasb / Lavozim
                 </label>
@@ -939,7 +1190,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                   type="text"
                   value={roleTitle}
                   onChange={(e) => setRoleTitle(e.target.value)}
-                  placeholder="Dasturchi / Muhandis"
+                  placeholder="Kasb / Lavozim"
                   className="misa-glass-input"
                   style={{ width: "100%", padding: "10px 14px", borderRadius: "12px", fontSize: "13px" }}
                 />
@@ -954,7 +1205,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                 rows={3}
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
-                placeholder="O'zingiz va vazifalaringiz haqida qisqacha ma'lumot..."
+                placeholder="Bio hali kiritilmagan"
                 className="misa-glass-input"
                 style={{
                   width: "100%",
@@ -1062,17 +1313,23 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                     gap: "6px",
                     padding: "4px 12px",
                     borderRadius: "999px",
-                    background: micFallbackUsed
+                    background: micMonitorActive
+                      ? "rgba(16, 185, 129, 0.2)"
+                      : micFallbackUsed
                       ? "rgba(245, 158, 11, 0.15)"
                       : micTestResult && !micTestResult.ok
                       ? "rgba(239, 68, 68, 0.15)"
                       : "rgba(16, 185, 129, 0.15)",
-                    border: micFallbackUsed
+                    border: micMonitorActive
+                      ? "1px solid rgba(52, 211, 153, 0.55)"
+                      : micFallbackUsed
                       ? "1px solid rgba(245, 158, 11, 0.35)"
                       : micTestResult && !micTestResult.ok
                       ? "1px solid rgba(239, 68, 68, 0.35)"
                       : "1px solid rgba(52, 211, 153, 0.35)",
-                    color: micFallbackUsed
+                    color: micMonitorActive
+                      ? "#34D399"
+                      : micFallbackUsed
                       ? "#FBBF24"
                       : micTestResult && !micTestResult.ok
                       ? "#F87171"
@@ -1091,7 +1348,9 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                     }}
                   />
                   <span>
-                    {micFallbackUsed
+                    {micMonitorActive
+                      ? "Jonli Monitor Faol"
+                      : micFallbackUsed
                       ? "Tanlangan mikrofon ulanmagan"
                       : micTestResult && !micTestResult.ok
                       ? "Xatolik / Ulanmagan"
@@ -1100,7 +1359,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                 </div>
               </div>
 
-              {/* Tanlash boshqaruvi va dropdown */}
+              {/* Tanlash boshqaruvi va amallar */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px", alignItems: "flex-end" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -1180,132 +1439,236 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                   </div>
                 </div>
 
-                {/* Mikrofonni tekshirish tugmasi */}
-                <div>
+                {/* Mikrofonni tekshirish va Jonli Monitor tugmalari */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                   <button
                     type="button"
                     onClick={handleTestMicrophone}
-                    disabled={micTesting}
+                    disabled={micTesting || micMonitorActive}
                     className="misa-btn-violet"
                     style={{
                       width: "100%",
                       display: "inline-flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      gap: "8px",
-                      padding: "10px 18px",
+                      gap: "6px",
+                      padding: "10px 12px",
                       borderRadius: "14px",
-                      fontSize: "13px",
+                      fontSize: "12px",
                       fontWeight: 600,
-                      cursor: micTesting ? "wait" : "pointer",
+                      cursor: (micTesting || micMonitorActive) ? "not-allowed" : "pointer",
                       boxShadow: "0 4px 18px rgba(147, 3, 197, 0.28)",
+                      opacity: micMonitorActive ? 0.6 : 1,
                     }}
                   >
-                    <MicIcon size={15} color="#FFFFFF" />
-                    <span>{micTesting ? "Ovoz o'lchanmoqda (1.5s)..." : "🎙 Mikrofonni tekshirish"}</span>
+                    <MicIcon size={14} color="#FFFFFF" />
+                    <span>{micTesting ? "O'lchanmoqda..." : "1.5s Sinov"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleToggleMicMonitor}
+                    style={{
+                      width: "100%",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "6px",
+                      padding: "10px 12px",
+                      borderRadius: "14px",
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      background: micMonitorActive
+                        ? "linear-gradient(135deg, rgba(239, 68, 68, 0.3) 0%, rgba(220, 38, 38, 0.5) 100%)"
+                        : "linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.35) 100%)",
+                      border: micMonitorActive
+                        ? "1px solid rgba(248, 113, 113, 0.6)"
+                        : "1px solid rgba(52, 211, 153, 0.45)",
+                      color: micMonitorActive ? "#FECACA" : "#A7F3D0",
+                      boxShadow: micMonitorActive
+                        ? "0 0 16px rgba(239, 68, 68, 0.3)"
+                        : "0 0 16px rgba(16, 185, 129, 0.2)",
+                      transition: "all 0.2s ease",
+                    }}
+                  >
+                    {micMonitorActive ? <StopIcon size={13} color="currentColor" /> : <PlayIcon size={13} color="currentColor" />}
+                    <span>{micMonitorActive ? "Monitorni to'xtatish" : "Jonli Monitor"}</span>
                   </button>
                 </div>
               </div>
 
+              {/* Loopback va Eshitish vositasi tavsiyasi */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: "12px",
+                  padding: "10px 16px",
+                  borderRadius: "12px",
+                  background: "rgba(2, 6, 14, 0.5)",
+                  border: "1px solid rgba(255, 255, 255, 0.07)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <input
+                    type="checkbox"
+                    id="micLoopbackToggle"
+                    checked={micLoopbackEnabled}
+                    onChange={handleToggleLoopback}
+                    style={{
+                      width: "16px",
+                      height: "16px",
+                      accentColor: "#9303C5",
+                      cursor: "pointer",
+                    }}
+                  />
+                  <label
+                    htmlFor="micLoopbackToggle"
+                    style={{
+                      fontSize: "12.5px",
+                      fontWeight: 600,
+                      color: "#FFFFFF",
+                      cursor: "pointer",
+                    }}
+                  >
+                    O'z ovozingizni eshitish (Loopback)
+                  </label>
+                </div>
+                <div style={{ fontSize: "11px", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: "5px" }}>
+                  <span>🎧</span>
+                  <span>Eshitish vositasidan (naushnik) foydalaning — dinamik aks-sado berishi mumkin.</span>
+                </div>
+              </div>
+
               {/* Status va Fallback Xabardorligi */}
-              {micStatusText && (
+              {(micStatusText || micMonitorError) && (
                 <div
                   style={{
                     padding: "8px 14px",
                     borderRadius: "10px",
-                    background: micFallbackUsed
+                    background: micMonitorError
+                      ? "rgba(239, 68, 68, 0.12)"
+                      : micFallbackUsed
                       ? "rgba(245, 158, 11, 0.1)"
                       : "rgba(255, 255, 255, 0.04)",
-                    border: micFallbackUsed
+                    border: micMonitorError
+                      ? "1px solid rgba(239, 68, 68, 0.3)"
+                      : micFallbackUsed
                       ? "1px solid rgba(245, 158, 11, 0.25)"
                       : "1px solid rgba(255, 255, 255, 0.07)",
-                    color: micFallbackUsed ? "#FCD34D" : "var(--text-secondary)",
+                    color: micMonitorError
+                      ? "#F87171"
+                      : micFallbackUsed
+                      ? "#FCD34D"
+                      : "var(--text-secondary)",
                     fontSize: "11.5px",
                     lineHeight: 1.4,
                   }}
                 >
                   <span style={{ fontWeight: 600 }}>Holat: </span>
-                  {micStatusText}
+                  {micMonitorError || micStatusText}
                 </div>
               )}
 
               {/* Real Input Level Bar */}
               <div
                 style={{
-                  padding: "12px 16px",
+                  padding: "14px 16px",
                   borderRadius: "14px",
-                  background: "rgba(2, 6, 14, 0.5)",
-                  border: "1px solid rgba(255, 255, 255, 0.06)",
+                  background: "rgba(2, 6, 14, 0.6)",
+                  border: "1px solid rgba(255, 255, 255, 0.07)",
                   display: "flex",
                   flexDirection: "column",
-                  gap: "8px",
+                  gap: "10px",
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
                   <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)" }}>
-                    Input darajasi (Real Signal):
+                    Apparat Input Darajasi (Real Signal):
                   </span>
                   <span
                     style={{
                       fontSize: "12px",
                       fontFamily: "monospace",
                       fontWeight: 700,
-                      color: micTestLevel > 50 ? "#4EDEA3" : micTestLevel > 15 ? "#C04CFD" : "var(--text-muted)",
+                      color: micMonitorActive
+                        ? (micMonitorPeak > 0.015 ? "#4EDEA3" : "#C04CFD")
+                        : (micTestLevel > 50 ? "#4EDEA3" : micTestLevel > 15 ? "#C04CFD" : "var(--text-muted)"),
                     }}
                   >
-                    {micTesting
-                      ? "Yozib olinmoqda..."
+                    {micMonitorActive
+                      ? `RMS: ${micMonitorRms.toFixed(4)} | Peak: ${micMonitorPeak.toFixed(4)} (${(20 * Math.log10(Math.max(micMonitorPeak, 0.0001))).toFixed(1)} dB)`
+                      : micTesting
+                      ? "Yozib olinmoqda (1.5s)..."
                       : micTestResult
                       ? `${micTestLevel}% (RMS: ${micTestResult.rms ?? 0})`
-                      : "0% — Tekshirish tugmasini bosing"}
+                      : "0% — Sinov yoki Jonli Monitorni yoqing"}
                   </span>
                 </div>
 
                 {/* Progress bar */}
+                {(() => {
+                  const displayLevel = micMonitorActive
+                    ? Math.min(100, Math.max(0, Math.round(micMonitorPeak * 100)))
+                    : micTestLevel;
+                  return (
+                    <div
+                      style={{
+                        width: "100%",
+                        height: "12px",
+                        borderRadius: "999px",
+                        background: "rgba(255, 255, 255, 0.06)",
+                        overflow: "hidden",
+                        position: "relative",
+                      }}
+                    >
+                      <div
+                        style={{
+                          height: "100%",
+                          width: `${displayLevel}%`,
+                          background:
+                            displayLevel > 75
+                              ? "linear-gradient(90deg, #9303C5 0%, #C04CFD 50%, #EF4444 100%)"
+                              : "linear-gradient(90deg, #9303C5 0%, #C04CFD 70%, #4EDEA3 100%)",
+                          borderRadius: "999px",
+                          transition: micMonitorActive ? "width 0.05s linear" : "width 0.3s ease",
+                          boxShadow: displayLevel > 0 ? "0 0 12px rgba(192, 76, 253, 0.6)" : "none",
+                        }}
+                      />
+                    </div>
+                  );
+                })()}
+
+                {/* Real-time monitor yoki sinov holati tavsifi */}
                 <div
                   style={{
-                    width: "100%",
-                    height: "10px",
-                    borderRadius: "999px",
-                    background: "rgba(255, 255, 255, 0.06)",
-                    overflow: "hidden",
-                    position: "relative",
+                    fontSize: "11px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "6px",
                   }}
                 >
-                  <div
+                  <span
                     style={{
-                      height: "100%",
-                      width: `${micTestLevel}%`,
-                      background:
-                        micTestLevel > 75
-                          ? "linear-gradient(90deg, #9303C5 0%, #C04CFD 50%, #EF4444 100%)"
-                          : "linear-gradient(90deg, #9303C5 0%, #C04CFD 70%, #4EDEA3 100%)",
-                      borderRadius: "999px",
-                      transition: "width 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                      boxShadow: micTestLevel > 0 ? "0 0 12px rgba(192, 76, 253, 0.6)" : "none",
-                    }}
-                  />
-                </div>
-
-                {/* Sinov natijasi xabari */}
-                {micTestResult && (
-                  <div
-                    style={{
-                      fontSize: "11px",
-                      color: micTestResult.ok ? "#4EDEA3" : "#F87171",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      marginTop: "2px",
+                      color: micMonitorActive
+                        ? (micMonitorPeak > 0.015 ? "#4EDEA3" : "#FBBF24")
+                        : (micTestResult?.ok ? "#4EDEA3" : "var(--text-muted)"),
                     }}
                   >
-                    <span>{micTestResult.ok ? "●" : "⚠"}</span>
-                    <span>
-                      {micTestResult.message}
-                      {micTestResult.device_name ? ` (${micTestResult.device_name})` : ""}
+                    {micMonitorActive
+                      ? (micMonitorPeak > 0.015 ? "● Jonli audio qabul qilinmoqda" : "○ Jimjitlik — mikrofon ovoz kutilmoqda")
+                      : (micTestResult ? (micTestResult.ok ? `● Sinov muvaffaqiyatli: ${micTestResult.message}` : `⚠ ${micTestResult.message}`) : "Har qanday soxta signal taqiqlangan")}
+                  </span>
+                  {micMonitorActive && (
+                    <span style={{ color: "rgba(255, 255, 255, 0.4)", fontSize: "10px" }}>
+                      30 soniyalik xavfsizlik taymeri faol
                     </span>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1355,7 +1718,6 @@ export const AccountPage: React.FC<AccountPageProps> = ({
               >
                 {VOICE_OPTIONS.map((voice) => {
                   const isSelected = voiceType === voice.id;
-                  const isTesting = testingVoiceId === voice.id;
                   return (
                     <div
                       key={voice.id}
@@ -1442,31 +1804,227 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleTestVoiceAudio(voice.id);
+                            handlePlayVoicePreview(voice.id);
                           }}
-                          disabled={isTesting}
+                          disabled={previewLoading && previewVoiceId === voice.id}
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
                             gap: "6px",
                             padding: "6px 12px",
                             borderRadius: "10px",
-                            background: isSelected ? "rgba(192, 76, 253, 0.2)" : "rgba(255, 255, 255, 0.08)",
-                            border: `1px solid ${isSelected ? "rgba(192, 76, 253, 0.35)" : "rgba(255, 255, 255, 0.12)"}`,
-                            color: isSelected ? "#FFFFFF" : "#F5F0FF",
+                            background: (isSelected || previewVoiceId === voice.id)
+                              ? "rgba(192, 76, 253, 0.2)"
+                              : "rgba(255, 255, 255, 0.08)",
+                            border: `1px solid ${(isSelected || previewVoiceId === voice.id) ? "rgba(192, 76, 253, 0.35)" : "rgba(255, 255, 255, 0.12)"}`,
+                            color: (isSelected || previewVoiceId === voice.id) ? "#FFFFFF" : "#F5F0FF",
                             fontSize: "11.5px",
                             fontWeight: 600,
                             cursor: "pointer",
                           }}
                         >
-                          <VolumeIcon size={12} color={isSelected ? "#E8B3FF" : "currentColor"} />
-                          <span>{isTesting ? "Yangramoqda..." : "Tinglab ko'rish"}</span>
+                          {previewVoiceId === voice.id && previewPlaying ? (
+                            <>
+                              <PauseIcon size={12} color="#E8B3FF" />
+                              <span>Pauza</span>
+                            </>
+                          ) : previewVoiceId === voice.id && previewLoading ? (
+                            <>
+                              <RefreshIcon size={12} color="#E8B3FF" className="misa-spin" />
+                              <span>Yuklanmoqda...</span>
+                            </>
+                          ) : (
+                            <>
+                              <VolumeIcon size={12} color={isSelected ? "#E8B3FF" : "currentColor"} />
+                              <span>Tinglab ko'rish</span>
+                            </>
+                          )}
                         </button>
                       </div>
                     </div>
                   );
                 })}
               </div>
+
+              {/* Jonli AI Audio Pleyeri (HTML5 Audio Player with Play, Pause, Stop, Seek, Volume & Fallback Badge) */}
+              {previewVoiceId && (() => {
+                const activeVoice = VOICE_OPTIONS.find((v) => v.id === previewVoiceId) || {
+                  id: previewVoiceId,
+                  name: previewVoiceId,
+                  badge: "Ovoz",
+                  color: "#9303C5",
+                };
+                const formatTime = (secs: number) => {
+                  if (isNaN(secs) || secs < 0) return "0:00";
+                  const m = Math.floor(secs / 60);
+                  const s = Math.floor(secs % 60);
+                  return `${m}:${s < 10 ? "0" : ""}${s}`;
+                };
+
+                return (
+                  <div
+                    className="misa-ultra-glass"
+                    style={{
+                      padding: "16px 20px",
+                      borderRadius: "16px",
+                      background: "linear-gradient(135deg, rgba(147, 3, 197, 0.12) 0%, rgba(2, 6, 14, 0.85) 100%)",
+                      border: "1px solid rgba(192, 76, 253, 0.35)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                      boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4)",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <span
+                          style={{
+                            width: "10px",
+                            height: "10px",
+                            borderRadius: "50%",
+                            backgroundColor: activeVoice.color || "#C04CFD",
+                            boxShadow: `0 0 10px ${activeVoice.color || "#C04CFD"}`,
+                          }}
+                        />
+                        <span style={{ fontSize: "13px", fontWeight: 700, color: "#FFFFFF" }}>
+                          {activeVoice.name}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            padding: "2px 8px",
+                            borderRadius: "6px",
+                            background: "rgba(147, 3, 197, 0.25)",
+                            color: "#E8B3FF",
+                            border: "1px solid rgba(192, 76, 253, 0.35)",
+                          }}
+                        >
+                          {activeVoice.badge}
+                        </span>
+                        <span style={{ fontSize: "11px", color: "var(--text-secondary)", fontStyle: "italic" }}>
+                          "Salom. Men Misa, sizning sun’iy intellekt yordamchingizman."
+                        </span>
+                      </div>
+
+                      {previewFallbackNotice && (
+                        <div
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            padding: "3px 10px",
+                            borderRadius: "8px",
+                            background: "rgba(245, 158, 11, 0.15)",
+                            border: "1px solid rgba(245, 158, 11, 0.4)",
+                            color: "#FCD34D",
+                            fontSize: "11px",
+                            fontWeight: 600,
+                          }}
+                        >
+                          <span>⚠ Zaxira:</span>
+                          <span>{previewFallbackNotice}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Audio Controls: Play/Pause, Stop, Progress bar, Time, Volume */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
+                      {/* Play/Pause */}
+                      <button
+                        type="button"
+                        onClick={() => handlePlayVoicePreview(previewVoiceId)}
+                        disabled={previewLoading}
+                        style={{
+                          width: "36px",
+                          height: "36px",
+                          borderRadius: "50%",
+                          background: "linear-gradient(135deg, #9303C5 0%, #C04CFD 100%)",
+                          border: "none",
+                          color: "#FFFFFF",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          cursor: previewLoading ? "wait" : "pointer",
+                          boxShadow: "0 0 16px rgba(147, 3, 197, 0.5)",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {previewLoading ? (
+                          <RefreshIcon size={14} color="#FFFFFF" className="misa-spin" />
+                        ) : previewPlaying ? (
+                          <PauseIcon size={14} color="#FFFFFF" />
+                        ) : (
+                          <PlayIcon size={14} color="#FFFFFF" />
+                        )}
+                      </button>
+
+                      {/* Stop */}
+                      <button
+                        type="button"
+                        onClick={handleStopVoicePreview}
+                        disabled={previewLoading || (!previewPlaying && previewCurrentTime === 0)}
+                        style={{
+                          width: "32px",
+                          height: "32px",
+                          borderRadius: "10px",
+                          background: "rgba(255, 255, 255, 0.08)",
+                          border: "1px solid rgba(255, 255, 255, 0.12)",
+                          color: "#FFFFFF",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          cursor: (previewLoading || (!previewPlaying && previewCurrentTime === 0)) ? "not-allowed" : "pointer",
+                          opacity: (!previewPlaying && previewCurrentTime === 0) ? 0.5 : 1,
+                          flexShrink: 0,
+                        }}
+                      >
+                        <StopIcon size={13} color="currentColor" />
+                      </button>
+
+                      {/* Progress / Seek bar */}
+                      <div style={{ flex: 1, minWidth: "180px", display: "flex", alignItems: "center", gap: "10px" }}>
+                        <span style={{ fontSize: "11px", fontFamily: "monospace", color: "var(--text-secondary)", minWidth: "32px" }}>
+                          {formatTime(previewCurrentTime)}
+                        </span>
+                        <input
+                          type="range"
+                          min="0"
+                          max={previewDuration || 1}
+                          step="0.05"
+                          value={previewCurrentTime}
+                          onChange={(e) => handleSeekVoicePreview(parseFloat(e.target.value))}
+                          style={{
+                            flex: 1,
+                            accentColor: "#C04CFD",
+                            cursor: "pointer",
+                          }}
+                        />
+                        <span style={{ fontSize: "11px", fontFamily: "monospace", color: "var(--text-secondary)", minWidth: "32px" }}>
+                          {formatTime(previewDuration)}
+                        </span>
+                      </div>
+
+                      {/* Volume Slider */}
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", width: "120px" }}>
+                        <VolumeIcon size={14} color="var(--text-secondary)" />
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step="0.05"
+                          value={previewVolume}
+                          onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+                          style={{
+                            width: "100%",
+                            accentColor: "#9303C5",
+                            cursor: "pointer",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Ovoz Tezligi Slayderi */}
               <div

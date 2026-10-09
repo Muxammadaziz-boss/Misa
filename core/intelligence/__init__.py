@@ -52,6 +52,7 @@ from core.intelligence.verifier import AgentVerifier
 from core.intelligence.agent_loop import AgentLoop, get_agent_loop
 from core.intelligence.orchestrator import IntelligenceOrchestrator
 from core.intelligence.adapter import CompatibilityAdapter
+from core.intelligence.text_cleaner import extract_clean_response_text
 from core.intelligence.planner import (
     GoalDecomposer,
     DependencyGraph,

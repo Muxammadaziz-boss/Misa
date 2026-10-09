@@ -18,6 +18,7 @@ import {
 } from "../components/icons/Icons";
 import {
   backendService,
+  unwrapCleanResponse,
   VoiceState,
   BackendStatus,
   AgentPlanEvent,
@@ -408,10 +409,12 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     try {
       const response = await backendService.sendMessage(effectiveQuery, { speak: autoSpeak, image: imageToSend });
       const completedPlan = activeAgentPlanRef.current || undefined;
+      const rawText = response.reply || response.response || "Buyruq bajarildi.";
+      const aiText = unwrapCleanResponse(rawText);
       const aiMsg: Message = {
         id: `a_${Date.now()}`,
         sender: "misa",
-        text: response.reply || "Buyruq bajarildi.",
+        text: aiText,
         timestamp: formatNow(),
         agentPlan: completedPlan,
       };

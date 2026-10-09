@@ -130,6 +130,9 @@ class VoiceManager:
             clean, "uz-UZ-MadinaNeural", cancel_token=cancel_token
         )
 
+    # Alias for synthesize_text
+    synthesize = synthesize_text
+
     def speak(
         self,
         text: str,

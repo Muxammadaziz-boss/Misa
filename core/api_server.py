@@ -28,6 +28,7 @@ for _p in (_curr_dir, _parent_dir):
         sys.path.insert(0, _p)
 
 from core.common_paths import get_base_dir, get_data_dir
+from core.intelligence.text_cleaner import extract_clean_response_text
 
 BASE_DIR = get_base_dir()
 if BASE_DIR not in sys.path:
@@ -567,15 +568,17 @@ def execute_command_pipeline(text: str, user: str, ovoz: str, mode: str = "ask",
                     except Exception as e:
                         logger.error(f"AI intent bajarishda xatolik: {e}")
                 
-                return ai_resp
+                return extract_clean_response_text(ai_resp)
 
             elif isinstance(reply, dict) and reply.get("type") in ("confirmation", "clarification"):
-                return reply.get("question") or reply.get("response") or "Iltimos, tasdiqlang yoki aniqlashtiring."
+                q_text = reply.get("question") or reply.get("response") or "Iltimos, tasdiqlang yoki aniqlashtiring."
+                return extract_clean_response_text(q_text)
 
             elif isinstance(reply, dict):
-                return reply.get("response") or reply.get("javob") or str(reply)
+                ans = reply.get("response") or reply.get("javob") or str(reply)
+                return extract_clean_response_text(ans)
             elif reply:
-                return str(reply)
+                return extract_clean_response_text(reply)
         except Exception as e:
             logger.error(f"AI savolida xatolik: {e}")
             return f"Xatolik yuz berdi: {e}"
@@ -652,6 +655,7 @@ async def handle_chat(request):
                 sync_broadcast("voice_state", {"state": "idle"}, loop)
 
     response_text = await loop.run_in_executor(None, _execute)
+    response_text = extract_clean_response_text(response_text)
     await broadcast_ws("ai_response", {"text": response_text, "mode": mode})
 
     return web.json_response({
@@ -1106,6 +1110,7 @@ async def handle_voice_start(request):
         service.add_transcript_callback(lambda txt, sender: sync_broadcast("voice_transcript", {"text": txt, "sender": sender}, loop))
         service.add_response_callback(lambda resp: sync_broadcast("ai_response", {"text": resp, "mode": "voice"}, loop))
         service.add_audio_level_callback(lambda lvl: sync_broadcast("audio_level", {"level": lvl}, loop))
+        service.add_wake_callback(lambda data: sync_broadcast("wake_word_detected", data, loop))
 
         # AudioQueue holatlarini MisaAperture ga sinxron uzatish
         get_voice_manager().register_state_callback(lambda st: sync_broadcast("voice_state", {"state": st}, loop))
@@ -1119,11 +1124,14 @@ async def handle_voice_start(request):
 
         _voice_state = "listening"
         await broadcast_ws("voice_state", {"state": "listening"})
+        ww_status = service.wake_detector.get_status()
         return web.json_response({
             "ok": True,
             "status": "listening",
             "mode": "autonomous_conversational",
-            "wake_word": "Misa (offline/local)",
+            "wake_word": ww_status.get("phrase", "Salom Misa"),
+            "active_engine": ww_status.get("active_engine", "acoustic_fallback"),
+            "openwakeword": ww_status.get("openwakeword", {}),
             "barge_in": "enabled"
         })
     except Exception as e:
@@ -1154,6 +1162,35 @@ async def handle_voice_stop(request):
     _voice_state = "idle"
     await broadcast_ws("voice_state", {"state": "idle"})
     return web.json_response({"ok": True, "status": "stopped"})
+
+
+async def handle_wake_word_status(request):
+    """GET /api/voice/wakeword/status - openWakeWord va lokal uyg'otuvchi so'z tizimi holati"""
+    try:
+        from core.voice.service import get_conversational_voice_service
+        service = get_conversational_voice_service()
+        status = service.wake_detector.get_status()
+        return web.json_response({"ok": True, "data": status})
+    except Exception as e:
+        logger.error(f"Wake word status olishda xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_wake_word_configure(request):
+    """POST /api/voice/wakeword/configure - Uyg'otuvchi so'z sezuvchanligi va parametrlarini yangilash"""
+    try:
+        body = await request.json()
+        from core.voice.service import get_conversational_voice_service
+        service = get_conversational_voice_service()
+        updated_status = service.wake_detector.configure(
+            sensitivity=body.get("sensitivity"),
+            model_path=body.get("model_path"),
+            cooldown=body.get("cooldown")
+        )
+        return web.json_response({"ok": True, "data": updated_status})
+    except Exception as e:
+        logger.error(f"Wake word sozlashda xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 
 async def handle_voice_devices_get(request):
@@ -1244,6 +1281,135 @@ async def handle_voice_device_test(request):
         return web.json_response(res)
     except Exception as e:
         logger.error(f"Mikrofon testida xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_voice_device_monitor_start(request):
+    """POST /api/voice/devices/monitor/start - Real-time apparat mikrofon monitoringi va loopbackni boshlash"""
+    try:
+        data = {}
+        if request.method == "POST":
+            try:
+                data = await request.json()
+            except Exception:
+                data = {}
+        device_id = data.get("device_id") or request.query.get("device_id")
+        enable_loopback = data.get("loopback", True)
+        if isinstance(enable_loopback, str):
+            enable_loopback = enable_loopback.lower() in ("true", "1", "yes")
+
+        from core.voice.devices import MicrophoneManager
+        mgr = MicrophoneManager.get_instance()
+
+        loop = asyncio.get_running_loop()
+        def _broadcast(payload):
+            sync_broadcast("mic_monitor_level", payload, loop)
+
+        res = mgr.start_realtime_monitor(
+            device_id=device_id,
+            enable_loopback=enable_loopback,
+            broadcast_cb=_broadcast,
+        )
+        return web.json_response(res)
+    except Exception as e:
+        logger.error(f"Mikrofon monitoringini boshlashda xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_voice_device_monitor_stop(request):
+    """POST /api/voice/devices/monitor/stop - Mikrofon monitoringini to'xtatish"""
+    try:
+        from core.voice.devices import MicrophoneManager
+        mgr = MicrophoneManager.get_instance()
+        res = mgr.stop_realtime_monitor()
+        return web.json_response(res)
+    except Exception as e:
+        logger.error(f"Mikrofon monitoringini to'xtatishda xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_voice_device_monitor_status(request):
+    """GET /api/voice/devices/monitor/status - Mikrofon monitoringining real holati"""
+    try:
+        from core.voice.devices import MicrophoneManager
+        mgr = MicrophoneManager.get_instance()
+        res = mgr.get_realtime_monitor_status()
+        return web.json_response(res)
+    except Exception as e:
+        logger.error(f"Mikrofon monitoringi holatini olishda xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_voice_preview(request):
+    """POST /api/voice/preview - AI Ovoz modellarining 'Tinglab ko'rish' sintezatori"""
+    try:
+        data = {}
+        if request.method == "POST":
+            try:
+                data = await request.json()
+            except Exception:
+                data = {}
+        voice_id = (data.get("voice_id") or request.query.get("voice_id") or "ayol").strip().lower()
+        text = data.get("text") or request.query.get("text")
+        if not text:
+            text = "Salom. Men Misa, sizning sun’iy intellekt yordamchingizman."
+
+        from core.voice.voice_registry import get_voice_registry
+        from core.voice.voice_manager import get_voice_manager
+
+        reg = get_voice_registry()
+        vm = get_voice_manager()
+
+        v_info = reg.get_voice_info(voice_id) or {}
+        provider = v_info.get("provider", "edge_tts")
+        is_fallback = False
+        fallback_reason = ""
+
+        # Provider mavjudligini halol tekshirish
+        if provider == "rvc":
+            rvc_stat = reg.rvc_provider.get_voice_status(voice_id)
+            if not rvc_stat.get("runtime_ready"):
+                is_fallback = True
+                fallback_reason = rvc_stat.get("reason", "Lokal RVC model runtime o'rnatilmagan")
+        elif provider == "fish_audio":
+            if not reg.fish_provider.is_available():
+                is_fallback = True
+                fallback_reason = "Fish Audio bulut xizmati faol emas yoki API kalit kiritilmagan"
+
+        # Haqiqiy TTS sintezi (backend audio fayl yaratadi)
+        loop = asyncio.get_running_loop()
+        audio_path = await loop.run_in_executor(None, vm.synthesize, text, voice_id)
+
+        if not audio_path or not os.path.exists(audio_path):
+            return web.json_response({
+                "ok": False,
+                "error": "Ovoz faylini yaratib bo'lmadi",
+                "voice_id": voice_id,
+                "provider": provider,
+            }, status=500)
+
+        # Base64 data URI formatida frontend ga uzatish
+        with open(audio_path, "rb") as f:
+            audio_bytes = f.read()
+
+        import base64
+        b64_str = base64.b64encode(audio_bytes).decode("ascii")
+        audio_data_uri = f"data:audio/mp3;base64,{b64_str}"
+
+        return web.json_response({
+            "ok": True,
+            "voice_id": voice_id,
+            "voice_name": v_info.get("name", voice_id),
+            "provider": provider,
+            "is_fallback": is_fallback,
+            "fallback_reason": fallback_reason,
+            "audio_data": audio_data_uri,
+            "sample_rate": 24000 if provider == "edge_tts" else 44100,
+            "text": text,
+            "message": "Ovoz muvaffaqiyatli sintez qilindi",
+        })
+    except Exception as e:
+        logger.error(f"[VOICE] Preview sintezida xatolik: {e}")
         return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 
@@ -2606,13 +2772,22 @@ async def handle_account_get(request):
     auth_display_name = (getattr(user, "display_name", "") or getattr(user, "username", "")) if user else ""
     auth_avatar_url = getattr(user, "avatar_url", "") if user else ""
 
-    name = user_cfg.get("name") or auth_display_name or user_name or mem_profile.get("ism", "Foydalanuvchi")
+    first_name = user_cfg.get("first_name") or getattr(user, "first_name", "") or ""
+    last_name = user_cfg.get("last_name") or getattr(user, "last_name", "") or ""
+    name = user_cfg.get("name") or auth_display_name or user_name or mem_profile.get("ism", "")
+
+    # Agar first_name va last_name alohida kiritilmagan bo'lsa, mavjud ismdan ajratish
+    if (not first_name and not last_name) and name:
+        parts = name.strip().split(" ", 1)
+        first_name = parts[0] if parts else ""
+        last_name = parts[1] if len(parts) > 1 else ""
+
     email = user_cfg.get("email") or auth_email or ""
     avatar = user_cfg.get("avatar") or mem_profile.get("avatar", "violet")
     avatar_url = user_cfg.get("avatar_url") or auth_avatar_url or ""
-    role = user_cfg.get("role") or mem_profile.get("kasb", "Dasturchi / Foydalanuvchi")
+    role = user_cfg.get("role") or mem_profile.get("kasb", "")
     phone = user_cfg.get("phone") or mem_profile.get("telefon", "")
-    bio = user_cfg.get("bio") or mem_profile.get("bio", "Misa AI shaxsiy sun'iy intellekt yordamchisi")
+    bio = user_cfg.get("bio") or mem_profile.get("bio", "")
     language = user_cfg.get("language") or mem_profile.get("til", "uz")
 
     ai_keys = {}
@@ -2662,6 +2837,8 @@ async def handle_account_get(request):
         "selected_device": account_summary["selected_device"],
         "telegram_linked": account_summary["telegram_linked"],
         "telegram_identity": account_summary["telegram_identity"],
+        "first_name": first_name,
+        "last_name": last_name,
         "name": name,
         "email": email,
         "avatar": avatar,
@@ -2755,7 +2932,12 @@ async def handle_account_update(request):
     m, ai, mem, _, _, _ = get_modules()
 
     # 1. User & Profil
+    new_first_name = body.get("first_name", "").strip() if "first_name" in body and body["first_name"] is not None else None
+    new_last_name = body.get("last_name", "").strip() if "last_name" in body and body["last_name"] is not None else None
     new_name = body.get("name", "").strip() if "name" in body and body["name"] is not None else None
+    if (new_first_name or new_last_name) and not new_name:
+        new_name = f"{new_first_name or ''} {new_last_name or ''}".strip()
+
     new_email = body.get("email", "").strip() if "email" in body and body["email"] is not None else None
     new_avatar = body.get("avatar", "").strip() if "avatar" in body and body["avatar"] is not None else None
     new_avatar_url = body.get("avatar_url", "").strip() if "avatar_url" in body and body["avatar_url"] is not None else None
@@ -2763,6 +2945,11 @@ async def handle_account_update(request):
     new_phone = body.get("phone", "").strip() if "phone" in body and body["phone"] is not None else None
     new_bio = body.get("bio", "").strip() if "bio" in body and body["bio"] is not None else None
     new_lang = body.get("language", "").strip() if "language" in body and body["language"] is not None else None
+
+    if new_first_name is not None:
+        cfg["user"]["first_name"] = new_first_name
+    if new_last_name is not None:
+        cfg["user"]["last_name"] = new_last_name
 
     if new_name:
         cfg["user"]["name"] = new_name
@@ -6527,6 +6714,8 @@ def create_app():
     app.router.add_post("/api/account/test-api-key", handle_ai_test_key)
     app.router.add_post("/api/voice/start", handle_voice_start)
     app.router.add_post("/api/voice/stop", handle_voice_stop)
+    app.router.add_get("/api/voice/wakeword/status", handle_wake_word_status)
+    app.router.add_post("/api/voice/wakeword/configure", handle_wake_word_configure)
     app.router.add_post("/api/voice/speak", handle_voice_speak)
     app.router.add_get("/api/voice/voices", handle_get_voices)
     app.router.add_get("/api/voice/diagnostic", handle_voice_diagnostic)
@@ -6535,6 +6724,11 @@ def create_app():
     app.router.add_post("/api/voice/devices/select", handle_voice_device_select)
     app.router.add_post("/api/voice/devices/test", handle_voice_device_test)
     app.router.add_get("/api/voice/devices/test", handle_voice_device_test)
+    app.router.add_post("/api/voice/devices/monitor/start", handle_voice_device_monitor_start)
+    app.router.add_post("/api/voice/devices/monitor/stop", handle_voice_device_monitor_stop)
+    app.router.add_get("/api/voice/devices/monitor/status", handle_voice_device_monitor_status)
+    app.router.add_post("/api/voice/preview", handle_voice_preview)
+    app.router.add_get("/api/voice/preview", handle_voice_preview)
 
 
     # Buyruqlar (Commands)

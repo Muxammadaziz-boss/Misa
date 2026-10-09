@@ -16,10 +16,12 @@ numpy
 packaging
 aiohttp>=3.9.0
 cryptography>=41.0.0
+openwakeword==0.6.0
+onnxruntime>=1.16.0
 
 # Ixtiyoriy: Mahalliy Silero TTS uchun (og'ir ~2.5GB):
 # torch
 # torchaudio
 # omegaconf
 # Ixtiyoriy: Mahalliy Semantik Vektor xotira uchun:
-# chromadb
+# chromadb

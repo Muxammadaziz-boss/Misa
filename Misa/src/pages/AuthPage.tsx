@@ -33,6 +33,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
   const [activeTab, setActiveTab] = useState<AuthTab>("login");
 
   // Form fields
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -301,6 +303,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
     try {
       const res = await backendService.register({
         username: username.trim(),
+        first_name: firstName.trim() || undefined,
+        last_name: lastName.trim() || undefined,
         email: email.trim() || undefined,
         password,
         confirm_password: confirmPassword,
@@ -1020,6 +1024,79 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.1)" }} />
               <span>yoki yangi akkaunt ochish</span>
               <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.1)" }} />
+            </div>
+
+            {/* Ism va Familiya */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
+                  Ism
+                </label>
+                <input
+                  type="text"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="Ismingiz"
+                  autoComplete="given-name"
+                  style={{
+                    width: "100%",
+                    padding: "11px 14px",
+                    background: "rgba(8, 14, 28, 0.65)",
+                    backdropFilter: "blur(12px)",
+                    WebkitBackdropFilter: "blur(12px)",
+                    border: "1px solid rgba(255, 255, 255, 0.12)",
+                    borderRadius: "12px",
+                    color: "#FFFFFF",
+                    fontSize: "13.5px",
+                    outline: "none",
+                    boxSizing: "border-box",
+                    transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = "#C04CFD";
+                    e.target.style.boxShadow = "0 0 0 3px rgba(192, 76, 253, 0.22)";
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = "rgba(255, 255, 255, 0.12)";
+                    e.target.style.boxShadow = "none";
+                  }}
+                />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
+                  Familiya
+                </label>
+                <input
+                  type="text"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Familiyangiz"
+                  autoComplete="family-name"
+                  style={{
+                    width: "100%",
+                    padding: "11px 14px",
+                    background: "rgba(8, 14, 28, 0.65)",
+                    backdropFilter: "blur(12px)",
+                    WebkitBackdropFilter: "blur(12px)",
+                    border: "1px solid rgba(255, 255, 255, 0.12)",
+                    borderRadius: "12px",
+                    color: "#FFFFFF",
+                    fontSize: "13.5px",
+                    outline: "none",
+                    boxSizing: "border-box",
+                    transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = "#C04CFD";
+                    e.target.style.boxShadow = "0 0 0 3px rgba(192, 76, 253, 0.22)";
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = "rgba(255, 255, 255, 0.12)";
+                    e.target.style.boxShadow = "none";
+                  }}
+                />
+              </div>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>

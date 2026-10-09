@@ -34,19 +34,19 @@ def _extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
 
     if cleaned.startswith("{") and cleaned.endswith("}"):
         try:
-            return json.loads(cleaned)
+            return json.loads(cleaned, strict=False)
         except json.JSONDecodeError:
             pass
 
     if "```json" in cleaned:
         try:
-            return json.loads(cleaned.split("```json")[1].split("```")[0].strip())
+            return json.loads(cleaned.split("```json")[1].split("```")[0].strip(), strict=False)
         except (IndexError, json.JSONDecodeError):
             pass
 
     if "```" in cleaned:
         try:
-            return json.loads(cleaned.split("```")[1].split("```")[0].strip())
+            return json.loads(cleaned.split("```")[1].split("```")[0].strip(), strict=False)
         except (IndexError, json.JSONDecodeError):
             pass
 
@@ -60,7 +60,7 @@ def _extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
                 depth -= 1
                 if depth == 0:
                     try:
-                        return json.loads(cleaned[start:i+1])
+                        return json.loads(cleaned[start:i+1], strict=False)
                     except json.JSONDecodeError:
                         break
     return None
@@ -255,12 +255,14 @@ class GeminiProvider(LLMProvider):
                 )
 
         # JSON Parse
+        from core.intelligence.text_cleaner import extract_clean_response_text
         extracted = _extract_json_from_text(ai_text)
         if extracted and isinstance(extracted, dict):
             resp_type = extracted.get("type", "answer")
             intent = extracted.get("intent")
             params = extracted.get("params") or {}
-            content = extracted.get("response") or extracted.get("question") or ai_text
+            raw_content = extracted.get("response") or extracted.get("question") or ai_text
+            content = extract_clean_response_text(raw_content)
             return AIResponse(
                 provider=self._name,
                 model=model,
@@ -274,11 +276,12 @@ class GeminiProvider(LLMProvider):
                 success=True,
             )
 
+        clean_content = extract_clean_response_text(ai_text)
         return AIResponse(
             provider=self._name,
             model=model,
             type="answer",
-            content=ai_text,
+            content=clean_content,
             usage=usage,
             raw_text=ai_text,
             success=True,

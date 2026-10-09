@@ -13,7 +13,9 @@ import logging
 import threading
 import hashlib
 import re
-from typing import Dict, Any, List, Optional, Tuple
+import time
+import queue
+from typing import Dict, Any, List, Optional, Tuple, Callable
 
 import numpy as np
 
@@ -450,3 +452,361 @@ class MicrophoneManager:
                 "message": msg,
                 "error": err_str,
             }
+
+    def start_realtime_monitor(
+        self,
+        device_id: Optional[str] = None,
+        enable_loopback: bool = True,
+        broadcast_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
+    ) -> Dict[str, Any]:
+        """Mikrofonni real-time audio capture va loopback monitoring rejimida ishga tushirish"""
+        return RealtimeAudioMonitor.get_instance().start(
+            device_id=device_id,
+            enable_loopback=enable_loopback,
+            broadcast_cb=broadcast_cb,
+        )
+
+    def stop_realtime_monitor(self) -> Dict[str, Any]:
+        """Mikrofon monitoringini to'xtatish"""
+        return RealtimeAudioMonitor.get_instance().stop()
+
+    def get_realtime_monitor_status(self) -> Dict[str, Any]:
+        """Mikrofon monitoringining joriy real statusi va darajalarini olish"""
+        return RealtimeAudioMonitor.get_instance().get_status()
+
+
+class RealtimeAudioMonitor:
+    """
+    Mikrofonni real-time sinash va apparat audio monitoringi:
+    - Tanlangan haqiqiy apparat qurilmasini InputStream orqali ochadi
+    - Har bir audio blokdan (512 frames, ~32ms) real RMS va Peak ni o'lchaydi
+    - O'lchangan real signallarni UI ga yuboradi (WebSocket yoki status polling)
+    - Loopback yoqilganda: past kechikishli sd.OutputStream orqali foydalanuvchi o'z ovozini
+      haqiqiy vaqtda eshitadi (fake emas, audio hardware loopback)
+    - Akustik aks-sado (feedback) xavfini kamaytirish uchun soft limiter va clipping cheklovchi
+    - 30 soniyalik avtomatik xavfsizlik to'xtatuvchisi (watchdog timer)
+    """
+
+    _instance: Optional["RealtimeAudioMonitor"] = None
+    _lock = threading.Lock()
+
+    def __init__(self):
+        self._is_active: bool = False
+        self._input_stream: Any = None
+        self._output_stream: Any = None
+        self._loopback_queue: queue.Queue = queue.Queue(maxsize=16)
+        self._stream_lock = threading.Lock()
+        self._watchdog_timer: Optional[threading.Timer] = None
+        self._current_level: float = 0.0
+        self._current_rms: float = 0.0
+        self._current_peak: float = 0.0
+        self._current_status: str = "inactive"
+        self._device_name: str = "Noma'lum"
+        self._device_id: str = "default"
+        self._enable_loopback: bool = False
+        self._broadcast_cb: Optional[Callable[[Dict[str, Any]], None]] = None
+        self._last_broadcast_time: float = 0.0
+        self._sample_rate: int = 16000
+
+    @classmethod
+    def get_instance(cls) -> "RealtimeAudioMonitor":
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = cls()
+            return cls._instance
+
+    def start(
+        self,
+        device_id: Optional[str] = None,
+        enable_loopback: bool = True,
+        broadcast_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
+    ) -> Dict[str, Any]:
+        with self._stream_lock:
+            # Agar oldingi monitor ochiq bo'lsa, tozalab to'xtatamiz
+            if self._is_active:
+                self._stop_internal()
+
+            try:
+                import sounddevice as sd
+            except ImportError:
+                return {
+                    "ok": False,
+                    "status": "error",
+                    "message": "sounddevice kutubxonasi mavjud emas.",
+                }
+
+            mgr = MicrophoneManager.get_instance()
+            target_index: Optional[int] = None
+            dev_name = "Noma'lum"
+
+            if device_id and device_id != "default":
+                devs = mgr.get_input_devices()
+                found = next((d for d in devs if d.get("id") == device_id), None)
+                if found and found.get("available") and found.get("index") is not None:
+                    target_index = found["index"]
+                    dev_name = found.get("name", "Mikrofon")
+                elif found and not found.get("available"):
+                    return {
+                        "ok": False,
+                        "status": "disconnected",
+                        "device_name": found.get("name", "Mikrofon"),
+                        "message": f"Tanlangan mikrofon ({found.get('name')}) audio portga ulanmagan.",
+                    }
+            else:
+                idx, dev_info, _, _ = mgr.resolve_selected_device()
+                target_index = idx
+                dev_name = dev_info.get("name", "Default mikrofon")
+
+            if target_index is None or target_index < 0:
+                return {
+                    "ok": False,
+                    "status": "disconnected",
+                    "device_name": dev_name,
+                    "message": f"Tanlangan mikrofon ({dev_name}) topilmadi yoki ulanmagan.",
+                }
+
+            # Samplerate tanlash
+            target_sr = 16000
+            try:
+                dev_query = sd.query_devices(target_index)
+                native_sr = int(dev_query.get("default_samplerate", 44100))
+            except Exception:
+                native_sr = 44100
+
+            used_sr = target_sr
+            block_size = 512  # ~32ms ultra past kechikish
+
+            # Loopback queue tozalash
+            while not self._loopback_queue.empty():
+                try:
+                    self._loopback_queue.get_nowait()
+                except Exception:
+                    pass
+
+            self._enable_loopback = bool(enable_loopback)
+            self._broadcast_cb = broadcast_cb
+            self._device_name = dev_name
+            self._device_id = device_id or mgr._selected_device_id or "default"
+            self._current_status = "Tekshirilmoqda..."
+            self._current_level = 0.0
+            self._current_rms = 0.0
+            self._current_peak = 0.0
+            self._last_broadcast_time = 0.0
+
+            # Audio callbacks
+            def input_callback(indata, frames, time_info, status):
+                if not self._is_active:
+                    return
+                try:
+                    flat = indata.flatten()
+                    rms = float(np.sqrt(np.mean(np.square(flat))))
+                    peak = float(np.max(np.abs(flat)))
+                    level = min(1.0, max(0.0, peak if peak > 0 else rms * 3.0))
+
+                    if peak >= 0.015:
+                        st = "Eshitish mumkin"
+                    elif peak >= 0.005:
+                        st = "Signal sezilmoqda"
+                    else:
+                        st = "Signal yo'q (gapirib ko'ring)"
+
+                    self._current_rms = round(rms, 4)
+                    self._current_peak = round(peak, 4)
+                    self._current_level = round(level, 3)
+                    self._current_status = st
+
+                    # Agar loopback yoqilgan bo'lsa, navbatga uzatish (soft clipping bilan)
+                    if self._enable_loopback and self._output_stream:
+                        processed = np.clip(indata * 0.95, -0.98, 0.98)
+                        if not self._loopback_queue.full():
+                            self._loopback_queue.put_nowait(processed.copy())
+
+                    # Har ~50ms (20fps) UI ga darajani yuborish
+                    now = time.time()
+                    if now - self._last_broadcast_time >= 0.05:
+                        self._last_broadcast_time = now
+                        if self._broadcast_cb:
+                            try:
+                                self._broadcast_cb({
+                                    "rms": self._current_rms,
+                                    "peak": self._current_peak,
+                                    "level": self._current_level,
+                                    "status": self._current_status,
+                                    "device_name": self._device_name,
+                                    "device_id": self._device_id,
+                                    "loopback": self._enable_loopback,
+                                })
+                            except Exception:
+                                pass
+                except Exception as e_cb:
+                    logger.debug(f"[RealtimeMonitor] Input callback xatosi: {e_cb}")
+
+            def output_callback(outdata, frames, time_info, status):
+                try:
+                    chunk = self._loopback_queue.get_nowait()
+                    if len(chunk) == len(outdata):
+                        outdata[:] = chunk
+                    else:
+                        outdata.fill(0)
+                except queue.Empty:
+                    outdata.fill(0)
+                except Exception:
+                    outdata.fill(0)
+
+            # Streamlarni ochish
+            try:
+                # 1. Input stream
+                try:
+                    self._input_stream = sd.InputStream(
+                        device=target_index,
+                        samplerate=target_sr,
+                        channels=1,
+                        dtype="float32",
+                        blocksize=block_size,
+                        callback=input_callback,
+                    )
+                    used_sr = target_sr
+                except Exception as e_sr:
+                    logger.info(f"[RealtimeMonitor] 16000Hz ochilmadi ({e_sr}), native {native_sr}Hz ga o'tilmoqda")
+                    self._input_stream = sd.InputStream(
+                        device=target_index,
+                        samplerate=native_sr,
+                        channels=1,
+                        dtype="float32",
+                        blocksize=block_size,
+                        callback=input_callback,
+                    )
+                    used_sr = native_sr
+
+                self._sample_rate = used_sr
+
+                # 2. Output stream (agar loopback so'ralgan bo'lsa)
+                if self._enable_loopback:
+                    try:
+                        self._output_stream = sd.OutputStream(
+                            samplerate=used_sr,
+                            channels=1,
+                            dtype="float32",
+                            blocksize=block_size,
+                            callback=output_callback,
+                        )
+                        self._output_stream.start()
+                    except Exception as e_out:
+                        logger.warning(f"[RealtimeMonitor] Loopback output stream ochilmadi: {e_out}. Loopback o'chirildi.")
+                        self._output_stream = None
+                        self._enable_loopback = False
+
+                self._input_stream.start()
+                self._is_active = True
+
+                # 30 soniyalik avtomatik xavfsizlik to'xtatuvchisi (watchdog)
+                if self._watchdog_timer:
+                    self._watchdog_timer.cancel()
+                self._watchdog_timer = threading.Timer(30.0, self.stop)
+                self._watchdog_timer.daemon = True
+                self._watchdog_timer.start()
+
+                logger.info(
+                    f"[RealtimeMonitor] Mikrofon monitoringi boshlandi: '{dev_name}' "
+                    f"(SR: {used_sr}Hz, Loopback: {self._enable_loopback})"
+                )
+
+                return {
+                    "ok": True,
+                    "status": "running",
+                    "device_name": dev_name,
+                    "device_id": self._device_id,
+                    "sample_rate": used_sr,
+                    "loopback": self._enable_loopback,
+                    "message": "Mikrofon monitoringi faollashtirildi",
+                }
+
+            except Exception as e_start:
+                logger.error(f"[RealtimeMonitor] Stream boshlashda apparat xatoligi: {e_start}")
+                self._stop_internal()
+                err_str = str(e_start)
+                if "busy" in err_str.lower() or "in use" in err_str.lower():
+                    msg = "Mikrofon boshqa dastur tomonidan band qilingan."
+                elif "permission" in err_str.lower() or "denied" in err_str.lower():
+                    msg = "Mikrofon ruxsati berilmagan."
+                else:
+                    msg = f"Mikrofonni ochib bo'lmadi: {err_str}"
+                return {
+                    "ok": False,
+                    "status": "error",
+                    "device_name": dev_name,
+                    "message": msg,
+                    "error": err_str,
+                }
+
+    def _stop_internal(self) -> None:
+        self._is_active = False
+        if self._watchdog_timer:
+            try:
+                self._watchdog_timer.cancel()
+            except Exception:
+                pass
+            self._watchdog_timer = None
+
+        if self._input_stream:
+            try:
+                self._input_stream.stop()
+                self._input_stream.close()
+            except Exception:
+                pass
+            self._input_stream = None
+
+        if self._output_stream:
+            try:
+                self._output_stream.stop()
+                self._output_stream.close()
+            except Exception:
+                pass
+            self._output_stream = None
+
+        while not self._loopback_queue.empty():
+            try:
+                self._loopback_queue.get_nowait()
+            except Exception:
+                pass
+
+        self._current_status = "To'xtatilgan"
+        self._current_level = 0.0
+
+    def stop(self) -> Dict[str, Any]:
+        with self._stream_lock:
+            self._stop_internal()
+            logger.info("[RealtimeMonitor] Mikrofon monitoringi to'xtatildi")
+            if self._broadcast_cb:
+                try:
+                    self._broadcast_cb({
+                        "rms": 0.0,
+                        "peak": 0.0,
+                        "level": 0.0,
+                        "status": "To'xtatilgan",
+                        "device_name": self._device_name,
+                        "device_id": self._device_id,
+                        "loopback": False,
+                        "stopped": True,
+                    })
+                except Exception:
+                    pass
+            return {
+                "ok": True,
+                "status": "stopped",
+                "message": "Mikrofon monitoringi to'xtatildi",
+            }
+
+    def get_status(self) -> Dict[str, Any]:
+        return {
+            "ok": True,
+            "active": self._is_active,
+            "level": self._current_level,
+            "rms": self._current_rms,
+            "peak": self._current_peak,
+            "status": self._current_status,
+            "device_name": self._device_name,
+            "device_id": self._device_id,
+            "loopback": self._enable_loopback,
+            "sample_rate": self._sample_rate,
+        }

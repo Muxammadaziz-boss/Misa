@@ -73,10 +73,18 @@ class ConversationalVoiceService:
         self._transcript_callbacks: List[Callable[[str, str], None]] = []
         self._response_callbacks: List[Callable[[str], None]] = []
         self._level_callbacks: List[Callable[[float], None]] = []
+        self._wake_callbacks: List[Callable[[Dict[str, Any]], None]] = []
 
         # Interruption va playback nazorati
         self._active_cancel_token: Optional[CancellationToken] = None
+        self._listening_deadline: float = 0.0
         self.barge_in.on_interrupted = self.handle_interruption
+
+    def add_wake_callback(self, cb: Callable[[Dict[str, Any]], None]) -> None:
+        """Uyg'otuvchi so'z aniqlanganda hodisa yuborish (WebSocket va frontend uchun)"""
+        with self._lock:
+            if cb not in self._wake_callbacks:
+                self._wake_callbacks.append(cb)
 
     def add_state_callback(self, cb: Callable[[str], None]) -> None:
         """Holat o'zgarganda xabar berish (MisaAperture uchun)"""
@@ -282,17 +290,22 @@ class ConversationalVoiceService:
                         self._emit_level(min(1.0, rms * 15.0))
 
                         # ==============================================================
-                        # 1-HOLAT: SPEAKING (Misa gapirmoqda, lekin mikrofon ochiq!)
+                        # 1-HOLAT: SPEAKING / ACKNOWLEDGING (Misa gapirmoqda)
                         # ==============================================================
+                        if self.state == VoiceServiceState.ACKNOWLEDGING:
+                            # Qisqa "Ha, eshitaman." tasdig'i vaqtida barge-in o'chiriladi (o'zini o'zi to'xtatmasligi uchun)
+                            continue
+
                         if self.voice_manager.is_speaking():
-                            # Barge-in: gapirish vaqtida "To'xta" aytilganini tekshirish
-                            if self.barge_in.check_audio_interruption(flat_chunk, threshold=0.040):
+                            # Misa to'liq gapirayotganda barge-in tekshiriladi (yuqori bo'sag'a bilan)
+                            if self.barge_in.check_audio_interruption(flat_chunk, threshold=0.075):
                                 self.handle_interruption()
                             continue
 
                         # Agar hozirgina gapirib bo'lingan bo'lsa -> Follow-up ga o'tish
                         if self.session.is_in_follow_up_window():
                             if self.state not in (VoiceServiceState.LISTENING, VoiceServiceState.THINKING):
+                                self._listening_deadline = time.time() + self.session.follow_up_window
                                 self._set_state(VoiceServiceState.LISTENING)
 
                         # ==============================================================
@@ -305,39 +318,70 @@ class ConversationalVoiceService:
                             continue
 
                         # ==============================================================
-                        # 3-HOLAT: LISTENING (Foydalanuvchi buyrug'ini qabul qilish)
+                        # 3-HOLAT: LISTENING (Foydalanuvchi buyrug'ini tinglash oynasi)
                         # ==============================================================
                         if self.state == VoiceServiceState.LISTENING:
                             vad_event, full_audio = self.vad.process_chunk(flat_chunk)
 
-                            # Agar follow-up oynasi tugagan bo'lsa va foydalanuvchi gapirmagan bo'lsa
-                            if not self.vad.is_speaking and not self.session.is_in_follow_up_window():
-                                if self.state == VoiceServiceState.LISTENING and not self.session.last_user_message:
-                                    # Standart IDLE ga qaytish
-                                    self._set_state(VoiceServiceState.IDLE)
-                                    continue
+                            # Agar foydalanuvchi gapirayotgan bo'lsa
+                            if self.vad.is_speaking:
+                                if vad_event == "speech_end" and full_audio is not None:
+                                    self._process_user_utterance(full_audio)
+                                continue
 
-                            if vad_event == "speech_end" and full_audio is not None:
-                                self._process_user_utterance(full_audio)
+                            # Jimlik davom etmoqda — muddat (deadline) tekshiriladi
+                            now = time.time()
+                            deadline = getattr(self, "_listening_deadline", 0.0)
+                            is_follow_up = self.session.is_in_follow_up_window()
+
+                            # Tinglash oynasi to'liq tugaganda (kamida 6-7 soniya) IDLE ga qaytish
+                            if now > deadline and not is_follow_up:
+                                logger.info("[VOICE] Tinglash darchasi tugadi (jimlik) -> IDLE holatiga qaytilmoqda")
+                                self._set_state(VoiceServiceState.IDLE)
+                                self.session.close_follow_up()
+                                self.wake_detector.reset()
+                                self.wake_detector._last_wake_time = time.time() + 0.5
+                                continue
+
                             continue
 
             except Exception as e:
                 logger.error(f"[VOICE] Mikrofon oqimida uzilish yoki xatolik: {e}. 1.5s dan so'ng qayta ulanadi...")
                 time.sleep(1.5)
 
-    def _on_wake_detected(self) -> None:
-        """'Misa' kalit so'zi aniqlanganda darhol bajariladigan jarayon"""
-        logger.info("[VOICE] WAKE DETECTED")
+    def _on_wake_detected(self, event_data: Optional[Dict[str, Any]] = None) -> None:
+        """'Salom Misa' kalit so'zi aniqlanganda darhol bajariladigan jarayon"""
+        detected_phrase = (event_data or {}).get("phrase", getattr(self.wake_detector, "phrase", "Salom Misa"))
+        engine_name = (event_data or {}).get("engine", self.wake_detector.get_active_engine_name())
+        score = (event_data or {}).get("score", getattr(self.wake_detector, "last_wake_score", 1.0))
+
+        logger.info(f"[VOICE] WAKE DETECTED: '{detected_phrase}' via {engine_name} (score={score:.2f})")
         logger.info("[VOICE] ACK START")
         self._set_state(VoiceServiceState.WAKE_DETECTED)
         self.session.on_wake_word_activated()
 
+        # Wake callback tinglovchilariga (WebSocket / frontend) hodisani yuborish
+        wake_payload = {
+            "phrase": detected_phrase,
+            "engine": engine_name,
+            "score": float(score),
+            "timestamp": time.time()
+        }
+        with self._lock:
+            w_cbs = list(self._wake_callbacks)
+        for cb in w_cbs:
+            try:
+                cb(wake_payload)
+            except Exception as e:
+                logger.debug(f"Wake callback xatosi: {e}")
+
         self._set_state(VoiceServiceState.ACKNOWLEDGING)
+        self.wake_detector.reset()
 
         # Tezkor lokal javob ("Ha, eshitaman.")
         ack_phrase = "Ha, eshitaman."
         self._emit_response(ack_phrase)
-        self._emit_transcript("Misa", sender="user")
+        self._emit_transcript(detected_phrase, sender="user")
 
         def _on_ack_start():
             logger.info("[VOICE] ACK PLAYING")
@@ -345,7 +389,12 @@ class ConversationalVoiceService:
         def _after_ack(interrupted: bool):
             logger.info(f"[VOICE] ACK COMPLETE (interrupted={interrupted})")
             if not interrupted and self._is_running:
+                # Karnay ovozi mikrofon buferida qolmasligi uchun tozalash va 1.2s cooldown
+                self.wake_detector.reset()
+                self.wake_detector._last_wake_time = time.time() + 1.2
                 self.vad.reset()
+                # Foydalanuvchi gapirishi uchun 7 soniyalik to'liq darcha ochamiz
+                self._listening_deadline = time.time() + 7.0
                 self._set_state(VoiceServiceState.LISTENING)
 
         logger.info("[VOICE] ACK TTS CREATED")
@@ -429,17 +478,24 @@ class ConversationalVoiceService:
         except Exception as e:
             logger.debug(f"CommandDispatcher tekshirishida ogohlantirish: {e}")
 
-        # 2-qadam: Agar mahalliy buyruq bo'lmasa -> ReAct Agent / Misa AI orqali hal qilish
+        # 2-qadam: Agar mahalliy buyruq bo'lmasa -> Yagona Unified Command Pipeline (execute_command_pipeline / ai_savol_yuborish)
         if not response_text:
             try:
-                import main
-                if hasattr(main, "agent_pipeline_run"):
-                    response_text = main.agent_pipeline_run(user_query)
-                elif hasattr(main, "ai_savol_berish"):
-                    response_text = main.ai_savol_berish(user_query)
+                from core.api_server import execute_command_pipeline, get_current_user_name, get_current_voice_type
+                user_name = get_current_user_name()
+                voice_type = self.voice_id or get_current_voice_type()
+                response_text = execute_command_pipeline(user_query, user=user_name, ovoz=voice_type, mode="ask")
             except Exception as e:
-                logger.error(f"Misa AI orqali javob olishda xatolik: {e}")
-                response_text = "Kechirasiz, so'rovingizni qayta ishlashda xatolik yuz berdi."
+                logger.error(f"Unified pipeline orqali javob olishda xatolik: {e}")
+                try:
+                    from core.ai_engine import ai_savol_yuborish
+                    res = ai_savol_yuborish(user_query)
+                    if isinstance(res, dict):
+                        response_text = res.get("response") or res.get("javob") or str(res)
+                    elif res:
+                        response_text = str(res)
+                except Exception as e2:
+                    logger.error(f"ai_savol_yuborish xatosi: {e2}")
 
         if not response_text:
             response_text = "Tushundim, buyruq qabul qilindi."
@@ -459,13 +515,20 @@ class ConversationalVoiceService:
         self._set_state(VoiceServiceState.SPEAKING)
 
         def _on_speech_finished(interrupted: bool):
+            # Karnay ovozi mikrofon buferida qolmasligi uchun tozalash va 1.2s cooldown
+            self.wake_detector.reset()
+            self.wake_detector._last_wake_time = time.time() + 1.2
+            self.vad.reset()
+
             if interrupted:
                 self._set_state(VoiceServiceState.INTERRUPTED)
                 time.sleep(0.2)
+                self._listening_deadline = time.time() + 6.0
                 self._set_state(VoiceServiceState.LISTENING)
             else:
                 # Nutq tugadi -> Follow-up oynasi ochiladi!
                 self.session.on_assistant_finished_speaking()
+                self._listening_deadline = time.time() + self.session.follow_up_window
                 self._set_state(VoiceServiceState.LISTENING)
 
         self.voice_manager.speak(

@@ -242,19 +242,20 @@ def _web_search(query: str, platform: str = "google") -> dict:
         except Exception:
             pass
 
-        # 5. Natija topilmadi — brauzerni OCHMA!
-        # Agent o'z AI bilimidan javob bersin (kamida 70% ishonchlilik mezoni bilan)
+        # 5. Natija topilmadi
         return {
-            "message": "Internetda aniq javob topilmadi. O'z bilimingdan javob ber (kamida 70% aniqlik talab etiladi).",
             "no_results": True,
+            "query": query,
+            "message": f"'{query}' bo'yicha internetdan to'g'ridan-to'g'ri natija topilmadi.",
         }
 
     except Exception as e:
-        # API xato — Agent o'zi javob bersin
+        # API xato
         return {
-            "message": f"Qidiruv API ishlamadi. O'z bilimingdan javob ber (kamida 70% aniqlik mezoniga amal qil).",
-            "error": str(e),
             "no_results": True,
+            "error": str(e),
+            "query": query,
+            "message": f"Internet qidiruvida xatolik yuz berdi: {e}",
         }
 
 

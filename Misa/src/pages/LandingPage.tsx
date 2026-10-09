@@ -16,6 +16,7 @@ import {
 } from "../components/icons/Icons";
 import {
   backendService,
+  unwrapCleanResponse,
   VoiceState,
   BackendStatus,
   SystemTelemetry,
@@ -196,6 +197,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         setAssistantResponse(data.text);
       }
     });
+    const unsubWake = backendService.onWakeWordDetected((data) => {
+      setUserTranscript(data.phrase || "Salom Misa");
+      setVoiceState("wake_detected");
+      setOrbState("wake_detected");
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {}
+      }
+    });
+    const unsubAudioLevel = backendService.onAudioLevel((data) => {
+      if (data && typeof data.level === "number") {
+        setAudioLevel(data.level);
+      }
+    });
     const unsubOrb = backendService.onOrbStateChange((ev) => {
       setOrbState(ev.state as OrbState);
     });
@@ -282,6 +298,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
     return () => {
       unsubVoice();
+      unsubWake();
+      unsubAudioLevel();
       unsubStatus();
       unsubResp();
       unsubTranscript();
@@ -519,7 +537,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     try {
       // Backendga { speak: false } yuboriladi, shunda backend o'zi alohida gapirib 2 marta takrorlanmaydi
       const res = await backendService.sendMessage(fullQuery, { speak: false, image: imageToSend });
-      const replyText = res.reply || "Buyruq bajarildi.";
+      const rawReply = res.reply || res.response || "Buyruq bajarildi.";
+      const replyText = unwrapCleanResponse(rawReply);
       setAssistantResponse(replyText);
       setIsProcessing(false);
 
@@ -552,9 +571,27 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     }
     isStoppingRef.current = false;
     isSecretaryModeRef.current = true;
-    isListeningRef.current = true;
     activeTranscriptRef.current = "";
 
+    // 1. Agar Python backend online bo'lsa, mikrofonni faqat Python ConversationalVoiceService boshqaradi.
+    // Brauzer SpeechRecognition yoki getUserMedia mutlaqo ochilmaydi — mikrofon to'qnashuvining oldi olinadi.
+    if (backendStatus.status === "online") {
+      stopAudioMonitor();
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {}
+      }
+      isListeningRef.current = true;
+      const started = await backendService.startVoice();
+      if (!started) {
+        isListeningRef.current = false;
+      }
+      return;
+    }
+
+    // 2. Aks holda (backend offline bo'lganda), brauzer ichki SpeechRecognition orqali zaxira tinglash
+    isListeningRef.current = true;
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
@@ -692,7 +729,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const handleToggleVoice = async () => {
     setMicError(null);
 
-    if (isListeningRef.current || (voiceState as string) === "listening") {
+    if (isListeningRef.current || (voiceState as string) === "listening" || (voiceState as string) === "wake_detected") {
       isStoppingRef.current = true;
       isSecretaryModeRef.current = false;
       isListeningRef.current = false;
@@ -1295,7 +1332,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
             {assistantResponse ? (
               <div style={{ fontSize: "13.5px", color: "#F5F0FF", lineHeight: 1.6 }}>
-                <MarkdownView content={assistantResponse} />
+                <MarkdownView content={unwrapCleanResponse(assistantResponse)} />
               </div>
             ) : (
               <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>

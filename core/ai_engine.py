@@ -137,7 +137,7 @@ MUHIM QOIDALAR:
    "farg'onada hav" = "farg'onada havo qanday"
    Sen AQLLI bo'l — chala gapni o'zing to'ldirib tushun!
 5. Xato yozilgan yoki noto'g'ri eshitilgan so'zlarni ham tushunishga harakat qil.
-6. HECH QACHON inglizcha fikrlash jarayonini (reasoning, 'The user is asking...', 'I should...') foydalanuvchiga matn qilib ko'rsatma! Faqat toza o'zbekcha yakuniy javob ber.
+6. HECH QACHON inglizcha fikrlash jarayonini (reasoning, 'The user is asking...', 'I should...') VA ICHKI QOIDALARNI (aniqlik foizlari, mezonlar, prompt ko'rsatmalari) foydalanuvchiga matn qilib ko'rsatma! Faqat toza va samimiy o'zbekcha yakuniy javob ber.
 7. INTERNETDAN QIDIRUV VA 70% ANQLIK MEZONI:
    Foydalanuvchi so'ragan har qanday ma'lumot, yangilik, narx, ob-havo, atama yoki fakt bo'yicha erkin internetdan izlashing mumkin.
    Taqdim etilayotgan har qanday ma'lumotning ishonchliligi va to'g'riligi kamida 70% bo'lishi SHART!
@@ -429,61 +429,49 @@ def _openrouter_yuborish(matn, system_prompt=None):
 
 def _javob_tahlil(ai_text):
     """AI javobini tahlil qilish (mustahkam himoya va tiklash bilan)"""
+    from core.intelligence.text_cleaner import extract_clean_response_text
     javob = _json_ajratish(ai_text)
-    
-    if javob:
+
+    if javob and isinstance(javob, dict):
         logging.info(f"AI natija: type={javob.get('type')}, intent={javob.get('intent', '-')}")
+        if "response" in javob:
+            javob["response"] = extract_clean_response_text(javob["response"])
         return javob
     else:
-        # 1. Qisman uzilib qolgan JSON dan 'response' matnini chiqarib olish
-        import re
-        resp_match = re.search(r'"response"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)', ai_text)
-        if resp_match:
-            clean_resp = resp_match.group(1).replace('\\"', '"').replace('\\n', '\n').strip()
-            if clean_resp:
-                return {"type": "answer", "response": clean_resp}
+        # Har qanday uzilib qolgan yoki xom JSON dan toza inson matnini ajratib olish
+        clean_resp = extract_clean_response_text(ai_text)
+        if clean_resp:
+            return {"type": "answer", "response": clean_resp}
 
-        # 2. Agar matnda JSON belgilari bo'lsa ham foydali matn qismini tozalab olish
-        tozalangan = re.sub(r'[{}\[\]"]', ' ', ai_text)
-        tozalangan = re.sub(r'\b(type|response|intent|params|answer)\b\s*:\s*', ' ', tozalangan)
-        tozalangan = re.sub(r'\s+', ' ', tozalangan).strip()
-        if len(tozalangan) > 15:
-            return {"type": "answer", "response": tozalangan}
-
-        # 3. Agar haqiqatdan ham foydali matn topilmasa
-        if ai_text.strip().startswith("{"):
-            logging.warning(f"Buzilgan JSON: {ai_text[:100]}")
-            return {"type": "answer", "response": "Kechirasiz, javobni tayyorlashda xatolik bo'ldi. Qaytadan urinib ko'ring."}
-        
-        logging.warning(f"JSON topilmadi, oddiy matn: {ai_text[:100]}")
-        return {"type": "answer", "response": ai_text}
+        logging.warning(f"Foydali matn topilmadi: {ai_text[:100]}")
+        return {"type": "answer", "response": "Kechirasiz, javobni tayyorlashda xatolik bo'ldi. Qaytadan urinib ko'ring."}
 
 
 def _json_ajratish(matn):
-    """AI javobidan JSON ni ajratib olish (ichma-ich {} ni qo'llab-quvvatlaydi)"""
+    """AI javobidan JSON ni ajratib olish (ichma-ich {} va strict=False ni qo'llab-quvvatlaydi)"""
     matn = matn.strip()
-    
+
     # To'g'ridan-to'g'ri JSON
     if matn.startswith("{"):
         try:
-            return json.loads(matn)
+            return json.loads(matn, strict=False)
         except json.JSONDecodeError:
             pass
-    
+
     # ```json ... ```
     if "```json" in matn:
         try:
-            return json.loads(matn.split("```json")[1].split("```")[0].strip())
+            return json.loads(matn.split("```json")[1].split("```")[0].strip(), strict=False)
         except (IndexError, json.JSONDecodeError):
             pass
-    
+
     # ``` ... ```
     if "```" in matn:
         try:
-            return json.loads(matn.split("```")[1].split("```")[0].strip())
+            return json.loads(matn.split("```")[1].split("```")[0].strip(), strict=False)
         except (IndexError, json.JSONDecodeError):
             pass
-    
+
     # Ichma-ich {} ni qo'llab-quvvatlovchi qidiruv
     start = matn.find("{")
     if start != -1:
@@ -495,10 +483,10 @@ def _json_ajratish(matn):
                 depth -= 1
                 if depth == 0:
                     try:
-                        return json.loads(matn[start:i+1])
+                        return json.loads(matn[start:i+1], strict=False)
                     except json.JSONDecodeError:
                         break
-    
+
     return None
 
 

@@ -36,20 +36,20 @@ def _extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
     # 1. To'g'ridan-to'g'ri JSON
     if cleaned.startswith("{") and cleaned.endswith("}"):
         try:
-            return json.loads(cleaned)
+            return json.loads(cleaned, strict=False)
         except json.JSONDecodeError:
             pass
 
     # 2. Markdown ```json ... ``` bloklari
     if "```json" in cleaned:
         try:
-            return json.loads(cleaned.split("```json")[1].split("```")[0].strip())
+            return json.loads(cleaned.split("```json")[1].split("```")[0].strip(), strict=False)
         except (IndexError, json.JSONDecodeError):
             pass
 
     if "```" in cleaned:
         try:
-            return json.loads(cleaned.split("```")[1].split("```")[0].strip())
+            return json.loads(cleaned.split("```")[1].split("```")[0].strip(), strict=False)
         except (IndexError, json.JSONDecodeError):
             pass
 
@@ -64,7 +64,7 @@ def _extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
                 depth -= 1
                 if depth == 0:
                     try:
-                        return json.loads(cleaned[start:i+1])
+                        return json.loads(cleaned[start:i+1], strict=False)
                     except json.JSONDecodeError:
                         break
     return None
@@ -360,12 +360,14 @@ class OpenAICompatibleProvider(LLMProvider):
             )
 
         # 2. JSON ichki tuzilmani tahlil qilish (Misa Legacy & Prompted format)
+        from core.intelligence.text_cleaner import extract_clean_response_text
         extracted = _extract_json_from_text(raw_text)
         if extracted and isinstance(extracted, dict):
             resp_type = extracted.get("type", "answer")
             intent = extracted.get("intent")
             params = extracted.get("params") or {}
-            content = extracted.get("response") or extracted.get("question")
+            raw_c = extracted.get("response") or extracted.get("question")
+            content = extract_clean_response_text(raw_c)
             if not content:
                 if resp_type == "command" and intent:
                     content = f"'{intent}' buyrug'i bajarilmoqda..."
@@ -393,8 +395,10 @@ class OpenAICompatibleProvider(LLMProvider):
             logger.warning(f"[{self._name}] Model ({model}) ichki inglizcha fikrlashni chiqardi. Filtrlanyapti.")
             raw_text = "So'rovingiz tushunildi. Natijani aniqlashtiryapman..."
 
+        clean_content = extract_clean_response_text(raw_text)
+
         # Agar javob bo'sh bo'lsa (masalan model barcha tokenlarni reasoning da sarflagan yoki uzilib qolgan)
-        if not raw_text.strip():
+        if not clean_content.strip():
             raise MalformedResponseError(
                 f"Provayder '{self._name}' ({model}) dan bo'sh javob olindi",
                 provider=self._name,
@@ -405,7 +409,7 @@ class OpenAICompatibleProvider(LLMProvider):
             provider=self._name,
             model=model,
             type="answer",
-            content=raw_text,
+            content=clean_content,
             usage=usage,
             metadata={"reasoning": reasoning_text if reasoning_text else None},
             raw_text=raw_text,
