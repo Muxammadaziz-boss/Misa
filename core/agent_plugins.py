@@ -170,11 +170,18 @@ class PluginManager:
                 cmd_template = config.get("command", "")
                 
                 def cmd_runner(cmd_tpl=cmd_template, **kwargs):
-                    cmd = cmd_tpl
-                    for key, value in kwargs.items():
-                        cmd = cmd.replace(f"{{{key}}}", shlex.quote(str(value)))
-                    result = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=10)
-                    return {"message": result.stdout[:500], "returncode": result.returncode}
+                    try:
+                        args = shlex.split(cmd_tpl)
+                        resolved_args = []
+                        for token in args:
+                            resolved_token = token
+                            for key, value in kwargs.items():
+                                resolved_token = resolved_token.replace(f"{{{key}}}", str(value))
+                            resolved_args.append(resolved_token)
+                        result = subprocess.run(resolved_args, shell=False, capture_output=True, text=True, timeout=10)
+                        return {"message": (result.stdout or result.stderr)[:500], "returncode": result.returncode}
+                    except Exception as err:
+                        return {"error": str(err), "returncode": -1}
                 
                 tool = Tool(name=name, description=desc, parameters=params,
                            function=cmd_runner, category=category)

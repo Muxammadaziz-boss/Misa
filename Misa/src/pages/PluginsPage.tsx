@@ -573,8 +573,24 @@ export const PluginsPage: React.FC<PluginsPageProps> = ({ onNavigateHome }) => {
               </svg>
             </div>
             <span style={{ fontSize: "15px", fontWeight: 600, color: "#F1F5F9" }}>Plaginlar yuklanmadi</span>
-            <span style={{ fontSize: "13px", color: "#94A3B8", maxWidth: "380px", lineHeight: 1.5 }}>{loadError}. Backend server ishga tushganligini tekshiring.</span>
-            <button onClick={() => fetchPlugins()} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "9px 18px", borderRadius: "8px", border: "none", background: "#10B981", color: "#fff", fontSize: "13px", fontWeight: 500, cursor: "pointer" }}>
+            <button
+              onClick={() => fetchPlugins()}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "9px 18px",
+                borderRadius: "10px",
+                border: "1px solid rgba(192, 76, 253, 0.45)",
+                background: "linear-gradient(135deg, rgba(147, 3, 197, 0.4) 0%, rgba(192, 76, 253, 0.3) 100%)",
+                color: "#FFFFFF",
+                fontSize: "13px",
+                fontWeight: 600,
+                cursor: "pointer",
+                boxShadow: "0 2px 12px rgba(147, 3, 197, 0.3)",
+                transition: "all 0.2s ease",
+              }}
+            >
               Qayta yuklash
             </button>
           </div>

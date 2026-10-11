@@ -35,13 +35,17 @@ ovoz_turi.txt
 buyruqlar_tarixi.txt
 eslatmalar.txt
 data/*.json
+core/config.json
 
 # Arxiv va vaqtinchalik
 *.rar
 *.zip
-!release/**/*.zip
 *.tmp
 *.mp3
+*.pth
+*.pt
+*.onnx
+*.index
 output/
 scratch/
 logos/

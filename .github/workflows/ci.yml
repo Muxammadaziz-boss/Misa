@@ -32,11 +32,11 @@ jobs:
 
       - name: Lint with flake8
         run: |
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=.git,__pycache__,.venv,release,dist,Misa
 
       - name: Run Backend Test Suite
         run: |
-          python -m unittest tests/test_intelligence_core.py tests/test_e2e_lifecycle.py tests/test_windows_qa.py tests/test_stress.py tests/test_logging.py tests/test_security_api.py tests/test_account_api.py tests/test_plugins_api.py tests/test_scheduler_api.py tests/test_memory_api.py tests/test_commands_api.py
+          python -m unittest tests/test_intelligence_core.py tests/test_e2e_lifecycle.py tests/test_windows_qa.py tests/test_stress.py tests/test_logging.py tests/test_security_api.py tests/test_account_api.py tests/test_plugins_api.py tests/test_scheduler_api.py tests/test_memory_api.py tests/test_commands_api.py tests/test_v9_voice_wakeword.py
 
   frontend-test-and-build:
     name: Frontend Test & Build (Node 20)

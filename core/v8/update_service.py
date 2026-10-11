@@ -30,7 +30,7 @@ DEFAULT_TRUSTED_PUBLIC_KEY = "b4be839fd62657c0e786e1a2ad590c05c45c511371d041137c
 # Default update repository / manifest endpoints
 DEFAULT_GITHUB_OWNER = "Muxammadaziz-boss"
 DEFAULT_GITHUB_REPO = "Misa"
-DEFAULT_MANIFEST_URL = f"https://raw.githubusercontent.com/{DEFAULT_GITHUB_OWNER}/{DEFAULT_GITHUB_REPO}/main/release/v9.0.0/version_manifest.json"
+DEFAULT_MANIFEST_URL = f"https://raw.githubusercontent.com/{DEFAULT_GITHUB_OWNER}/{DEFAULT_GITHUB_REPO}/main/release/v9.0.1/version_manifest.json"
 
 # Auto-check minimum interval: 6 hours (21600 seconds)
 MIN_AUTO_CHECK_INTERVAL_SEC = 6 * 3600

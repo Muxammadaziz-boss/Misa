@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import {
   HomeIcon,
-  MicIcon,
   ChatIcon,
   CommandsIcon,
   MemoryIcon,
@@ -36,7 +35,6 @@ export const NAV_SECTIONS: NavSectionDef[] = [
     items: [
       { id: "home", path: "/", label: "Home", icon: HomeIcon },
       { id: "chat", path: "/chat", label: "AI Suhbat", icon: ChatIcon },
-      { id: "voice", path: "/voice", label: "Ovozli muloqot", icon: MicIcon },
     ],
   },
   {

@@ -47,8 +47,13 @@ export const VoicePage: React.FC<VoicePageProps> = ({
         setLastTranscript(data.text);
       }
     });
+    const unsubWake = backendService.onWakeWordDetected((data) => {
+      setUserTranscript(data.phrase || "Salom Misa");
+      setVoiceState("wake_detected");
+    });
     return () => {
       unsubVoice();
+      unsubWake();
       unsubStatus();
       unsubResp();
       unsubTranscript();
@@ -56,7 +61,7 @@ export const VoicePage: React.FC<VoicePageProps> = ({
   }, []);
 
   const handleToggleVoice = async () => {
-    if (voiceState === "listening") {
+    if (voiceState === "listening" || voiceState === "wake_detected") {
       await backendService.stopVoice();
     } else {
       setUserTranscript("");
@@ -80,6 +85,10 @@ export const VoicePage: React.FC<VoicePageProps> = ({
 
   const getStateDescription = () => {
     switch (effectiveOrbState) {
+      case "wake_detected":
+        return "Misa uyg'ondi! Sizni tinglamoqda...";
+      case "acknowledging":
+        return "Ha, eshitaman...";
       case "listening":
         return "Sizni eshitmoqdaman... Gapiring";
       case "thinking":

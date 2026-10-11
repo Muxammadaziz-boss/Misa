@@ -387,7 +387,7 @@ class CommandDispatcher:
         """Maxsus buyruq handlerini ro'yxatdan o'tkazish"""
         self._custom_handlers[intent] = handler
 
-    def dispatch_local(self, text: str) -> Tuple[bool, str]:
+    def dispatch_local(self, text: str, user_name: Optional[str] = None) -> Tuple[bool, str]:
         """
         Matn mahalliy tizim buyrug'i ekanligini tekshirish va bajarish.
         Agar mahalliy buyruq yoki tizim so'rovi bo'lsa: (True, "natija xabari")
@@ -400,13 +400,69 @@ class CommandDispatcher:
         has_question = is_question_phrase(clean_text)
 
         # -------------------------------------------------------------
+        # 0. Foydalanuvchi va Misa identifikatsiyasi (Identity queries)
+        # -------------------------------------------------------------
+        clean_no_punct = re.sub(r"[?!.,;:_`*~#]+", "", clean_text).strip()
+        user_display = (user_name or "").strip()
+        if not user_display or user_display.lower() in ["user", "foydalanuvchi", "none"]:
+            try:
+                from config import get_config
+                cfg_user = get_config("user_name")
+                if cfg_user:
+                    user_display = str(cfg_user).strip()
+            except Exception:
+                pass
+        if not user_display or user_display.lower() in ["user", "foydalanuvchi", "none"]:
+            user_display = "Ustoz"
+
+        # -------------------------------------------------------------
+        # 0.1. Misa chaqiruv so'zi (Wake-word / Call prefix: "Misa ...")
+        # -------------------------------------------------------------
+        misa_call_match = re.match(r"^(?:(?:salom|assalomu\s+alaykum|hey|ey|o['']?y|hoy|qani|iltimos)\s+)?(?:misa|mikasa|micasa|миса|микаса|мекаса|mekasa)(?:[,\s:!.]*|$)", clean_text, re.IGNORECASE)
+        if misa_call_match:
+            sub_command = clean_text[misa_call_match.end():].strip()
+            if not sub_command or len(sub_command) < 2:
+                return True, f"Labbay, {user_display}! Sizni tinglayapman, marhamat buyuring."
+            # Misa so'zini olib tashlab, qolgan buyruqni tahlil qilish
+            clean_text = sub_command
+            clean_no_punct = re.sub(r"[?!.,;:_`*~#]+", "", clean_text).strip()
+            has_question = is_question_phrase(clean_text)
+
+        if clean_no_punct in [
+            "men kimman", "men kimmam", "men kim", "men haqimda ayt", "men haqimda",
+            "ismim nima", "mening ismim nima", "otim nima", "mening otim nima", "ismimni ayt"
+        ] or re.match(r"^(?:men\s+kimman|mening\s+ismim\s+nima|ismim\s+nima)\??$", clean_text):
+            return True, f"Siz — **{user_display}**siz. Misa AI tizimida shaxsiy profilingiz faol holatda."
+
+        if clean_no_punct in [
+            "sen kimsan", "sen kim", "kimsan", "o'zing haqingda ayt", "ozing haqingda ayt",
+            "misa kimsan", "misa nima", "sen nimasan", "o'zingni tanishtir", "ozingni tanishtir"
+        ] or re.match(r"^(?:sen\s+kimsan|misa\s+kimsan|kimsan)\??$", clean_text):
+            return True, (
+                "Men **Misa AI** — sizning shaxsiy sun'iy intellekt va avtonom kompyuter yordamchingizman.\n\n"
+                "Men quyidagi asosiy vazifalarni bajara olaman:\n"
+                "• 💻 Dasturlarni ochish va boshqarish (Telegram, Chrome, VS Code, Discord va b.)\n"
+                "• 📊 Tizim parametrlarini tahlil qilish (CPU, GPU, RAM, Disk, batareya, vaqt va sana)\n"
+                "• 🎵 Ovoz va musiqa boshqaruvi\n"
+                "• ⏰ Vazifalar va eslatmalarni rejalashtirish\n"
+                "• 📱 Telegram orqali masofaviy boshqaruv"
+            )
+
+        # -------------------------------------------------------------
         # 1. Vaqt va sana so'rovlari
         # -------------------------------------------------------------
-        if clean_text in ["vaqt", "soat", "vaqt necha", "soat necha", "vaqtni ayt", "hozir soat necha"]:
+        if clean_no_punct in [
+            "vaqt", "soat", "vaqt necha", "soat necha", "vaqt nechi", "soat nechi",
+            "soat nechchi", "vaqt nechchi", "vaqtni ayt", "soatni ayt", "hozir soat necha",
+            "hozir soat nechi", "hozirgi vaqt", "hozir vaqt nechi", "hozir soat nechchi"
+        ] or re.search(r"^(?:hozir\s+)?(?:soat|vaqt)\s*(?:necha|nechi|nechchi|qancha)?\??$", clean_no_punct):
             now = datetime.datetime.now()
             return True, f"Hozirgi vaqt: {now.strftime('%H:%M')}"
 
-        if clean_text in ["sana", "bugungi sana", "bugun qaysi kun", "qaysi sana", "bugun sana necha"]:
+        if clean_no_punct in [
+            "sana", "bugungi sana", "bugun qaysi kun", "qaysi sana", "bugun sana necha",
+            "bugun sana nechi", "bugungi kun"
+        ] or re.search(r"^(?:bugun(?:gi)?\s+)?(?:sana|kun)\s*(?:necha|nechi|qaysi)?\??$", clean_no_punct):
             now = datetime.datetime.now()
             oylar = [
                 "yanvar", "fevral", "mart", "aprel", "may", "iyun",
@@ -566,8 +622,24 @@ class CommandDispatcher:
         ])
 
         if not is_comparative:
+            # Jami nechta ilova bor / qanday dasturlar bor so'rovi
+            total_apps_match = re.search(
+                r"(?:menda|kompyuterimda|kompyuterda|bu\s+qurilmada|pcda|tizimda)?\s*(?:jami\s+)?(?:nechta|qanday|qanaqa|qaysi)\s*(?:ilova|dastur|programmala?r?)\s*(?:bor|mavjud|o['']rnatilgan)\??$",
+                clean_text
+            )
+            if total_apps_match:
+                try:
+                    from core.app_detector import get_app_detector
+                    detector = get_app_detector()
+                    inv = detector.get_realtime_inventory_summary()
+                    items = [line for line in inv.split("\n") if line.strip().startswith("•")]
+                    count = len(items)
+                    return True, f"📊 Kompyuteringizda aniqlangan asosiy dasturlar (jami {count} ta):\n\n{inv}"
+                except Exception as e:
+                    logger.warning(f"Ilovalar sonini aniqlashda xatolik: {e}")
+
             app_inquiry_match = re.search(
-                r"(?:kel\s+undan\s+oldin|avval)?\s*(?:menda|kompyuterimda|kompyuterda|pcda)?\s*(telegram|tg|ayugram|kotatogram|chrome|google chrome|vs code|vscode|code|discord|brave|python|spotify|steam|cursor)\s*(?:ilovasi|dasturi)?\s*(?:bormi|brmi|bormikan|o['']rnatilganmi|ornatilganmi|mavjudmi)\s*(?:tekshir|ayt|ko['']rsat)?\??$",
+                r"(?:kel\s+undan\s+oldin|avval)?\s*(?:menda|kompyuterimda|kompyuterda|bu\s+qurilmada|pcda)?\s*(telegram|tg|ayugram|kotatogram|chrome|google chrome|vs code|vscode|code|discord|brave|python|spotify|steam|cursor|pycharm|opencode|webstorm|sublime|notepad\+\+|notepad)\s*(?:ilovasi|dasturi)?\s*(?:bormi|brmi|bormikan|o['']rnatilganmi|ornatilganmi|mavjudmi)\s*(?:tekshir|ayt|ko['']rsat)?\??$",
                 clean_text
             )
             if app_inquiry_match:
@@ -604,8 +676,11 @@ class CommandDispatcher:
                     try:
                         if path and os.path.exists(path) and hasattr(os, "startfile"):
                             os.startfile(path)
+                        elif hasattr(os, "startfile"):
+                            os.startfile("tg:")
                         else:
-                            os.system("start tg:")
+                            import subprocess
+                            subprocess.Popen(["cmd", "/c", "start", "tg:"], shell=False)
                         return True, f"✅ {title} ochilmoqda."
                     except Exception as e:
                         return True, f"Telegramni ochishda xatolik: {e}"
@@ -634,7 +709,8 @@ class CommandDispatcher:
                     except Exception:
                         pass
                 try:
-                    os.system("code")
+                    import subprocess
+                    subprocess.Popen(["code"], shell=False)
                     return True, "✅ VS Code ochilmoqda."
                 except Exception:
                     return True, "❌ Kompyuteringizda VS Code topilmadi."
@@ -649,7 +725,11 @@ class CommandDispatcher:
                     except Exception:
                         pass
                 try:
-                    os.system("start discord:")
+                    if hasattr(os, "startfile"):
+                        os.startfile("discord:")
+                    else:
+                        import subprocess
+                        subprocess.Popen(["cmd", "/c", "start", "discord:"], shell=False)
                     return True, "✅ Discord ochilmoqda."
                 except Exception:
                     return True, "❌ Kompyuteringizda Discord topilmadi."

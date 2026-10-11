@@ -107,9 +107,39 @@ class Sandbox:
 
         try:
             tree = ast.parse(code)
+            forbidden_modules = {
+                "os", "sys", "subprocess", "socket", "urllib", "requests", "http",
+                "shutil", "ctypes", "pty", "posix", "nt", "importlib", "pickle", "marshal"
+            }
+            forbidden_names = self.BLOCKED_FUNCTIONS | {
+                "__builtins__", "eval", "exec", "compile", "open", "getattr", "setattr", "delattr", "__import__"
+            }
+            forbidden_attrs = {
+                "__class__", "__subclasses__", "__bases__", "__globals__", "__builtins__",
+                "__code__", "__mro__", "__import__", "__loader__", "__spec__"
+            }
+
             for node in ast.walk(tree):
-                if isinstance(node, ast.Name) and node.id in self.BLOCKED_FUNCTIONS:
-                    return False, f"Xavfli funksiya: {node.id}"
+                # 1. Block dangerous names and builtins
+                if isinstance(node, ast.Name) and node.id in forbidden_names:
+                    return False, f"Xavfli funksiya yoki identifikator: {node.id}"
+                
+                # 2. Block dunder attribute escape chains
+                if isinstance(node, ast.Attribute) and node.attr in forbidden_attrs:
+                    return False, f"Xavfli dunder atribut orqali xavfsizlikni buzish: {node.attr}"
+
+                # 3. Block unauthorized imports via AST
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        mod_root = alias.name.split(".")[0]
+                        if mod_root in forbidden_modules or (self.ALLOWED_MODULES and mod_root not in self.ALLOWED_MODULES):
+                            return False, f"Ruxsat etilmagan modul importi: {alias.name}"
+
+                if isinstance(node, ast.ImportFrom):
+                    mod_root = (node.module or "").split(".")[0]
+                    if mod_root in forbidden_modules or (self.ALLOWED_MODULES and mod_root not in self.ALLOWED_MODULES):
+                        return False, f"Ruxsat etilmagan modul importi: {node.module}"
+
         except SyntaxError as e:
             return False, f"Syntax xatolik: {e}"
 

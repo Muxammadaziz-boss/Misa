@@ -180,12 +180,7 @@ class TTSManager:
         Returns:
             Audio fayl yo'li
         """
-        # 1. Silero TTS (local, tez)
-        audio_file = self.speak_silero(text)
-        if audio_file:
-            return audio_file
-        
-        # 2. Edge TTS (fallback)
+        # 1. Edge TTS (Primary - Madina/Sardor voices)
         import asyncio
         
         params = kayfiyat_params or {}
@@ -194,22 +189,39 @@ class TTSManager:
         volume = params.get("volume", "+0%")
         
         try:
-            audio_file = asyncio.run(
-                self.speak_edge(text, rate, pitch, volume)
-            )
-            return audio_file
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
             try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+            if loop.is_running():
+                # Cannot use asyncio.run if loop is running. But typically TTS runs in a separate thread.
+                # Let's use run_until_complete if possible.
+                pass # will handle below
+                
+            audio_file = None
+            try:
+                audio_file = asyncio.run(
+                    self.speak_edge(text, rate, pitch, volume)
+                )
+            except RuntimeError:
+                # Event loop is already running
+                loop = asyncio.new_event_loop()
                 audio_file = loop.run_until_complete(
                     self.speak_edge(text, rate, pitch, volume)
                 )
-            finally:
-                loop.close()
-            return audio_file
+            
+            if audio_file:
+                return audio_file
         except Exception as e:
-            logger.error(f"TTS (barcha) xatolik: {e}")
-            return ""
+            logger.warning(f"Edge TTS xatolik (fallback to Silero): {e}")
+
+        # 2. Silero TTS (Fallback, local, fast, but only female 'dilnavoz' available)
+        audio_file = self.speak_silero(text)
+        if audio_file:
+            return audio_file
+        return ""
     
     def play_audio(self, audio_file: str):
         """Audio faylni ijro etish va keyin o'chirish"""

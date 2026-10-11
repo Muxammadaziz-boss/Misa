@@ -12,7 +12,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Dict, Any, Optional, Tuple, List
 
 from core.v8.events import RemoteEventType, RemoteAuditLogger
-from core.v8.device import DeviceIdentity
+from core.v8.device import DeviceIdentity, get_current_app_version
 
 logger = logging.getLogger("core.v8.account_device")
 
@@ -71,7 +71,7 @@ class Device:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     hostname: str = ""
     platform: str = "windows"
-    agent_version: str = "9.0.0"
+    agent_version: str = field(default_factory=get_current_app_version)
     status: str = "offline"  # online, offline, standby, revoked
     created_at: float = field(default_factory=time.time)
     last_seen_at: Optional[float] = None
@@ -401,7 +401,7 @@ class AccountDeviceManager:
         name: Optional[str] = None,
         hostname: str = "",
         platform: str = "windows",
-        agent_version: str = "9.0.0",
+        agent_version: Optional[str] = None,
         status: str = "offline",
         metadata: Optional[Dict[str, Any]] = None
     ) -> Device:
@@ -409,6 +409,8 @@ class AccountDeviceManager:
         Qurilmani aniq foydalanuvchiga biriktirish va ro'yxatdan o'tkazish.
         Agar qurilma boshqa foydalanuvchiga tegishli bo'lsa, xatolik beriladi.
         """
+        if not agent_version or agent_version == "9.0.0":
+            agent_version = get_current_app_version()
         uid = str(user_id).strip()
         hw_id = str(device_id).strip()
         if not uid or not hw_id:

@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 def _extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
-    """Matn ichidan JSON obyektini xavfsiz ajratib olish (nested qavslar bilan)"""
+    """Matn ichidan JSON obyektini xavfsiz ajratib olish (nested qavslar va strict=False bilan)"""
     if not text:
         return None
     cleaned = text.strip()
@@ -24,20 +24,20 @@ def _extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
     # 1. To'g'ridan-to'g'ri JSON
     if cleaned.startswith("{") and cleaned.endswith("}"):
         try:
-            return json.loads(cleaned)
+            return json.loads(cleaned, strict=False)
         except json.JSONDecodeError:
             pass
 
     # 2. Markdown ```json ... ``` bloklari
     if "```json" in cleaned:
         try:
-            return json.loads(cleaned.split("```json")[1].split("```")[0].strip())
+            return json.loads(cleaned.split("```json")[1].split("```")[0].strip(), strict=False)
         except (IndexError, json.JSONDecodeError):
             pass
 
     if "```" in cleaned:
         try:
-            return json.loads(cleaned.split("```")[1].split("```")[0].strip())
+            return json.loads(cleaned.split("```")[1].split("```")[0].strip(), strict=False)
         except (IndexError, json.JSONDecodeError):
             pass
 
@@ -52,7 +52,7 @@ def _extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
                 depth -= 1
                 if depth == 0:
                     try:
-                        return json.loads(cleaned[start:i+1])
+                        return json.loads(cleaned[start:i+1], strict=False)
                     except json.JSONDecodeError:
                         break
 
@@ -63,12 +63,11 @@ class GeminiProvider(AIProvider):
     """Google Gemini rasmiy REST API provayderi"""
 
     DEFAULT_MODELS = [
-        "gemini-3.1-flash-lite",
-        "gemini-flash-lite-latest",
-        "gemini-3.8-flash",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-1.5-flash",
         "gemini-flash-latest",
-        "gemini-3.5-flash-lite",
-        "gemini-3.7-flash",
+        "gemini-1.5-pro",
         "gemini-pro-latest",
     ]
 
@@ -182,6 +181,11 @@ class GeminiProvider(AIProvider):
                     timeout=15
                 )
 
+                if response.status_code == 403:
+                    last_error = f"HTTP 403 Permission Denied: {response.text[:200]}"
+                    logger.warning(f"Gemini API kaliti bloklangan yoki yaroqsiz (403): {last_error}")
+                    break
+
                 if response.status_code == 429:
                     logger.warning(f"Gemini {model} kvotasi tugadi (429), keyingi modelga o'tilmoqda...")
                     continue
@@ -251,11 +255,14 @@ class GeminiProvider(AIProvider):
             "raw_length": len(text),
         }
 
+        from core.intelligence.text_cleaner import extract_clean_response_text
+
         if parsed and isinstance(parsed, dict):
             resp_type = parsed.get("type", "answer").lower()
             intent = parsed.get("intent")
             params = parsed.get("params", {})
-            content = parsed.get("response") or parsed.get("content") or parsed.get("javob") or ""
+            raw_content = parsed.get("response") or parsed.get("content") or parsed.get("javob") or ""
+            content = extract_clean_response_text(raw_content)
 
             if resp_type in ("command", "action"):
                 return AIResponse(
@@ -271,7 +278,7 @@ class GeminiProvider(AIProvider):
                     success=True
                 )
             elif resp_type == "clarification":
-                question = parsed.get("question") or content
+                question = extract_clean_response_text(parsed.get("question") or content)
                 return AIResponse(
                     provider=self.name,
                     model=model,
@@ -285,7 +292,7 @@ class GeminiProvider(AIProvider):
                     success=True
                 )
             elif resp_type == "confirmation":
-                question = parsed.get("question") or content
+                question = extract_clean_response_text(parsed.get("question") or content)
                 return AIResponse(
                     provider=self.name,
                     model=model,
@@ -303,7 +310,7 @@ class GeminiProvider(AIProvider):
                     provider=self.name,
                     model=model,
                     type="answer",
-                    content=content or str(parsed),
+                    content=content or extract_clean_response_text(text),
                     intent=intent,
                     params=params,
                     usage=usage,
@@ -312,28 +319,13 @@ class GeminiProvider(AIProvider):
                     success=True
                 )
 
-        # JSON topilmasa: toza matn javob
-        # Qisman buzilgan JSON dan response ni tiklashga urinish
-        resp_match = re.search(r'"response"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)', text)
-        if resp_match:
-            clean_resp = resp_match.group(1).replace('\\"', '"').replace('\\n', '\n').strip()
-            if clean_resp:
-                return AIResponse(
-                    provider=self.name,
-                    model=model,
-                    type="answer",
-                    content=clean_resp,
-                    usage=usage,
-                    metadata=metadata,
-                    raw_text=text,
-                    success=True
-                )
-
+        # JSON topilmasa yoki uzilib qolgan bo'lsa: toza matn javob
+        clean_text_ans = extract_clean_response_text(text)
         return AIResponse(
             provider=self.name,
             model=model,
             type="answer",
-            content=text,
+            content=clean_text_ans,
             usage=usage,
             metadata=metadata,
             raw_text=text,

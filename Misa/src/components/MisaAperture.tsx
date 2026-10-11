@@ -2,6 +2,8 @@ import React from "react";
 
 export type OrbState =
   | "idle"
+  | "wake_detected"
+  | "acknowledging"
   | "listening"
   | "thinking"
   | "planning"
@@ -56,6 +58,26 @@ export const MisaAperture: React.FC<MisaApertureProps> = ({
 
   const getStateVisuals = () => {
     switch (normState) {
+      case "wake_detected":
+        return {
+          aura: "radial-gradient(ellipse at center, rgba(78, 222, 163, 0.6) 0%, rgba(192, 76, 253, 0.3) 45%, transparent 72%)",
+          eyeColor: "#4EDEA3",
+          eyeGlow: "0 0 28px rgba(78, 222, 163, 1)",
+          smileColor: "#4EDEA3",
+          borderColor: "rgba(78, 222, 163, 0.6)",
+          badgeDot: "#4EDEA3",
+          defaultLabel: "Misa eshitmoqda!",
+        };
+      case "acknowledging":
+        return {
+          aura: "radial-gradient(ellipse at center, rgba(192, 76, 253, 0.55) 0%, rgba(78, 222, 163, 0.25) 48%, transparent 72%)",
+          eyeColor: "#F5F0FF",
+          eyeGlow: "0 0 24px rgba(232, 179, 255, 0.95)",
+          smileColor: "#4EDEA3",
+          borderColor: "rgba(192, 76, 253, 0.5)",
+          badgeDot: "#4EDEA3",
+          defaultLabel: "Javob berilmoqda...",
+        };
       case "listening":
         return {
           aura: "radial-gradient(ellipse at center, rgba(192, 76, 253, 0.5) 0%, rgba(78, 222, 163, 0.25) 45%, transparent 72%)",

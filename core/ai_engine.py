@@ -18,8 +18,15 @@ load_dotenv()
 
 
 # ========== Sozlamalar ==========
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "") or os.getenv("GEMINI_API_KEY", "")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+GOOGLE_API_KEY = (
+    os.getenv("MISA_GEMINI_API_KEY", "").strip()
+    or os.getenv("GOOGLE_API_KEY", "").strip()
+    or os.getenv("GEMINI_API_KEY", "").strip()
+)
+OPENROUTER_API_KEY = (
+    os.getenv("MISA_OPENROUTER_API_KEY", "").strip()
+    or os.getenv("OPENROUTER_API_KEY", "").strip()
+)
 OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "google/gemini-2.0-flash-exp:free")
 
 
@@ -34,13 +41,17 @@ def get_gemini_api_key(user_id: Optional[str] = None) -> str:
     except Exception:
         pass
 
-    if GOOGLE_API_KEY and str(GOOGLE_API_KEY).strip():
-        return str(GOOGLE_API_KEY).strip()
-    key = os.getenv("GEMINI_API_KEY", "").strip() or os.getenv("GOOGLE_API_KEY", "").strip()
-
+    key = (
+        os.getenv("MISA_GEMINI_API_KEY", "").strip()
+        or os.getenv("GEMINI_API_KEY", "").strip()
+        or os.getenv("GOOGLE_API_KEY", "").strip()
+    )
     if key:
         GOOGLE_API_KEY = key
         return key
+
+    if GOOGLE_API_KEY and str(GOOGLE_API_KEY).strip():
+        return str(GOOGLE_API_KEY).strip()
     try:
         cfg_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "config.json")
         if os.path.exists(cfg_path):
@@ -126,6 +137,11 @@ MUHIM QOIDALAR:
    "farg'onada hav" = "farg'onada havo qanday"
    Sen AQLLI bo'l — chala gapni o'zing to'ldirib tushun!
 5. Xato yozilgan yoki noto'g'ri eshitilgan so'zlarni ham tushunishga harakat qil.
+6. HECH QACHON inglizcha fikrlash jarayonini (reasoning, 'The user is asking...', 'I should...') VA ICHKI QOIDALARNI (aniqlik foizlari, mezonlar, prompt ko'rsatmalari) foydalanuvchiga matn qilib ko'rsatma! Faqat toza va samimiy o'zbekcha yakuniy javob ber.
+7. INTERNETDAN QIDIRUV VA 70% ANQLIK MEZONI:
+   Foydalanuvchi so'ragan har qanday ma'lumot, yangilik, narx, ob-havo, atama yoki fakt bo'yicha erkin internetdan izlashing mumkin.
+   Taqdim etilayotgan har qanday ma'lumotning ishonchliligi va to'g'riligi kamida 70% bo'lishi SHART!
+   Agar biror ma'lumotning aniqligi yoki ishonchliligi 70% dan past bo'lsa, shubhali bo'lsa yoki tasdiqlanmagan mish-mish bo'lsa, uni mutlaq haqiqat deb taqdim etma! Foydalanuvchiga buni ochiq bildir yoki faqat tekshirilgan qismini ko'rsat.
 
 VAZIFANG:
 Foydalanuvchi biron narsa aytganda, sen ikki xil javob bera olasan:
@@ -260,14 +276,14 @@ def _gemini_yuborish(matn, system_prompt=None, user_id=None):
     """Google Gemini API orqali so'rov — Google Search Grounding va Thinking Mode bilan"""
     prompt = system_prompt or SYSTEM_PROMPT
     GEMINI_MODELS = [
-        "gemini-3.1-flash-lite",
-        "gemini-flash-lite-latest",
-        "gemini-3.8-flash",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-1.5-flash",
         "gemini-flash-latest",
-        "gemini-3.5-flash-lite",
-        "gemini-3.7-flash",
+        "gemini-1.5-pro",
         "gemini-pro-latest",
     ]
+
     
     suhbat_tarixi_gemini.append({"role": "user", "parts": [{"text": matn}]})
     while len(suhbat_tarixi_gemini) > MAX_TARIX:
@@ -326,7 +342,12 @@ def _gemini_yuborish(matn, system_prompt=None, user_id=None):
                     continue
             
             data = response.json()
-            parts = data["candidates"][0]["content"]["parts"]
+            candidates = data.get("candidates") or []
+            if not candidates:
+                logging.warning(f"Gemini ({model}): candidates ro'yxati bo'sh")
+                continue
+            cand0 = candidates[0]
+            parts = cand0.get("content", {}).get("parts", [])
             ai_text = ""
             for part in parts:
                 # Agar modelning ichki o'ylash (thought) qismi bo'lsa, uni o'tkazib yuboramiz
@@ -335,9 +356,11 @@ def _gemini_yuborish(matn, system_prompt=None, user_id=None):
                 if "text" in part:
                     ai_text += part["text"]
             ai_text = ai_text.strip()
+            if not ai_text:
+                continue
             
             # Grounding metadata bormi tekshirish
-            grounding = data["candidates"][0].get("groundingMetadata", {})
+            grounding = cand0.get("groundingMetadata", {})
             if grounding:
                 logging.debug(f"Gemini ({model}): Google Search Grounding ishlatildi")
             
@@ -406,61 +429,49 @@ def _openrouter_yuborish(matn, system_prompt=None):
 
 def _javob_tahlil(ai_text):
     """AI javobini tahlil qilish (mustahkam himoya va tiklash bilan)"""
+    from core.intelligence.text_cleaner import extract_clean_response_text
     javob = _json_ajratish(ai_text)
-    
-    if javob:
+
+    if javob and isinstance(javob, dict):
         logging.info(f"AI natija: type={javob.get('type')}, intent={javob.get('intent', '-')}")
+        if "response" in javob:
+            javob["response"] = extract_clean_response_text(javob["response"])
         return javob
     else:
-        # 1. Qisman uzilib qolgan JSON dan 'response' matnini chiqarib olish
-        import re
-        resp_match = re.search(r'"response"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)', ai_text)
-        if resp_match:
-            clean_resp = resp_match.group(1).replace('\\"', '"').replace('\\n', '\n').strip()
-            if clean_resp:
-                return {"type": "answer", "response": clean_resp}
+        # Har qanday uzilib qolgan yoki xom JSON dan toza inson matnini ajratib olish
+        clean_resp = extract_clean_response_text(ai_text)
+        if clean_resp:
+            return {"type": "answer", "response": clean_resp}
 
-        # 2. Agar matnda JSON belgilari bo'lsa ham foydali matn qismini tozalab olish
-        tozalangan = re.sub(r'[{}\[\]"]', ' ', ai_text)
-        tozalangan = re.sub(r'\b(type|response|intent|params|answer)\b\s*:\s*', ' ', tozalangan)
-        tozalangan = re.sub(r'\s+', ' ', tozalangan).strip()
-        if len(tozalangan) > 15:
-            return {"type": "answer", "response": tozalangan}
-
-        # 3. Agar haqiqatdan ham foydali matn topilmasa
-        if ai_text.strip().startswith("{"):
-            logging.warning(f"Buzilgan JSON: {ai_text[:100]}")
-            return {"type": "answer", "response": "Kechirasiz, javobni tayyorlashda xatolik bo'ldi. Qaytadan urinib ko'ring."}
-        
-        logging.warning(f"JSON topilmadi, oddiy matn: {ai_text[:100]}")
-        return {"type": "answer", "response": ai_text}
+        logging.warning(f"Foydali matn topilmadi: {ai_text[:100]}")
+        return {"type": "answer", "response": "Kechirasiz, javobni tayyorlashda xatolik bo'ldi. Qaytadan urinib ko'ring."}
 
 
 def _json_ajratish(matn):
-    """AI javobidan JSON ni ajratib olish (ichma-ich {} ni qo'llab-quvvatlaydi)"""
+    """AI javobidan JSON ni ajratib olish (ichma-ich {} va strict=False ni qo'llab-quvvatlaydi)"""
     matn = matn.strip()
-    
+
     # To'g'ridan-to'g'ri JSON
     if matn.startswith("{"):
         try:
-            return json.loads(matn)
+            return json.loads(matn, strict=False)
         except json.JSONDecodeError:
             pass
-    
+
     # ```json ... ```
     if "```json" in matn:
         try:
-            return json.loads(matn.split("```json")[1].split("```")[0].strip())
+            return json.loads(matn.split("```json")[1].split("```")[0].strip(), strict=False)
         except (IndexError, json.JSONDecodeError):
             pass
-    
+
     # ``` ... ```
     if "```" in matn:
         try:
-            return json.loads(matn.split("```")[1].split("```")[0].strip())
+            return json.loads(matn.split("```")[1].split("```")[0].strip(), strict=False)
         except (IndexError, json.JSONDecodeError):
             pass
-    
+
     # Ichma-ich {} ni qo'llab-quvvatlovchi qidiruv
     start = matn.find("{")
     if start != -1:
@@ -472,15 +483,21 @@ def _json_ajratish(matn):
                 depth -= 1
                 if depth == 0:
                     try:
-                        return json.loads(matn[start:i+1])
+                        return json.loads(matn[start:i+1], strict=False)
                     except json.JSONDecodeError:
                         break
-    
+
     return None
 
 
 def ai_mavjudmi():
-    """AI tizimi ishga tayyor ekanligini tekshirish"""
+    """AI tizimi ishga tayyor ekanligini tekshirish (ko'p provayderli tizim bilan)"""
+    try:
+        from core.providers import get_provider_system
+        if get_provider_system().is_any_available():
+            return True
+    except Exception:
+        pass
     return bool(get_gemini_api_key()) or bool(OPENROUTER_API_KEY)
 
 
@@ -493,27 +510,104 @@ def suhbat_tarixini_tozalash():
 
 
 # ========== Ekran tahlili (AI Vision) ==========
-def ekran_tahlil(savol="Ekranda nima ko'rinmoqda? Qisqacha tushuntir."):
-    """Ekran screenshot olib, AI Vision orqali tahlil qilish"""
+def _capture_screen_pil():
+    """Ekrandan ishonchli screenshot olish (pyautogui va Windows GDI BitBlt fallback)"""
     try:
         import pyautogui
-        
-        # Screenshot olish
-        screenshot = pyautogui.screenshot()
+        return pyautogui.screenshot()
+    except Exception as e:
+        logging.warning(f"pyautogui screenshot ololmadi: {e}, GDI BitBlt orqali olishga urinilmoqda...")
+    
+    # Windows GDI BitBlt fallback (non-interactive / background / DWM sesiyalar uchun 100% ishlaydi)
+    try:
+        import ctypes
+        from ctypes import wintypes
+        from PIL import Image
+
+        user32 = ctypes.windll.user32
+        gdi32 = ctypes.windll.gdi32
+
+        try:
+            user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
+        w = user32.GetSystemMetrics(0)
+        h = user32.GetSystemMetrics(1)
+        if w <= 0 or h <= 0:
+            w, h = 1920, 1080
+
+        hdesktop = user32.GetDesktopWindow()
+        desktop_dc = user32.GetWindowDC(hdesktop)
+        img_dc = gdi32.CreateCompatibleDC(desktop_dc)
+        mem_bitmap = gdi32.CreateCompatibleBitmap(desktop_dc, w, h)
+        old_bmp = gdi32.SelectObject(img_dc, mem_bitmap)
+
+        SRCCOPY = 0x00CC0020
+        gdi32.BitBlt(img_dc, 0, 0, w, h, desktop_dc, 0, 0, SRCCOPY)
+
+        class BITMAPINFOHEADER(ctypes.Structure):
+            _fields_ = [
+                ('biSize', wintypes.DWORD),
+                ('biWidth', wintypes.LONG),
+                ('biHeight', wintypes.LONG),
+                ('biPlanes', wintypes.WORD),
+                ('biBitCount', wintypes.WORD),
+                ('biCompression', wintypes.DWORD),
+                ('biSizeImage', wintypes.DWORD),
+                ('biXPelsPerMeter', wintypes.LONG),
+                ('biYPelsPerMeter', wintypes.LONG),
+                ('biClrUsed', wintypes.DWORD),
+                ('biClrImportant', wintypes.DWORD)
+            ]
+
+        bmi = BITMAPINFOHEADER()
+        bmi.biSize = ctypes.sizeof(BITMAPINFOHEADER)
+        bmi.biWidth = w
+        bmi.biHeight = -h  # top-down DIB
+        bmi.biPlanes = 1
+        bmi.biBitCount = 32
+        bmi.biCompression = 0
+
+        buffer_len = w * h * 4
+        buf = ctypes.create_string_buffer(buffer_len)
+        DIB_RGB_COLORS = 0
+        gdi32.GetDIBits(desktop_dc, mem_bitmap, 0, h, buf, ctypes.byref(bmi), DIB_RGB_COLORS)
+
+        # Tozalash
+        gdi32.SelectObject(img_dc, old_bmp)
+        gdi32.DeleteObject(mem_bitmap)
+        gdi32.DeleteDC(img_dc)
+        user32.ReleaseDC(hdesktop, desktop_dc)
+
+        img = Image.frombuffer('RGBA', (w, h), buf, 'raw', 'BGRA', 0, 1)
+        return img.convert('RGB')
+    except Exception as gdi_err:
+        logging.error(f"GDI screenshot olishda ham xatolik: {gdi_err}")
+        return None
+
+
+def ekran_tahlil(savol="Ekranda nima ko'rinmoqda? Qisqacha tushuntir.", user_id=None):
+    """Ekran screenshot olib, AI Vision orqali tahlil qilish"""
+    try:
+        screenshot = _capture_screen_pil()
+        if not screenshot:
+            logging.error("Ekran tahlili: screenshot olinmadi")
+            return "Ekran tasvirini olib bo'lmadi (ekran ruxsati yoki oyna holati cheklangan)."
         
         # Rasmni kichiklashtirish (API uchun tez va arzon)
-        screenshot = screenshot.resize((1024, int(1024 * screenshot.height / screenshot.width)))
+        screenshot = screenshot.resize((1024, max(1, int(1024 * screenshot.height / screenshot.width))))
         
         # Base64 ga o'girish
         buffer = io.BytesIO()
-        screenshot.save(buffer, format="JPEG", quality=70)
+        screenshot.save(buffer, format="JPEG", quality=75)
         img_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
         
-        logging.debug(f"Screenshot olindi: {len(img_base64)} bytes (base64)")
+        logging.info(f"Screenshot olindi: {len(img_base64)} bytes (base64)")
         
         # Gemini Vision API ga yuborish
-        if GOOGLE_API_KEY:
-            result = _gemini_vision(img_base64, savol)
+        if get_gemini_api_key(user_id=user_id):
+            result = _gemini_vision(img_base64, savol, user_id=user_id)
             if result:
                 return result
         
@@ -524,11 +618,11 @@ def ekran_tahlil(savol="Ekranda nima ko'rinmoqda? Qisqacha tushuntir."):
                 return result
         
         logging.error("Ekran tahlili: hech qaysi AI provider ishlamadi")
-        return None
+        return "Ekran tahlili uchun AI Vision xizmati javob bermadi."
         
     except Exception as e:
         logging.error(f"Ekran tahlili xatolik: {e}")
-        return None
+        return f"Ekran tahlilida xatolik yuz berdi: {e}"
 
 
 def ekran_element_top(element_nomi):
@@ -604,49 +698,102 @@ Javobni FAQAT shu formatda ber (boshqa hech narsa yozma):
         return {"muvaffaqiyat": False, "tavsif": str(e), "keyingi_qadam": "qayta urinish"}
 
 
-def _gemini_vision(img_base64, savol):
-    """Gemini Vision API ga rasm yuborish"""
-    VISION_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"]
-    
+def rasm_tahlil(img_data_or_path: str, savol: str = "Ushbu rasmni o'zbek tilida batafsil va aniq tahlil qilib ber.", user_id: Optional[str] = None) -> Optional[str]:
+    """Ixtiyoriy rasm fayli yoki Base64 ma'lumotini Gemini Vision orqali tahlil qilish."""
+    if not img_data_or_path:
+        return None
+
+    img_b64 = ""
+    # 1. Fayl yo'li bo'lsa o'qish
+    if len(img_data_or_path) < 1000 and os.path.isfile(img_data_or_path):
+        try:
+            with open(img_data_or_path, "rb") as f:
+                img_b64 = base64.b64encode(f.read()).decode("utf-8")
+        except Exception as e:
+            logging.error(f"Rasm faylini o'qishda xatolik ({img_data_or_path}): {e}")
+            return None
+    else:
+        img_b64 = img_data_or_path
+
+    # 2. Gemini Vision orqali tahlil
+    result = _gemini_vision(img_b64, savol, user_id=user_id)
+    if result:
+        return result
+
+    # 3. OpenRouter Vision zaxirasi
+    if OPENROUTER_API_KEY:
+        res_open = _openrouter_vision(img_b64, savol)
+        if res_open:
+            return res_open
+
+    return None
+
+
+def _gemini_vision(img_base64: str, savol: str, user_id: Optional[str] = None) -> Optional[str]:
+    """Gemini Vision API ga rasm yuborish (Gemini 3.8 Flash & 2.5 Flash)"""
+    key = get_gemini_api_key(user_id=user_id)
+    if not key:
+        logging.warning("Gemini Vision: API kaliti topilmadi")
+        return None
+
+    VISION_MODELS = [
+        "gemini-flash-lite-latest",
+        "gemini-3.1-flash-lite-preview",
+        "gemini-flash-latest",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash",
+        "gemini-3.8-flash",
+    ]
+
+    # Agar "data:image/...;base64," prefix bilan kelsa, tozalaymiz
+    if "," in img_base64 and img_base64.startswith("data:"):
+        img_base64 = img_base64.split(",", 1)[1]
+    img_base64 = img_base64.strip()
+
     for model in VISION_MODELS:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-            
-            gen_config = {"maxOutputTokens": 512, "temperature": 0.2}
-            if "2.5" in model:
-                gen_config["thinkingConfig"] = {"thinkingBudget": 0}
-            
+            gen_config = {"maxOutputTokens": 1024, "temperature": 0.2}
+
             response = requests.post(
-                f"{url}?key={GOOGLE_API_KEY}",
+                f"{url}?key={key}",
                 headers={"Content-Type": "application/json"},
                 json={
                     "contents": [{
                         "parts": [
-                            {"text": savol},
+                            {"text": savol or "Ushbu rasmni o'zbek tilida batafsil va aniq tushuntirib ber."},
                             {"inline_data": {"mime_type": "image/jpeg", "data": img_base64}}
                         ]
                     }],
                     "generationConfig": gen_config
                 },
-                timeout=20
+                timeout=35
             )
-            
+
             if response.status_code == 429:
-                logging.warning(f"Vision {model} kvota tugagan, keyingi...")
+                logging.warning(f"Vision {model} kvota tugagan (429), keyingi...")
                 continue
-            
+
             if response.status_code != 200:
-                logging.error(f"Vision {model} xato: {response.status_code}")
+                logging.error(f"Vision {model} xato: {response.status_code} - {response.text[:120]}")
                 continue
-            
+
             data = response.json()
-            ai_text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-            logging.debug(f"Vision ({model}) javobi: {ai_text[:100]}")
+            candidates = data.get("candidates") or []
+            if not candidates:
+                continue
+            parts = candidates[0].get("content", {}).get("parts", [])
+            if not parts or "text" not in parts[0]:
+                continue
+            ai_text = parts[0]["text"].strip()
+            logging.info(f"Vision ({model}) muvaffaqiyatli tahlil qildi: {ai_text[:80]}")
             return ai_text
-            
+
         except Exception as e:
             logging.error(f"Vision {model} xatolik: {e}")
             continue
+
+    return None
     
     return None
 
@@ -709,7 +856,32 @@ def agent_ai_call(prompt: str, system_prompt: str, history: list = None) -> str:
     Returns:
         AI javobi (raw text)
     """
-    # Gemini orqali urinish
+    # 1. Multi-Provider Router orqali urinish (Groq Llama 3.3 70B, Cerebras, Gemini, OpenRouter)
+    try:
+        from core.providers import get_provider_system
+        from core.intelligence.types import AIRequest
+        ps = get_provider_system()
+        if ps.is_any_available():
+            conv = []
+            if history:
+                for msg in history[-10:]:
+                    role = msg.get("role", "user")
+                    c = msg.get("content", "")
+                    if c:
+                        conv.append({"role": role, "content": c})
+            req = AIRequest(
+                message=prompt,
+                system_context={"prompt": system_prompt},
+                conversation=conv,
+                metadata={"requires_tool": True, "task": "tool_calling"}
+            )
+            resp = ps.generate(req)
+            if resp and resp.success and (resp.raw_text or resp.content):
+                return resp.raw_text or resp.content
+    except Exception as e:
+        logging.warning(f"Agent Multi-Provider chaqirishda xatolik: {e}")
+
+    # Gemini orqali an'anaviy urinish
     try:
         result = _agent_gemini_call(prompt, system_prompt, history)
         if result:
@@ -774,7 +946,10 @@ def _agent_gemini_call(prompt: str, system_prompt: str, history: list = None) ->
                 continue
             
             data = response.json()
-            parts = data["candidates"][0]["content"]["parts"]
+            candidates = data.get("candidates") or []
+            if not candidates:
+                continue
+            parts = candidates[0].get("content", {}).get("parts", [])
             ai_text = ""
             for part in parts:
                 if "text" in part:

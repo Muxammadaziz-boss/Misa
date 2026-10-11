@@ -33,6 +33,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
   const [activeTab, setActiveTab] = useState<AuthTab>("login");
 
   // Form fields
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -301,6 +303,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
     try {
       const res = await backendService.register({
         username: username.trim(),
+        first_name: firstName.trim() || undefined,
+        last_name: lastName.trim() || undefined,
         email: email.trim() || undefined,
         password,
         confirm_password: confirmPassword,
@@ -439,13 +443,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
         alignItems: "center",
         justifyContent: "center",
         minHeight: "100vh",
+        maxHeight: "100vh",
         width: "100%",
         backgroundColor: "var(--bg-darkest, #02060E)",
         color: "#F8FAFC",
         fontFamily: "var(--font-sans)",
         position: "relative",
-        overflow: "hidden",
-        padding: "20px",
+        overflowY: "auto",
+        overflowX: "hidden",
+        padding: "64px 20px 32px 20px",
         boxSizing: "border-box",
       }}
     >
@@ -457,7 +463,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
       <header
         data-tauri-drag-region
         style={{
-          position: "absolute",
+          position: "fixed",
           top: 0,
           left: 0,
           right: 0,
@@ -477,7 +483,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
         <div data-tauri-drag-region style={{ display: "flex", alignItems: "center", gap: "9px", cursor: "default" }}>
           <SparklesIcon size={16} color="#C04CFD" />
           <span style={{ fontSize: "12.5px", fontWeight: 700, color: "#E2E8F0", letterSpacing: "0.04em", fontFamily: "var(--font-display)" }}>
-            MISA AI v9.0.0
+            MISA AI
           </span>
         </div>
         <div data-tauri-drag-region style={{ flex: 1, height: "100%", cursor: "default" }} />
@@ -529,6 +535,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
           padding: "36px 32px",
           position: "relative",
           zIndex: 10,
+          margin: "auto",
         }}
       >
         {/* Header Branding */}
@@ -1017,6 +1024,79 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.1)" }} />
               <span>yoki yangi akkaunt ochish</span>
               <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.1)" }} />
+            </div>
+
+            {/* Ism va Familiya */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
+                  Ism
+                </label>
+                <input
+                  type="text"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="Ismingiz"
+                  autoComplete="given-name"
+                  style={{
+                    width: "100%",
+                    padding: "11px 14px",
+                    background: "rgba(8, 14, 28, 0.65)",
+                    backdropFilter: "blur(12px)",
+                    WebkitBackdropFilter: "blur(12px)",
+                    border: "1px solid rgba(255, 255, 255, 0.12)",
+                    borderRadius: "12px",
+                    color: "#FFFFFF",
+                    fontSize: "13.5px",
+                    outline: "none",
+                    boxSizing: "border-box",
+                    transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = "#C04CFD";
+                    e.target.style.boxShadow = "0 0 0 3px rgba(192, 76, 253, 0.22)";
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = "rgba(255, 255, 255, 0.12)";
+                    e.target.style.boxShadow = "none";
+                  }}
+                />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
+                  Familiya
+                </label>
+                <input
+                  type="text"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Familiyangiz"
+                  autoComplete="family-name"
+                  style={{
+                    width: "100%",
+                    padding: "11px 14px",
+                    background: "rgba(8, 14, 28, 0.65)",
+                    backdropFilter: "blur(12px)",
+                    WebkitBackdropFilter: "blur(12px)",
+                    border: "1px solid rgba(255, 255, 255, 0.12)",
+                    borderRadius: "12px",
+                    color: "#FFFFFF",
+                    fontSize: "13.5px",
+                    outline: "none",
+                    boxSizing: "border-box",
+                    transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = "#C04CFD";
+                    e.target.style.boxShadow = "0 0 0 3px rgba(192, 76, 253, 0.22)";
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = "rgba(255, 255, 255, 0.12)";
+                    e.target.style.boxShadow = "none";
+                  }}
+                />
+              </div>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -1594,7 +1674,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
             <ShieldIcon size={14} color="#4EDEA3" />
             <span style={{ color: "#4EDEA3", fontWeight: 500 }}>Secured by Supabase Auth</span>
           </div>
-          <span style={{ color: "#E8B3FF", fontWeight: 600 }}>v9.0.0 Ultra Glass</span>
+          <span style={{ color: "#94A3B8" }}>Ultra Glass Edition</span>
         </div>
       </div>
     </div>

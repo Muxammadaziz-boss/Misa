@@ -24,6 +24,8 @@ export const RoutePlaceholder: React.FC<RoutePlaceholderProps> = ({
         alignItems: "center",
         justifyContent: "center",
         height: "100%",
+        overflowY: "auto",
+        boxSizing: "border-box",
         padding: "32px",
         textAlign: "center",
         userSelect: "none",

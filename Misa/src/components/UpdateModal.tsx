@@ -44,6 +44,17 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
     };
   }, [isOpen, updateInfo]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !isProcessing) {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, isProcessing, onClose]);
+
   const startStatusPolling = () => {
     if (pollingRef.current) clearInterval(pollingRef.current);
 
@@ -119,6 +130,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
 
   return (
     <div
+      onClick={!isProcessing ? onClose : undefined}
       style={{
         position: "fixed",
         top: 0,
@@ -135,6 +147,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
       }}
     >
       <div
+        onClick={(e) => e.stopPropagation()}
         style={{
           width: "100%",
           maxWidth: "480px",

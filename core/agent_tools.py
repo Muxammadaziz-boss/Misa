@@ -9,6 +9,8 @@ import math
 import logging
 import datetime
 import webbrowser
+import subprocess
+import base64
 from urllib.parse import quote_plus
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple, Set
@@ -215,19 +217,45 @@ def _web_search(query: str, platform: str = "google") -> dict:
                 "message": f"'{query}' bo'yicha natijalar:\n{combined}",
             }
 
-        # 4. Natija topilmadi — brauzerni OCHMA!
-        # Agent o'z AI bilimidan javob bersin (Gemini kuchida!)
+        # 4. Wikipedia API orqali qidiruv (kamida 70% ishonchlilikdagi ensiklopedik ma'lumot)
+        try:
+            wiki_resp = requests.get(
+                "https://uz.wikipedia.org/w/api.php",
+                params={"action": "query", "list": "search", "srsearch": query, "format": "json", "utf8": 1},
+                headers={"User-Agent": "MisaAI/9.0 (misa@assistant.ai)"},
+                timeout=5,
+            )
+            if wiki_resp.status_code == 200:
+                wiki_data = wiki_resp.json()
+                items = wiki_data.get("query", {}).get("search", [])
+                if items:
+                    first = items[0]
+                    raw_snip = first.get("snippet", "")
+                    clean_snip = re.sub(r"<[^>]+>", "", raw_snip).strip()
+                    clean_title = first.get("title", "")
+                    return {
+                        "answer": f"{clean_title}: {clean_snip}",
+                        "source": "Vikipediya",
+                        "confidence": "85%",
+                        "message": f"'{clean_title}' bo'yicha ma'lumot (Vikipediya):\n{clean_snip}",
+                    }
+        except Exception:
+            pass
+
+        # 5. Natija topilmadi
         return {
-            "message": "Internetda aniq javob topilmadi. O'z bilimingdan javob ber.",
             "no_results": True,
+            "query": query,
+            "message": f"'{query}' bo'yicha internetdan to'g'ridan-to'g'ri natija topilmadi.",
         }
 
     except Exception as e:
-        # API xato — Agent o'zi javob bersin
+        # API xato
         return {
-            "message": f"Qidiruv API ishlamadi. O'z bilimingdan javob ber.",
-            "error": str(e),
             "no_results": True,
+            "error": str(e),
+            "query": query,
+            "message": f"Internet qidiruvida xatolik yuz berdi: {e}",
         }
 
 
@@ -364,7 +392,7 @@ def _system_control(action: str, value: str = "") -> dict:
         "open_telegram": lambda: webbrowser.open("telegram:"),
         "open_chrome": lambda: webbrowser.open("https://google.com"),
         "open_discord": lambda: webbrowser.open("discord:"),
-        "open_vscode": lambda: subprocess.Popen(["code"], shell=True),
+        "open_vscode": lambda: subprocess.Popen(["code"], shell=False),
         "open_explorer": lambda: subprocess.Popen(["explorer"], shell=False),
         "open_cmd": lambda: subprocess.Popen(
             ["cmd"], creationflags=subprocess.CREATE_NEW_CONSOLE
@@ -598,8 +626,6 @@ def _weather(city: str = "Tashkent") -> dict:
     load_dotenv()
 
     api_key = os.getenv("OPENWEATHER_API_KEY", "")
-    if not api_key:
-        return {"error": "Ob-havo API kaliti topilmadi"}
 
     # O'zbek shahar nomlari
     SHAHAR = {
@@ -617,6 +643,30 @@ def _weather(city: str = "Tashkent") -> dict:
         "urganch": "Urgench",
     }
     city_en = SHAHAR.get(city.lower().strip(), city)
+
+    if not api_key:
+        try:
+            wttr_resp = requests.get(f"https://wttr.in/{city_en}?format=j1", timeout=5)
+            if wttr_resp.status_code == 200:
+                w_data = wttr_resp.json()
+                current = w_data.get("current_condition", [{}])[0]
+                temp = current.get("temp_C", "N/A")
+                feels = current.get("FeelsLikeC", temp)
+                humidity = current.get("humidity", "N/A")
+                wind = current.get("windspeedKmph", "N/A")
+                desc = current.get("weatherDesc", [{}])[0].get("value", "Ochiq havo")
+                return {
+                    "city": city,
+                    "temp": temp,
+                    "feels_like": feels,
+                    "humidity": humidity,
+                    "wind": wind,
+                    "description": desc,
+                    "message": f"🌤️ {city} shahrida havo harorati {temp}°C (his qilinishi {feels}°C), namlik {humidity}%, {desc}.",
+                }
+        except Exception:
+            pass
+        return {"error": "Ob-havo API kaliti topilmadi"}
 
     try:
         resp = requests.get(
@@ -1342,10 +1392,10 @@ def _screen_analyze(question: str = "Ekranda nima bor?") -> dict:
         from core.ai_engine import ekran_tahlil
 
         result = ekran_tahlil(question)
-        if result:
+        if result and not result.startswith("Ekran tasvirini olib bo'lmadi"):
             return {"message": result, "question": question}
         else:
-            return {"error": "Ekran tahlil qilinmadi"}
+            return {"error": result or "Ekran tahlil qilinmadi"}
     except ImportError:
         return {"error": "ai_engine moduli topilmadi"}
     except Exception as e:
@@ -1367,7 +1417,7 @@ TOOL_SCREEN = Tool(
     capabilities=['screen_vision', 'screen_ocr', 'desktop_vision'],
     aliases=['ekran', 'screen', 'vision'],
     risk_level=RiskLevel.LOW,
-    timeout=15.0,
+    timeout=35.0,
     idempotent=True,
     destructive=False,
 )
@@ -1748,14 +1798,20 @@ def _app_check(category: str = "code_editor", app_name: str = "") -> dict:
                 else 0,
             )
             if result.returncode == 0:
+                loc = result.stdout.strip().split("\n")[0]
                 return {
                     "name": app_name,
                     "found": True,
-                    "path": result.stdout.strip().split("\n")[0],
+                    "path": loc,
+                    "message": f"✅ Ha, kompyuteringizda **{app_name}** ilovasi o'rnatilgan ({loc}).",
                 }
         except Exception:
             pass
-        return {"name": app_name, "found": False}
+        return {
+            "name": app_name,
+            "found": False,
+            "message": f"❌ Kompyuteringizda **{app_name}** ilovasi topilmadi (o'rnatilmagan).",
+        }
 
     # Kategoriya bo'yicha barcha ilovalarni tekshirish
     if category not in APP_DATABASE:
@@ -2570,12 +2626,19 @@ def _notification(
             notification.notify(title=title, message=message, timeout=duration)
             return {"message": f"Eslatma yuborildi: {title}"}
         except ImportError:
-            import subprocess
-
-            escaped_title = title.replace("'", "''").replace("\n", " ")
-            escaped_msg = message.replace("'", "''").replace("\n", " ")
-            ps = f"[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null; $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02); $template.GetElementsByTagName('text')[0].AppendChild($template.CreateTextNode('{escaped_title}')); $template.GetElementsByTagName('text')[1].AppendChild($template.CreateTextNode('{escaped_msg}')); [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Misa AI').Show([Windows.UI.Notifications.ToastNotification]::new($template))"
-            subprocess.run(["powershell", "-Command", ps], capture_output=True)
+            import base64
+            b64_title = base64.b64encode(str(title).encode("utf-8")).decode("ascii")
+            b64_msg = base64.b64encode(str(message).encode("utf-8")).decode("ascii")
+            ps = (
+                "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null; "
+                "$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02); "
+                f"$tText = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{b64_title}')); "
+                f"$mText = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{b64_msg}')); "
+                "$template.GetElementsByTagName('text')[0].AppendChild($template.CreateTextNode($tText)); "
+                "$template.GetElementsByTagName('text')[1].AppendChild($template.CreateTextNode($mText)); "
+                "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Misa AI').Show([Windows.UI.Notifications.ToastNotification]::new($template))"
+            )
+            subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps], capture_output=True)
             return {"message": f"Eslatma yuborildi: {title}"}
     except Exception as e:
         return {"error": str(e)}

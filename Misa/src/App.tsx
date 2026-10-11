@@ -1,17 +1,18 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import { AppShell } from "./layout/AppShell";
-import { LandingPage } from "./pages/LandingPage";
-import { ChatPage } from "./pages/ChatPage";
-import { VoicePage } from "./pages/VoicePage";
-import { CommandsPage } from "./pages/CommandsPage";
-import { MemoryPage } from "./pages/MemoryPage";
-import { SchedulerPage } from "./pages/SchedulerPage";
-import { PluginsPage } from "./pages/PluginsPage";
-import { AccountPage } from "./pages/AccountPage";
-import { RemoteControlPage } from "./pages/RemoteControlPage";
-import { DevicesPage } from "./pages/DevicesPage";
-import { TelegramIntegrationPage } from "./pages/TelegramIntegrationPage";
-import { AuthPage } from "./pages/AuthPage";
+
+const LandingPage = lazy(() => import("./pages/LandingPage").then(m => ({ default: m.LandingPage })));
+const ChatPage = lazy(() => import("./pages/ChatPage").then(m => ({ default: m.ChatPage })));
+const VoicePage = lazy(() => import("./pages/VoicePage").then(m => ({ default: m.VoicePage })));
+const CommandsPage = lazy(() => import("./pages/CommandsPage").then(m => ({ default: m.CommandsPage })));
+const MemoryPage = lazy(() => import("./pages/MemoryPage").then(m => ({ default: m.MemoryPage })));
+const SchedulerPage = lazy(() => import("./pages/SchedulerPage").then(m => ({ default: m.SchedulerPage })));
+const PluginsPage = lazy(() => import("./pages/PluginsPage").then(m => ({ default: m.PluginsPage })));
+const AccountPage = lazy(() => import("./pages/AccountPage").then(m => ({ default: m.AccountPage })));
+const RemoteControlPage = lazy(() => import("./pages/RemoteControlPage").then(m => ({ default: m.RemoteControlPage })));
+const DevicesPage = lazy(() => import("./pages/DevicesPage").then(m => ({ default: m.DevicesPage })));
+const TelegramIntegrationPage = lazy(() => import("./pages/TelegramIntegrationPage").then(m => ({ default: m.TelegramIntegrationPage })));
+const AuthPage = lazy(() => import("./pages/AuthPage").then(m => ({ default: m.AuthPage })));
 import { CommandPalette } from "./components/CommandPalette";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { UpdateModal } from "./components/UpdateModal";
@@ -24,9 +25,7 @@ export type MisaAuthUser = MikasaAuthUser;
 
 export function applyMisaAppearanceSettings() {
   try {
-    const raw =
-      localStorage.getItem("misa_appearance_settings") ||
-      localStorage.getItem("misa_appearance_settings");
+    const raw = localStorage.getItem("misa_appearance_settings");
     if (!raw) return;
     const parsed = JSON.parse(raw);
     const root = document.documentElement;
@@ -112,18 +111,10 @@ function App() {
   const [authChecking, setAuthChecking] = useState<boolean>(true);
   const [currentUser, setCurrentUser] = useState<MisaAuthUser | null>(null);
   const [userName, setUserName] = useState<string>(() => {
-    return (
-      localStorage.getItem("misa_user_name") ||
-      localStorage.getItem("misa_user_name") ||
-      "Ustoz"
-    );
+    return localStorage.getItem("misa_user_name") || "Ustoz";
   });
   const [avatarStyle, setAvatarStyle] = useState<string>(() => {
-    return (
-      localStorage.getItem("misa_user_avatar") ||
-      localStorage.getItem("misa_user_avatar") ||
-      "cosmic"
-    );
+    return localStorage.getItem("misa_user_avatar") || "cosmic";
   });
 
   // Verify existing session on startup and subscribe to auth changes
@@ -447,16 +438,34 @@ function App() {
   if (!currentUser) {
     return (
       <ErrorBoundary onReset={() => setCurrentUser(null)}>
-        <AuthPage
-          onAuthSuccess={(user) => {
-            setCurrentUser(user);
-            if (user.username) {
-              setUserName(user.username);
-              localStorage.setItem("misa_user_name", user.username);
-              localStorage.setItem("misa_user_name", user.username);
-            }
-          }}
-        />
+        <Suspense
+          fallback={
+            <div
+              style={{
+                display: "flex",
+                height: "100vh",
+                width: "100vw",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "var(--bg-base, #0E1422)",
+                color: "var(--text-secondary, #94A3B8)",
+                fontSize: "13px",
+              }}
+            >
+              Yuklanmoqda...
+            </div>
+          }
+        >
+          <AuthPage
+            onAuthSuccess={(user) => {
+              setCurrentUser(user);
+              if (user.username) {
+                setUserName(user.username);
+                localStorage.setItem("misa_user_name", user.username);
+              }
+            }}
+          />
+        </Suspense>
       </ErrorBoundary>
     );
   }
@@ -468,9 +477,29 @@ function App() {
       onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
       userName={userName}
       avatarStyle={avatarStyle}
+      avatarUrl={currentUser?.avatar_url}
     >
       <ErrorBoundary key={activePath} onReset={() => handleNavigate("/")}>
-        {renderContent()}
+        <Suspense
+          fallback={
+            <div
+              style={{
+                display: "flex",
+                height: "100%",
+                width: "100%",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--text-secondary, #94A3B8)",
+                fontSize: "13px",
+                padding: "40px",
+              }}
+            >
+              Sahifa yuklanmoqda...
+            </div>
+          }
+        >
+          {renderContent()}
+        </Suspense>
       </ErrorBoundary>
       <CommandPalette
         isOpen={isCommandPaletteOpen}

@@ -883,7 +883,7 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ onNavigateHome }) => {
                       <div>
                         <span style={{ color: "#64748B", display: "block", fontSize: "10px", textTransform: "uppercase", fontWeight: 600 }}>Agent Versiyasi</span>
                         <span style={{ color: "#93C5FD", fontFamily: "monospace", display: "block" }}>
-                          v{dev.agent_version || "9.0.0"}
+                          v{dev.agent_version || "9.0.1"}
                         </span>
                       </div>
                       <div>

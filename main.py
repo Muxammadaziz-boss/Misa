@@ -3,10 +3,21 @@
 # Versiya: 8.0.0
 # ========== Ogohlantirishlarni yashirish ==========
 
-VERSION = "9.0.0"
+VERSION = "9.0.1"
 APP_NAME = "Misa AI"
 import os
+import sys
 import logging
+
+if sys.platform.startswith("win"):
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 import webbrowser
 import urllib.request
 from urllib.parse import quote_plus
@@ -499,7 +510,7 @@ def kayfiyat_aniqla(matn):
     return rate, pitch, volume
 
 
-def ovoz_chiqar_tez(text):
+def ovoz_chiqar_tez(text, ovoz_turi=None):
     """
     Misa AI 9.0.0 — Yuqori sifatli va barqaror TTS audio ijrosi.
     Edge TTS (uz-UZ-MadinaNeural / uz-UZ-SardorNeural) orqali ovoz yaratadi
@@ -530,19 +541,31 @@ def ovoz_chiqar_tez(text):
             if not sentences:
                 sentences = [clean_text]
 
-            # 2. Ovoz turini aniqlash
-            ovoz_turi = getattr(global_state, "ovoz_turi_global", "ayol")
-            fayl = os.path.join(BASE_DIR, "data", "ovoz_turi.txt")
-            if os.path.exists(fayl):
-                try:
-                    with open(fayl, "r", encoding="utf-8") as f:
-                        v = f.read().strip()
-                        if v in ["ayol", "erkak"]:
-                            ovoz_turi = v
-                except Exception:
-                    pass
+            # 2. Ovoz turini aniqlash (barcha modellar: Edge-TTS, Fish Audio, RVC)
+            target_ovoz = ovoz_turi or getattr(global_state, "ovoz_turi_global", None)
+            if not target_ovoz:
+                fayl = os.path.join(BASE_DIR, "data", "ovoz_turi.txt")
+                if os.path.exists(fayl):
+                    try:
+                        with open(fayl, "r", encoding="utf-8") as f:
+                            v = f.read().strip()
+                            if v:
+                                target_ovoz = v
+                    except Exception:
+                        pass
 
-            voice = "uz-UZ-MadinaNeural" if ovoz_turi == "ayol" else "uz-UZ-SardorNeural"
+            if not target_ovoz:
+                target_ovoz = "ayol"
+
+            # 3. Unified VoiceEngine orqali ijro etish
+            try:
+                from core.voice_engine import play_speech_sync
+                if play_speech_sync(clean_text, voice_type=target_ovoz):
+                    return
+            except Exception as e:
+                logging.debug(f"VoiceEngine ijro xatosi, mahalliy fallbackga o'tilmoqda: {e}")
+
+            voice = "uz-UZ-MadinaNeural" if target_ovoz in ["ayol", "madina", "fish_anime", "ashley", "yukari"] else "uz-UZ-SardorNeural"
 
             # 3. Tezlik (speed) ni config.json dan olish
             speed_mult = 1.0
@@ -1968,6 +1991,12 @@ def agent_pipeline_run(matn):
         gui_ga_xabar_yuborish(f"⚠️ Agent: {response}")
         ovoz_chiqar_tez(response)
 
+    try:
+        from core.voice.session_manager import get_session_manager
+        get_session_manager().record_turn(matn, response)
+    except Exception:
+        pass
+
 
 # ========== OpenRouter AI ==========
 def openrouter_ai_suhbat(matn):
@@ -2625,6 +2654,11 @@ def buyruqni_tushun(matn, foydalanuvchi_ismi, ovoz_turi):
             try:
                 handled, result_msg = command_dispatcher.dispatch_local(matn)
                 if handled and result_msg:
+                    try:
+                        from core.voice.session_manager import get_session_manager
+                        get_session_manager().record_turn(matn, result_msg)
+                    except Exception:
+                        pass
                     gui_ga_xabar_yuborish(f"✨ {result_msg}", ovoz=True)
                     return
             except Exception as e:

@@ -16,6 +16,7 @@ import {
 } from "../components/icons/Icons";
 import {
   backendService,
+  unwrapCleanResponse,
   VoiceState,
   BackendStatus,
   SystemTelemetry,
@@ -102,13 +103,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [assistantResponse, setAssistantResponse] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [micError, setMicError] = useState<string | null>(null);
-  const [attachedFiles, setAttachedFiles] = useState<{ name: string; size: number; content?: string }[]>([]);
+  const [attachedFiles, setAttachedFiles] = useState<
+    { name: string; size: number; content?: string; dataUrl?: string; type?: "text" | "image" }[]
+  >([]);
+
+  // Startup System Briefing (Voice & Banner)
+  const [startupBriefing, setStartupBriefing] = useState<string | null>(null);
+  const [briefingSeverity, setBriefingSeverity] = useState<"success" | "warning" | "error">("success");
+  const [isBriefingVisible, setIsBriefingVisible] = useState<boolean>(true);
 
   // Telemetry & Agent Loop
   const [telemetry, setTelemetry] = useState<SystemTelemetry | null>(null);
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
   const [agentGoal, setAgentGoal] = useState<string | null>(null);
   const [agentSteps, setAgentSteps] = useState<AgentStepItem[]>([]);
+  const [activeVoiceType, setActiveVoiceType] = useState<string>("ayol");
 
   const recognitionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -116,6 +125,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const activeTranscriptRef = useRef<string>("");
+  const silenceTimerRef = useRef<any>(null);
+  const isStoppingRef = useRef<boolean>(false);
+  const isListeningRef = useRef<boolean>(false);
+  const isSecretaryModeRef = useRef<boolean>(true);
+
+  useEffect(() => {
+    backendService.getAccount().then((acc) => {
+      if (acc && acc.voice_type) {
+        setActiveVoiceType(acc.voice_type);
+      }
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const clockInterval = setInterval(() => {
@@ -127,6 +149,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         const data = await backendService.getSystemTelemetry();
         if (data && data.ok !== false) {
           setTelemetry(data);
+          // Backend aloqada ekanligi tasdiqlandi -> xatolik bannerini darhol yopamiz
+          setStartupBriefing((prev) => {
+            if (prev && prev.includes("18420-portda ishga tushirilishi kutilmoqda")) {
+              return null;
+            }
+            return prev;
+          });
         }
       } catch {
         // Silent fallback
@@ -148,6 +177,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     });
     const unsubStatus = backendService.onStatusChange((status) => {
       setBackendStatus(status);
+      if (status.status === "online") {
+        setStartupBriefing((prev) => {
+          if (prev && prev.includes("18420-portda ishga tushirilishi kutilmoqda")) {
+            return null;
+          }
+          return prev;
+        });
+      }
     });
     const unsubResp = backendService.onResponse((data) => {
       setAssistantResponse(data.text);
@@ -158,6 +195,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         setUserTranscript(data.text);
       } else {
         setAssistantResponse(data.text);
+      }
+    });
+    const unsubWake = backendService.onWakeWordDetected((data) => {
+      setUserTranscript(data.phrase || "Salom Misa");
+      setVoiceState("wake_detected");
+      setOrbState("wake_detected");
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {}
+      }
+    });
+    const unsubAudioLevel = backendService.onAudioLevel((data) => {
+      if (data && typeof data.level === "number") {
+        setAudioLevel(data.level);
       }
     });
     const unsubOrb = backendService.onOrbStateChange((ev) => {
@@ -182,14 +234,82 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       );
     });
 
+    // ── App Startup Audio & System Health Briefing ──
+    const runStartupBriefing = async () => {
+      if (sessionStorage.getItem("misa_v9_startup_briefing_done")) {
+        setTimeout(() => {
+          startSecretaryListening();
+        }, 600);
+        return;
+      }
+      sessionStorage.setItem("misa_v9_startup_briefing_done", "true");
+
+      // Backend ishga tushishi uchun qayta tekshiruv (retry loop, jami ~7 soniya)
+      let currentStat: BackendStatus = { status: "connecting" };
+      for (let attempt = 0; attempt < 10; attempt++) {
+        try {
+          currentStat = await backendService.checkStatus();
+          if (currentStat.status === "online") break;
+        } catch {
+          currentStat = { status: "offline" };
+        }
+        await new Promise((r) => setTimeout(r, 700));
+      }
+
+      let account: any = null;
+      try {
+        account = await backendService.getAccount();
+        if (account?.voice_type) {
+          setActiveVoiceType(account.voice_type);
+        }
+      } catch {}
+
+      let textToSpeak = "";
+      let severity: "success" | "warning" | "error" = "success";
+
+      if (currentStat.status === "online") {
+        const hasKey = account?.has_gemini_key || currentStat.ai_available;
+        if (hasKey) {
+          severity = "success";
+          textToSpeak = `Assalomu alaykum Ustoz! Misa tizimi muvaffaqiyatli ishga tushdi, serverga ulandi. Barcha modullar faol va tayyor. Meni chaqirish uchun "Misa..." deb gapirishingiz mumkin.`;
+        } else {
+          severity = "warning";
+          textToSpeak = `Assalomu alaykum Ustoz! Serverga ulandim, lekin menda xatolik bor: AI kaliti kiritilmagan. Sozlamalar bo'limidan API kalitini kiritishingizni so'rayman.`;
+        }
+      } else {
+        severity = "error";
+        textToSpeak = `Salom Ustoz! Menda xatolik bor: mahalliy backend serveriga ulanib bo'lmadi. Server 18420-portda ishga tushirilishi kutilmoqda.`;
+      }
+
+      setStartupBriefing(textToSpeak);
+      setBriefingSeverity(severity);
+
+      // Faqat server online bo'lsa yoki haqiqiy milliy ovoz bo'lsagina ovozda ijro etamiz
+      if (currentStat.status === "online") {
+        const voiceChoice = account?.voice_type || activeVoiceType || "ayol";
+        await playSpeechAudio(textToSpeak, voiceChoice);
+      }
+      setTimeout(() => {
+        startSecretaryListening();
+      }, 500);
+    };
+
+    runStartupBriefing();
+
     return () => {
       unsubVoice();
+      unsubWake();
+      unsubAudioLevel();
       unsubStatus();
       unsubResp();
       unsubTranscript();
       unsubOrb();
       unsubPlan();
       unsubStep();
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
       stopAudioMonitor();
       if (recognitionRef.current) {
         try {
@@ -257,9 +377,138 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     setAudioLevel(0);
   };
 
-  const executeMisaQuery = async (text: string, speakReply = true) => {
+  // ── Multi-Layer High-Fidelity Speech Player (Edge TTS, Fish Audio, RVC) ──
+  const playSpeechAudio = async (text: string, voiceOverride?: string): Promise<void> => {
+    const cleanText = text
+      .replace(/\[.*?\]\(.*?\)/g, "")
+      .replace(/```[\s\S]*?```/g, "")
+      .replace(/`.*?`/g, "")
+      .replace(/[\*\_~#>]/g, "")
+      .replace(/[🎤🗣️📝🎯✅❌⚠️💡📊🎵▶️⏸️🔊🔉🔇📌🤖✨🔹👋]/gu, "")
+      .trim();
+
+    if (!cleanText) return;
+
+    // Nutq so'zlanayotganda mikrofondan o'z ovozini eshitib olmasligi uchun tinglashni vaqtinchalik to'xtatamiz
+    if (recognitionRef.current && isListeningRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch {}
+      stopAudioMonitor();
+      isListeningRef.current = false;
+    }
+
+    setVoiceState("speaking");
+    setOrbState("speaking");
+
+    return new Promise<void>(async (resolve) => {
+      let resolved = false;
+      const finish = () => {
+        if (!resolved) {
+          resolved = true;
+          setVoiceState("idle");
+          setOrbState("idle");
+          resolve();
+          // Misa gapirib bo'lgach, kotiba kabi avtomatik yana eshitishga o'tadi
+          if (isSecretaryModeRef.current && !isStoppingRef.current) {
+            setTimeout(() => {
+              startSecretaryListening();
+            }, 350);
+          }
+        }
+      };
+
+      // 1. Backend Edge-TTS orqali yuqori sifatli milliy ovozda ijro etish (uz-UZ-MadinaNeural / uz-UZ-SardorNeural)
+      let backendPlayed = false;
+      const voiceToUse = voiceOverride || activeVoiceType || "ayol";
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          backendPlayed = await backendService.speakText(cleanText, voiceToUse);
+          if (backendPlayed) break;
+        } catch {
+          backendPlayed = false;
+        }
+        await new Promise((r) => setTimeout(r, 400));
+      }
+
+      if (backendPlayed) {
+        // O'zbek tilida o'rtacha gapirish tezligi: soniyasiga ~13 belgi
+        const durationMs = Math.max(1600, Math.min(18000, (cleanText.length / 13) * 1000));
+        setTimeout(finish, durationMs);
+        return;
+      }
+
+      // Agar backend bir lahzaga ulanmagan bo'lsa, xunuk inglizcha/ruscha robot ovozlarga
+      // aslo o'tmaslik kerak — xavfsiz yakunlaymiz
+      finish();
+    });
+  };
+
+  // ── Wake-Word & Call Prefix Parser ("Misa ...", "Mikasa ...") ──
+  const parseMisaInvocation = (rawText: string) => {
+    const trimmed = rawText.trim();
+    const callRegex = /^(?:(?:salom|assalomu\s+alaykum|hey|ey|o['']?y|hoy|qani|iltimos)\s+)?(?:misa|mikasa|micasa|миса|микаса|мекаса|mekasa)(?:[,\s:!.]+|$)/i;
+    const match = trimmed.match(callRegex);
+    const containsMisa =
+      match !== null ||
+      /\b(?:misa|mikasa|micasa|миса|микаса|мекаса|mekasa)\b/i.test(trimmed) ||
+      /(?:misa|mikasa|micasa|миса|микаса)/i.test(trimmed);
+
+    let command = trimmed;
+    if (match) {
+      command = trimmed.slice(match[0].length).trim();
+    } else if (containsMisa) {
+      command = trimmed.replace(/\b(?:misa|mikasa|micasa|миса|микаса|мекаса|mekasa)\b/gi, "").trim();
+    }
+
+    return {
+      hasMisa: containsMisa,
+      isCallingOnly: containsMisa && (!command || command.length < 2),
+      cleanCommand: command || trimmed,
+    };
+  };
+
+  const resumeSecretaryListening = () => {
+    if (isSecretaryModeRef.current && !isStoppingRef.current) {
+      setTimeout(() => {
+        startSecretaryListening();
+      }, 350);
+    }
+  };
+
+  const executeMisaQuery = async (text: string, speakReply = true, isVoiceInput = false) => {
     const clean = text.trim();
-    if (!clean) return;
+    if (!clean) {
+      if (isVoiceInput) resumeSecretaryListening();
+      return;
+    }
+
+    const invocation = parseMisaInvocation(clean);
+
+    // KOTIBA REJIMI:
+    // Agar ovoz orqali eshitilsa va gap ichida "Misa" (yoki "Mikasa") bo'lmasa,
+    // xuddi kompaniya kotibi kabi jim eshitib turadi va javob bermaydi (begona suhbatlarga xalal bermaydi).
+    if (isVoiceInput && !invocation.hasMisa) {
+      setUserTranscript("");
+      resumeSecretaryListening();
+      return;
+    }
+
+    // Foydalanuvchi faqat Misa deb chaqirsa ("Misa", "Salom Misa"):
+    if (invocation.isCallingOnly) {
+      const greetingResponse = "Labbay Ustoz! Sizni tinglayapman, marhamat buyuring.";
+      setUserTranscript(clean);
+      setAssistantResponse(greetingResponse);
+      setIsProcessing(false);
+      if (speakReply) {
+        await playSpeechAudio(greetingResponse);
+      } else {
+        resumeSecretaryListening();
+      }
+      return;
+    }
+
+    const commandToExecute = invocation.cleanCommand || clean;
 
     const attachmentContext =
       attachedFiles.length > 0
@@ -270,7 +519,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           "]"
         : "";
 
-    const fullQuery = clean + attachmentContext;
+    const fullQuery = commandToExecute + attachmentContext;
+
+    const attachedImage = attachedFiles.find((f) => f.dataUrl || f.type === "image");
+    const imageToSend = attachedImage?.dataUrl;
 
     setUserTranscript(clean);
     setAttachedFiles([]);
@@ -283,32 +535,208 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     setOrbState("thinking");
 
     try {
-      const res = await backendService.sendMessage(fullQuery);
-      const replyText = res.reply || "Buyruq bajarildi.";
+      // Backendga { speak: false } yuboriladi, shunda backend o'zi alohida gapirib 2 marta takrorlanmaydi
+      const res = await backendService.sendMessage(fullQuery, { speak: false, image: imageToSend });
+      const rawReply = res.reply || res.response || "Buyruq bajarildi.";
+      const replyText = unwrapCleanResponse(rawReply);
       setAssistantResponse(replyText);
       setIsProcessing(false);
 
       if (speakReply) {
-        setVoiceState("speaking");
-        setOrbState("speaking");
-        try {
-          await backendService.speakText(replyText);
-        } catch {}
+        await playSpeechAudio(replyText);
+      } else {
+        setVoiceState("idle");
+        setOrbState("idle");
+        if (isVoiceInput) {
+          resumeSecretaryListening();
+        }
       }
-      setVoiceState("idle");
-      setOrbState("idle");
     } catch {
-      setAssistantResponse("Kechirasiz, Misa serveri bilan bog'lanishda xatolik yuz berdi.");
+      const errReply = "Kechirasiz, Misa serveri bilan bog'lanishda xatolik yuz berdi.";
+      setAssistantResponse(errReply);
       setIsProcessing(false);
       setVoiceState("error");
       setOrbState("error");
+      if (speakReply) {
+        await playSpeechAudio(errReply);
+      } else if (isVoiceInput) {
+        resumeSecretaryListening();
+      }
     }
+  };
+
+  const startSecretaryListening = async () => {
+    if (isListeningRef.current || (voiceState as string) === "speaking" || isProcessing) {
+      return;
+    }
+    isStoppingRef.current = false;
+    isSecretaryModeRef.current = true;
+    activeTranscriptRef.current = "";
+
+    // 1. Agar Python backend online bo'lsa, mikrofonni faqat Python ConversationalVoiceService boshqaradi.
+    // Brauzer SpeechRecognition yoki getUserMedia mutlaqo ochilmaydi — mikrofon to'qnashuvining oldi olinadi.
+    if (backendStatus.status === "online") {
+      stopAudioMonitor();
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {}
+      }
+      isListeningRef.current = true;
+      const started = await backendService.startVoice();
+      if (!started) {
+        isListeningRef.current = false;
+      }
+      return;
+    }
+
+    // 2. Aks holda (backend offline bo'lganda), brauzer ichki SpeechRecognition orqali zaxira tinglash
+    isListeningRef.current = true;
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (SpeechRecognition) {
+      const micAllowed = await startAudioMonitor();
+      if (!micAllowed) {
+        isListeningRef.current = false;
+        return;
+      }
+
+      try {
+        if (recognitionRef.current) {
+          try {
+            recognitionRef.current.abort();
+          } catch {}
+        }
+        const recognition = new SpeechRecognition();
+        recognitionRef.current = recognition;
+        recognition.lang = "uz-UZ";
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.maxAlternatives = 1;
+
+        setVoiceState("listening");
+        setOrbState("listening");
+
+        let finalizedText = "";
+
+        recognition.onresult = (event: any) => {
+          let interimText = "";
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+              finalizedText += (finalizedText ? " " : "") + transcript;
+            } else {
+              interimText += transcript;
+            }
+          }
+          const currentTotal = (finalizedText + " " + interimText).trim();
+          activeTranscriptRef.current = currentTotal;
+          setUserTranscript(currentTotal);
+
+          // Reset silence timer on any speech detected
+          if (silenceTimerRef.current) {
+            clearTimeout(silenceTimerRef.current);
+          }
+          silenceTimerRef.current = setTimeout(() => {
+            const captured = activeTranscriptRef.current.trim();
+            if (captured) {
+              const inv = parseMisaInvocation(captured);
+              if (!inv.hasMisa) {
+                // Xonadagi begona suhbat, Misa chaqirilmagan -> jim e'tiborsiz qoldiriladi
+                activeTranscriptRef.current = "";
+                setUserTranscript("");
+                return;
+              }
+              // Misa chaqirildi!
+              activeTranscriptRef.current = "";
+              if (recognitionRef.current) {
+                try {
+                  recognitionRef.current.stop();
+                } catch {}
+              }
+              stopAudioMonitor();
+              isListeningRef.current = false;
+              executeMisaQuery(captured, true, true);
+            }
+          }, 1800);
+        };
+
+        recognition.onerror = (event: any) => {
+          if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+            isListeningRef.current = false;
+            stopAudioMonitor();
+            setMicError("Tovushli boshqaruv uchun mikrofon ruxsati kerak.");
+            setVoiceState("error");
+            setOrbState("error");
+          } else if (event.error === "no-speech") {
+            // Xonadagi tabiiy jimlik - kotiba tinglashda davom etadi
+          } else {
+            console.warn("Speech recognition notice:", event.error);
+          }
+        };
+
+        recognition.onend = () => {
+          if (isStoppingRef.current) {
+            isListeningRef.current = false;
+            return;
+          }
+          const gathered = activeTranscriptRef.current.trim();
+          activeTranscriptRef.current = "";
+          if (gathered) {
+            const inv = parseMisaInvocation(gathered);
+            if (inv.hasMisa) {
+              isListeningRef.current = false;
+              stopAudioMonitor();
+              executeMisaQuery(gathered, true, true);
+              return;
+            }
+          }
+          // Doimiy kotiba tinglash tsikli: uzilish bo'lsa darhol qayta ulanadi
+          if (isSecretaryModeRef.current && !isStoppingRef.current) {
+            try {
+              recognition.start();
+            } catch {
+              setTimeout(() => {
+                if (isSecretaryModeRef.current && !isStoppingRef.current) {
+                  startSecretaryListening();
+                }
+              }, 400);
+            }
+          } else {
+            isListeningRef.current = false;
+            stopAudioMonitor();
+          }
+        };
+
+        recognition.start();
+        return;
+      } catch (e) {
+        isListeningRef.current = false;
+        stopAudioMonitor();
+        console.error("Kotiba tinglash xatosi:", e);
+      }
+    }
+
+    // Web Speech API mavjud bo'lmasa backend fon xizmatiga ulanish
+    setUserTranscript("");
+    setAssistantResponse("");
+    setVoiceState("listening");
+    setOrbState("listening");
+    await backendService.startVoice();
   };
 
   const handleToggleVoice = async () => {
     setMicError(null);
 
-    if (voiceState === "listening") {
+    if (isListeningRef.current || (voiceState as string) === "listening" || (voiceState as string) === "wake_detected") {
+      isStoppingRef.current = true;
+      isSecretaryModeRef.current = false;
+      isListeningRef.current = false;
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
       stopAudioMonitor();
       if (recognitionRef.current) {
         try {
@@ -316,75 +744,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         } catch {}
       }
       await backendService.stopVoice();
+      activeTranscriptRef.current = "";
       setVoiceState("idle");
       setOrbState("idle");
       return;
     }
 
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
-    if (SpeechRecognition) {
-      const micAllowed = await startAudioMonitor();
-      if (!micAllowed) return;
-
-      try {
-        const recognition = new SpeechRecognition();
-        recognitionRef.current = recognition;
-        recognition.lang = "uz-UZ";
-        recognition.interimResults = true;
-        recognition.maxAlternatives = 1;
-
-        setVoiceState("listening");
-        setOrbState("listening");
-        setUserTranscript("");
-        setAssistantResponse("");
-
-        let finalTranscribed = "";
-
-        recognition.onresult = (event: any) => {
-          let interim = "";
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript;
-            if (event.results[i].isFinal) {
-              finalTranscribed += transcript;
-            } else {
-              interim += transcript;
-            }
-          }
-          setUserTranscript(finalTranscribed || interim);
-        };
-
-        recognition.onerror = (event: any) => {
-          stopAudioMonitor();
-          if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-            setMicError("Tovushli boshqaruv uchun mikrofon ruxsati kerak.");
-            setVoiceState("error");
-            setOrbState("error");
-          } else {
-            backendService.startVoice();
-          }
-        };
-
-        recognition.onend = () => {
-          stopAudioMonitor();
-          if (finalTranscribed.trim()) {
-            executeMisaQuery(finalTranscribed.trim(), true);
-          } else {
-            setVoiceState((prev) => (prev === "listening" ? "idle" : prev));
-          }
-        };
-
-        recognition.start();
-        return;
-      } catch {
-        stopAudioMonitor();
-      }
-    }
-
-    setUserTranscript("");
-    setAssistantResponse("");
-    await backendService.startVoice();
+    // Foydalanuvchi aperturaga yoki mikrofonga bosib Kotiba rejimini faollashtirdi
+    isStoppingRef.current = false;
+    isSecretaryModeRef.current = true;
+    startSecretaryListening();
   };
 
   const handleFormSubmit = (e: React.FormEvent) => {
@@ -392,7 +761,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     if (!queryText.trim() && attachedFiles.length === 0) return;
     const text = queryText.trim() || "Biriktirilgan faylni tahlil qil";
     setQueryText("");
-    executeMisaQuery(text, false);
+    executeMisaQuery(text, false, false);
   };
 
   const handleSuggestionClick = (item: (typeof QUICK_SUGGESTIONS)[0]) => {
@@ -400,14 +769,23 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       handleToggleVoice();
       return;
     }
-    executeMisaQuery(item.query, false);
+    executeMisaQuery(item.query, false, false);
   };
 
   const handleFileAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     Array.from(files).forEach((file) => {
-      if (
+      if (file.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name)) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          setAttachedFiles((prev) => [
+            ...prev,
+            { name: file.name, size: file.size, dataUrl: String(reader.result || ""), type: "image" },
+          ]);
+        };
+        reader.readAsDataURL(file);
+      } else if (
         file.size <= 256 * 1024 &&
         (file.type.startsWith("text/") ||
           /\.(txt|md|json|py|ts|tsx|js|csv|html|css|log)$/i.test(file.name))
@@ -416,7 +794,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         reader.onload = () => {
           setAttachedFiles((prev) => [
             ...prev,
-            { name: file.name, size: file.size, content: String(reader.result || "") },
+            { name: file.name, size: file.size, content: String(reader.result || ""), type: "text" },
           ]);
         };
         reader.readAsText(file);
@@ -439,7 +817,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const getStatusSubtitle = () => {
     switch (effectiveOrbState) {
       case "listening":
-        return "Sizni tinglayapman... Marhamat, gapiring";
+        return userTranscript
+          ? `Tinglanmoqda: "${userTranscript}"`
+          : 'Kotiba rejimi faol — Misa eshitmoqda... Chaqirish uchun "Misa..." deb gapiring';
       case "thinking":
         return "So'rovingiz tahlil qilinmoqda...";
       case "planning":
@@ -453,10 +833,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       case "speaking":
         return "Misa javob bermoqda...";
       case "error":
-        return micError || "Tizim holatini tekshiring yoki qayta urinib ko'ring";
+        return (
+          micError ||
+          (backendStatus.status === "offline"
+            ? "Menda xatolik bor: server bilan aloqa uzilgan (Port 18420)"
+            : "Tizim holatini tekshiring yoki qayta urinib ko'ring")
+        );
       case "idle":
       default:
-        return "Bugun nimani birgalikda bajaramiz?";
+        return 'Kotiba rejimi pauzada. Boshlash uchun markaziy aperturaga bosing';
     }
   };
 
@@ -560,6 +945,111 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           )}
         </div>
 
+        {/* 1.5. Startup System Status & Diagnostic Briefing Banner */}
+        {startupBriefing && isBriefingVisible && (
+          <div
+            className="misa-glass-card"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "10px",
+              padding: "9px 18px",
+              borderRadius: "16px",
+              marginBottom: "18px",
+              maxWidth: "680px",
+              width: "100%",
+              background:
+                briefingSeverity === "success"
+                  ? "rgba(18, 53, 36, 0.72)"
+                  : briefingSeverity === "warning"
+                  ? "rgba(64, 43, 10, 0.72)"
+                  : "rgba(56, 14, 20, 0.72)",
+              border:
+                briefingSeverity === "success"
+                  ? "1px solid rgba(78, 222, 163, 0.45)"
+                  : briefingSeverity === "warning"
+                  ? "1px solid rgba(245, 158, 11, 0.45)"
+                  : "1px solid rgba(255, 113, 108, 0.45)",
+              boxShadow: "0 6px 24px rgba(0, 0, 0, 0.35)",
+            }}
+          >
+            <span
+              style={{
+                width: "8px",
+                height: "8px",
+                borderRadius: "50%",
+                flexShrink: 0,
+                backgroundColor:
+                  briefingSeverity === "success"
+                    ? "#4EDEA3"
+                    : briefingSeverity === "warning"
+                    ? "#F59E0B"
+                    : "#FF716C",
+                boxShadow: `0 0 10px ${
+                  briefingSeverity === "success"
+                    ? "#4EDEA3"
+                    : briefingSeverity === "warning"
+                    ? "#F59E0B"
+                    : "#FF716C"
+                }`,
+              }}
+            />
+            <span
+              style={{
+                fontSize: "12.5px",
+                color:
+                  briefingSeverity === "success"
+                    ? "#C2F0DD"
+                    : briefingSeverity === "warning"
+                    ? "#FDE68A"
+                    : "#FFD1D0",
+                flex: 1,
+                textAlign: "left",
+                fontWeight: 500,
+                lineHeight: 1.45,
+              }}
+            >
+              {startupBriefing}
+            </span>
+            <button
+              type="button"
+              onClick={() => playSpeechAudio(startupBriefing)}
+              title="Qayta tinglash"
+              style={{
+                background: "rgba(255, 255, 255, 0.08)",
+                border: "1px solid rgba(255, 255, 255, 0.12)",
+                borderRadius: "8px",
+                padding: "4px 8px",
+                color: "#FFFFFF",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "5px",
+                fontSize: "11px",
+              }}
+            >
+              <VolumeIcon size={12} color="currentColor" />
+              <span>Ovozda</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsBriefingVisible(false)}
+              title="Yopish"
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "rgba(255, 255, 255, 0.5)",
+                cursor: "pointer",
+                padding: "4px",
+                display: "inline-flex",
+                alignItems: "center",
+              }}
+            >
+              <CloseIcon size={12} color="currentColor" />
+            </button>
+          </div>
+        )}
+
         {/* 2. Greeting Typography */}
         <h1
           style={{
@@ -589,7 +1079,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             fontSize: "15px",
             fontWeight: 400,
             color:
-              effectiveOrbState === "listening"
+              (effectiveOrbState as string) === "listening"
                 ? "#4EDEA3"
                 : effectiveOrbState === "error"
                 ? "#FF716C"
@@ -773,7 +1263,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   <>
                     <button
                       type="button"
-                      onClick={() => backendService.speakText(assistantResponse)}
+                      onClick={() => playSpeechAudio(assistantResponse)}
                       title="Ovozda eshitish"
                       style={{
                         display: "inline-flex",
@@ -842,7 +1332,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
             {assistantResponse ? (
               <div style={{ fontSize: "13.5px", color: "#F5F0FF", lineHeight: 1.6 }}>
-                <MarkdownView content={assistantResponse} />
+                <MarkdownView content={unwrapCleanResponse(assistantResponse)} />
               </div>
             ) : (
               <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
@@ -1037,7 +1527,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               type="text"
               value={queryText}
               onChange={(e) => setQueryText(e.target.value)}
-              placeholder="Misa bilan suhbatlashing yoki buyruq bering..."
+              placeholder='Misa bilan suhbatlashing... (masalan: "Misa, bugun ob-havo qanday?")'
               style={{
                 flex: 1,
                 background: "transparent",

@@ -248,6 +248,11 @@ export const RemoteControlPage: React.FC<RemoteControlPageProps> = () => {
   return (
     <div
       style={{
+        flex: 1,
+        width: "100%",
+        height: "100%",
+        overflowY: "auto",
+        boxSizing: "border-box",
         padding: "24px 32px 48px 32px",
         maxWidth: "1380px",
         margin: "0 auto",
@@ -314,7 +319,7 @@ export const RemoteControlPage: React.FC<RemoteControlPageProps> = () => {
                 Masofaviy Boshqaruv & Ruxsatlar Markazi
               </h1>
               <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted, #94A3B8)" }}>
-                Telegram Bot, Misa User App va Windows PC Agent xavfsiz boshqaruv tizimi (v9.0.0)
+                Telegram Bot, Misa User App va Windows PC Agent xavfsiz boshqaruv tizimi
               </p>
             </div>
           </div>
@@ -413,7 +418,7 @@ export const RemoteControlPage: React.FC<RemoteControlPageProps> = () => {
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0" }}>
                 <span style={{ color: "var(--text-muted, #94A3B8)" }}>Agent Versiyasi:</span>
-                <span style={{ color: "#10B981", fontWeight: 600 }}>v{selectedDevice.agent_version || "9.0.0"}</span>
+                <span style={{ color: "#10B981", fontWeight: 600 }}>v{selectedDevice.agent_version || "9.0.1"}</span>
               </div>
             </div>
           ) : (

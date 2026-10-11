@@ -88,7 +88,7 @@ export const MisaLogo: React.FC<MisaLogoProps> = ({
                 whiteSpace: "nowrap",
               }}
             >
-              v9.0
+              v9.0.1
             </span>
           )}
         </div>

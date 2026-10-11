@@ -514,6 +514,17 @@ export const CommandsPage: React.FC<CommandsPageProps> = ({ onNavigateHome }) =>
     return () => clearTimeout(handler);
   }, [searchQuery]);
 
+  useEffect(() => {
+    if (!activeInspectTool) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setActiveInspectTool(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeInspectTool]);
+
   // Load commands from backend
   const fetchCommands = useCallback(async () => {
     let mounted = true;
@@ -1094,10 +1105,19 @@ export const CommandsPage: React.FC<CommandsPageProps> = ({ onNavigateHome }) =>
             <button
               onClick={() => fetchCommands()}
               style={{
-                display: "flex", alignItems: "center", gap: "6px",
-                padding: "9px 18px", borderRadius: "8px", border: "none",
-                background: "#10B981", color: "#fff", fontSize: "13px",
-                fontWeight: 500, cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "9px 18px",
+                borderRadius: "10px",
+                border: "1px solid rgba(192, 76, 253, 0.45)",
+                background: "linear-gradient(135deg, rgba(147, 3, 197, 0.4) 0%, rgba(192, 76, 253, 0.3) 100%)",
+                color: "#FFFFFF",
+                fontSize: "13px",
+                fontWeight: 600,
+                cursor: "pointer",
+                boxShadow: "0 2px 12px rgba(147, 3, 197, 0.3)",
+                transition: "all 0.2s ease",
               }}
             >
               Qayta yuklash

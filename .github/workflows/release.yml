@@ -84,7 +84,7 @@ jobs:
               python packaging/sign_release.py --manifest $manifest
           } else {
               Write-Host "MIKASA_RELEASE_SIGNING_KEY not set in GitHub secrets. Verifying pre-signed manifest..."
-              python -c "import json; from core.v8.update_service import UpdateCrypto; c = UpdateCrypto(); m = json.load(open('$manifest')); [c.verify_artifact('release/$tag/' + f['name'], f['sha256'], f['signature']) for f in m.get('files', [])]; print('Verified pre-signed release manifest successfully.')"
+              python -c "import json; from core.v8.update_service import UpdateCrypto; c = UpdateCrypto(); m = json.load(open('$manifest')); [c.verify_artifact('release/$tag/' + f['name'], f['sha256'], f['signature']) for f in m.get('files', []) if 'signature' in f]; print('Verified pre-signed release manifest successfully.')"
           }
 
       - name: Clean Existing Release Assets
@@ -109,33 +109,30 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: "Mikasa AI ${{ github.ref_name }} (Windows Production Release)"
+          name: "Misa AI ${{ github.ref_name }} (Windows Production Release)"
           draft: false
           prerelease: false
           make_latest: true
           body: |
-            ## 🚀 Mikasa AI v8.0.0 — Level 8 Autonomous Desktop Assistant & Intelligence Hub
+            ## 🚀 Misa AI ${{ github.ref_name }} — Level 9 Autonomous Desktop Assistant & Intelligence Hub
 
-            Rasmiy Mikasa AI v8.0.0 Windows Production Release.
+            Rasmiy Misa AI ${{ github.ref_name }} Windows Production Release.
 
-            ### 📦 Reliz Fayllari (Ed25519 & SHA-256 bilan imzolangan):
-            - **`Mikasa-AI-v8.0.0-Portable.zip`**: To'liq mustaqil (Self-contained) portativ arxiv — 59 MB (ichida standalone backend runtime, WebView2Loader va `run_portable.bat` bilan, foydalanuvchidan Python yoki Node talab qilinmaydi).
-            - **`Mikasa-AI-Setup-v8.0.0.exe`**: Windows NSIS Setup o'rnatuvchisi (Tavsiya etiladi — 2.01 MB).
-            - **`Mikasa-AI-v8.0.0.exe`**: O'zida WebView2Loader kutubxonasini avtomatik ta'minlovchi mustaqil ilova (4.87 MB).
-            - **`Mikasa-AI-v8.0.0.msi`**: Standart Windows Installer paketi (2.70 MB).
-            - **`WebView2Loader.dll`**: Native Windows runtime dll (156 KB).
+            ### 📦 Reliz Fayllari (SHA-256 va Ed25519 bilan himoyalangan):
+            - **`Misa-AI-${{ github.ref_name }}-Portable.zip`**: To'liq mustaqil (Self-contained) portativ arxiv (ichida standalone backend runtime, WebView2Loader va `run_portable.bat` bilan, foydalanuvchidan Python yoki Node.js talab qilinmaydi).
+            - **`Misa-AI-Setup-${{ github.ref_name }}.exe`**: Windows NSIS Setup o'rnatuvchisi (Tavsiya etiladi).
+            - **`Misa-AI-${{ github.ref_name }}.exe`**: O'zida WebView2Loader kutubxonasini avtomatik ta'minlovchi mustaqil ilova.
+            - **`Misa-AI-${{ github.ref_name }}.msi`**: Standart Windows Installer paketi.
+            - **`WebView2Loader.dll`**: Native Windows runtime dll.
             - **`run_portable.bat`**: Backend va Frontendni bir bosishda ishga tushiruvchi bat skript.
-            - **`version_manifest.json`**: Kriptografik imzolangan reliz manifesti.
+            - **`version_manifest.json`**: Kriptografik imzolangan va tekshirilgan reliz manifesti.
 
-            ### ⚡ Asosiy Imkoniyatlar (v8.0.0):
-            1. **Self-Contained Backend Runtime**: Python 3.11 yoki Node.js o'rnatilmagan kompyuterlarda ham `127.0.0.1:18420` backend to'liq mustaqil ishlaydi.
-            2. **Native Tauri Backend Supervisor**: Dastur ochilganda backend holati tekshiriladi, fon rejimida boshqariladi va ilova yopilganda toza to'xtatiladi.
-            3. **Google OAuth & Desktop Pairing**: Brauzer orqali Google OAuth autentifikatsiyasi va avtomatik callback sessiyalari 100% integratsiya qilindi.
-            4. **Kriptografik xavfsizlik**: Barcha reliz artefaktlari Ed25519 algoritmi bilan imzolangan va xavfsiz avtomatik yangilanish tizimi bilan himoyalangan.
-
-            ### 🔐 Xavfsizlik:
-            - **Trusted Ed25519 Public Key**: `b4be839fd62657c0e786e1a2ad590c05c45c511371d041137c5ca9ac57c29829`
-            - **Avtomatik yangilanish**: Fail-closed, atomik staging va xavfsiz rollback.
+            ### ⚡ Yangi Imkoniyatlar (${{ github.ref_name }}):
+            1. **Intellektual Ovozli Yordamchi**: Wake-word (`Hey Misa`), jonli mikrofon oqimi, dynamic hot-plug audio qurilmalar boshqaruvi va RVC (Retrieval-based Voice Conversion) vokal modellar integratsiyasi.
+            2. **Self-Contained Backend**: Python 3.11 yoki Node.js o'rnatilmagan kompyuterlarda ham `127.0.0.1:18420` backend to'liq mustaqil ishlaydi.
+            3. **Native Tauri Desktop Supervisor**: Dastur ochilganda backend holati tekshiriladi, fon rejimida boshqariladi va ilova yopilganda toza to'xtatiladi.
+            4. **Google OAuth & Desktop Pairing**: Brauzer orqali Google OAuth autentifikatsiyasi va avtomatik callback sessiyalari 100% integratsiya qilindi.
+            5. **Kriptografik Xavfsizlik**: Barcha reliz artefaktlari SHA-256 va Ed25519 algoritmi bilan ta'minlangan xavfsiz avtomatik yangilanish tizimi bilan himoyalangan.
           files: |
             release/${{ github.ref_name }}/*.exe
             release/${{ github.ref_name }}/*.msi
