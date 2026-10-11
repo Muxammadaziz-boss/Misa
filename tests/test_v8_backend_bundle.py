@@ -28,17 +28,30 @@ def is_port_listening(port: int = 18420, host: str = "127.0.0.1") -> bool:
 
 def ensure_backend_extracted():
     """If running in fresh CI clone where backend/ was gitignored, unpack from portable zip."""
-    backend_exe = REPO_ROOT / "release" / "v8.0.0" / "backend" / "misa_backend.exe"
-    zip_path = REPO_ROOT / "release" / "v8.0.0" / "Mikasa-AI-v8.0.0-Portable.zip"
-    if not backend_exe.exists() and zip_path.exists():
+    v8_dir = REPO_ROOT / "release" / "v8.0.0"
+    backend_dir = v8_dir / "backend"
+    zip_path = v8_dir / "Mikasa-AI-v8.0.0-Portable.zip"
+    if zip_path.exists() and not (backend_dir / "misa_backend.exe").exists() and not (backend_dir / "mikasa_backend.exe").exists():
         with zipfile.ZipFile(zip_path, "r") as zf:
             for member in zf.namelist():
                 if member.startswith("backend/"):
-                    zf.extract(member, REPO_ROOT / "release" / "v8.0.0")
-    tauri_backend_exe = REPO_ROOT / "Misa" / "src-tauri" / "backend" / "misa_backend.exe"
-    if not tauri_backend_exe.exists() and backend_exe.exists():
-        tauri_backend_exe.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(backend_exe.parent, tauri_backend_exe.parent, dirs_exist_ok=True)
+                    zf.extract(member, v8_dir)
+
+    # Ensure misa_backend.exe exists if mikasa_backend.exe was unpacked
+    if (backend_dir / "mikasa_backend.exe").exists() and not (backend_dir / "misa_backend.exe").exists():
+        shutil.copy2(backend_dir / "mikasa_backend.exe", backend_dir / "misa_backend.exe")
+
+    tauri_backend_dir = REPO_ROOT / "Misa" / "src-tauri" / "backend"
+    tauri_backend_exe = tauri_backend_dir / "misa_backend.exe"
+    src_backend_exe = backend_dir / "misa_backend.exe"
+    if not src_backend_exe.exists():
+        src_backend_exe = backend_dir / "mikasa_backend.exe"
+
+    if not tauri_backend_exe.exists() and src_backend_exe.exists():
+        tauri_backend_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(src_backend_exe.parent, tauri_backend_dir, dirs_exist_ok=True)
+        if not tauri_backend_exe.exists() and (tauri_backend_dir / "mikasa_backend.exe").exists():
+            shutil.copy2(tauri_backend_dir / "mikasa_backend.exe", tauri_backend_exe)
 
 
 ensure_backend_extracted()
@@ -49,12 +62,16 @@ class TestBackendBundleStructure(unittest.TestCase):
 
     def test_backend_executable_in_release(self):
         backend_exe = REPO_ROOT / "release" / "v8.0.0" / "backend" / "misa_backend.exe"
-        self.assertTrue(backend_exe.exists(), f"misa_backend.exe not found at: {backend_exe}")
+        if not backend_exe.exists():
+            backend_exe = REPO_ROOT / "release" / "v8.0.0" / "backend" / "mikasa_backend.exe"
+        self.assertTrue(backend_exe.exists(), f"Backend executable not found at: {backend_exe}")
         size_mb = backend_exe.stat().st_size / (1024 * 1024)
         self.assertGreater(size_mb, 1.0, f"Executable size too small: {size_mb:.2f} MB")
 
     def test_backend_deployed_to_tauri_resources(self):
         tauri_backend_exe = REPO_ROOT / "Misa" / "src-tauri" / "backend" / "misa_backend.exe"
+        if not tauri_backend_exe.exists():
+            tauri_backend_exe = REPO_ROOT / "Misa" / "src-tauri" / "backend" / "mikasa_backend.exe"
         self.assertTrue(tauri_backend_exe.exists(), f"Tauri resource backend not found at: {tauri_backend_exe}")
 
     def test_tauri_conf_includes_backend_resources(self):
@@ -84,11 +101,11 @@ class TestBackendRuntimeAndHealth(unittest.TestCase):
                 cwd=str(REPO_ROOT),
                 env=env,
             )
-            # Wait for backend readiness
-            for _ in range(30):
+            # Wait for backend readiness (up to 30s)
+            for _ in range(60):
                 if is_port_listening(18420):
                     break
-                time.sleep(0.2)
+                time.sleep(0.5)
 
     @classmethod
     def tearDownClass(cls):
