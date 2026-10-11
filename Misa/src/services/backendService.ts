@@ -785,17 +785,39 @@ export function normalizeApiError(error: any, fallbackMessage: string = "Xatolik
   const msg = String(error?.message || error || "").trim();
   const lower = msg.toLowerCase();
 
+  // HTTP status codes
+  if (lower.includes("401") || lower.includes("unauthorized") || lower.includes("avtorizatsiya")) {
+    return "Avtorizatsiya xatosi (HTTP 401: Token yaroqsiz yoki muddati o'tgan).";
+  }
+  if (lower.includes("403") || lower.includes("forbidden") || lower.includes("cross-tenant")) {
+    return "Ruxsat etilmagan (HTTP 403: Boshqa hisob ma'lumotlariga kirish taqiqlangan).";
+  }
+  if (lower.includes("404") || lower.includes("not found") || lower.includes("topilmadi")) {
+    return "Resurs yoki foydalanuvchi topilmadi (HTTP 404).";
+  }
+  if (lower.includes("500") || lower.includes("internal server error")) {
+    return "Server ichki xatosi (HTTP 500).";
+  }
+
+  // Network & connection diagnostics
+  if (lower.includes("connection refused") || lower.includes("econnrefused")) {
+    return "Backend ishga tushmoqda yoki ulanib bo'lmadi (127.0.0.1:18420 Connection Refused).";
+  }
   if (
     lower.includes("failed to fetch") ||
     lower.includes("networkerror") ||
-    lower.includes("connection refused") ||
-    lower.includes("econnrefused") ||
-    lower.includes("load failed")
+    lower.includes("load failed") ||
+    lower.includes("network request failed")
   ) {
-    return "Backend xizmati bilan aloqa yo'q (127.0.0.1:18420 da xizmat ishga tushmagan yoki yuklanmoqda).";
+    return "Backend ishga tushmoqda... (127.0.0.1:18420 portida xizmat yuklanmoqda)";
   }
   if (lower.includes("timeout") || lower.includes("aborted") || lower.includes("aborterror")) {
     return "So'rov vaqti tugadi (Timeout). Server juda sekin javob berdi.";
+  }
+
+  // Audio & microphone diagnostics
+  if (lower.includes("disconnected") || lower.includes("ulanmagan")) {
+    return "Tanlangan audio qurilma uzilgan yoki audio portga ulanmagan.";
   }
   if (lower.includes("permission") || lower.includes("notallowederror")) {
     return "Mikrofon ruxsati berilmagan. Audio capture ruxsatini tekshiring.";
@@ -803,6 +825,7 @@ export function normalizeApiError(error: any, fallbackMessage: string = "Xatolik
   if (lower.includes("notfounderror") || lower.includes("devicesnotfound")) {
     return "Audio kirish qurilmasi (mikrofon) topilmadi.";
   }
+
   return msg || fallbackMessage;
 }
 
@@ -812,6 +835,85 @@ class BackendService {
   private isConnectingWs = false;
   private currentStatus: BackendStatus = { status: "connecting" };
   private currentVoiceState: VoiceState = "idle";
+  private isBackendHealthy = false;
+
+  public async checkBackendHealth(): Promise<{ ok: boolean; ready: boolean; status?: string; version?: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/api/health`, { method: "GET" });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        this.isBackendHealthy = true;
+        return { ok: true, ready: !!data.ready || data.status === "ok", status: data.status, version: data.version };
+      }
+      return { ok: false, ready: false, status: `HTTP ${res.status}` };
+    } catch {
+      this.isBackendHealthy = false;
+      return { ok: false, ready: false, status: "connecting" };
+    }
+  }
+
+  public isHealthy(): boolean {
+    return this.isBackendHealthy;
+  }
+
+  public async waitForBackendReady(maxWaitMs: number = 6000): Promise<boolean> {
+    const start = Date.now();
+    while (Date.now() - start < maxWaitMs) {
+      const h = await this.checkBackendHealth();
+      if (h.ready) return true;
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    return false;
+  }
+
+  public async apiRequest<T = any>(
+    endpoint: string,
+    options: RequestInit = {},
+    timeoutMs: number = 8000
+  ): Promise<{ ok: boolean; data?: T; status?: number; error?: string }> {
+    const url = endpoint.startsWith("http") ? endpoint : `${API_BASE}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    const headers: Record<string, string> = {
+      ...(options.headers as Record<string, string> || {}),
+    };
+    if (this.authToken && !headers["Authorization"]) {
+      headers["Authorization"] = `Bearer ${this.authToken}`;
+    }
+
+    try {
+      const res = await fetch(url, {
+        ...options,
+        headers,
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        return {
+          ok: false,
+          status: res.status,
+          error: normalizeApiError(txt || `HTTP ${res.status}`),
+        };
+      }
+
+      const contentType = res.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        const json = await res.json();
+        return { ok: true, data: json, status: res.status };
+      }
+      return { ok: true, data: (await res.text()) as any, status: res.status };
+    } catch (err: any) {
+      clearTimeout(timer);
+      return {
+        ok: false,
+        status: 0,
+        error: normalizeApiError(err),
+      };
+    }
+  }
 
   private statusListeners: Set<(status: BackendStatus) => void> = new Set();
   private voiceStateListeners: Set<(state: VoiceState) => void> = new Set();
@@ -856,6 +958,8 @@ class BackendService {
                 session.user.user_metadata?.username ||
                 session.user.email?.split("@")[0] ||
                 "User",
+              first_name: session.user.user_metadata?.first_name || undefined,
+              last_name: session.user.user_metadata?.last_name || undefined,
               email: session.user.email || "",
               is_active: true,
               is_verified: Boolean(session.user.email_confirmed_at),
@@ -863,6 +967,12 @@ class BackendService {
               avatar_url: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || undefined,
               provider: session.user.app_metadata?.provider || "google",
             };
+            if (user.first_name) {
+              try { localStorage.setItem("misa_user_first_name", user.first_name); } catch {}
+            }
+            if (user.last_name) {
+              try { localStorage.setItem("misa_user_last_name", user.last_name); } catch {}
+            }
             this.notifyAuthChange(user);
           }
         } else if (event === "SIGNED_OUT") {
@@ -1427,7 +1537,9 @@ class BackendService {
     voice_name?: string;
     provider?: string;
     is_fallback?: boolean;
+    needs_download?: boolean;
     fallback_reason?: string;
+    badge?: string;
     message?: string;
     error?: string;
   }> {
@@ -1453,6 +1565,97 @@ class BackendService {
         ok: false,
         error: normalizeApiError(e, "Ovoz serveriga ulanib bo'lmadi"),
       };
+    }
+  }
+
+  // ========== RVC Local AI Voice Runtime Installer ==========
+  public async getVoiceRuntimeStatus(): Promise<{
+    ok: boolean;
+    installed: boolean;
+    needs_download: boolean;
+    status_label: string;
+    badge: string;
+    missing_components?: string[];
+    installed_components?: string[];
+    hubert_exists?: boolean;
+    torch_exists?: boolean;
+    faiss_exists?: boolean;
+    task?: {
+      state: "idle" | "downloading_hubert" | "installing_packages" | "completed" | "error" | "cancelled";
+      step?: string;
+      progress: number;
+      message: string;
+      downloaded_bytes?: number;
+      total_bytes?: number;
+      error?: string | null;
+    };
+    error?: string;
+  }> {
+    try {
+      const res = await fetch(`${API_BASE}/api/voice/runtime/status`);
+      if (!res.ok) {
+        return {
+          ok: false,
+          installed: false,
+          needs_download: true,
+          status_label: "Yuklab olish zarur",
+          badge: "Yuklab olish zarur",
+          error: `HTTP ${res.status}`,
+        };
+      }
+      return await res.json();
+    } catch (e: any) {
+      return {
+        ok: false,
+        installed: false,
+        needs_download: true,
+        status_label: "Yuklab olish zarur",
+        badge: "Yuklab olish zarur",
+        error: normalizeApiError(e, "Runtime holatini aniqlab bo'lmadi"),
+      };
+    }
+  }
+
+  public async installVoiceRuntime(): Promise<{
+    ok: boolean;
+    message: string;
+    task?: any;
+    error?: string;
+  }> {
+    try {
+      const res = await fetch(`${API_BASE}/api/voice/runtime/install`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        return {
+          ok: false,
+          message: "Yuklab olishni boshlab bo'lmadi",
+          error: normalizeApiError(txt, `HTTP ${res.status}`),
+        };
+      }
+      return await res.json();
+    } catch (e: any) {
+      return {
+        ok: false,
+        message: "Serverga ulanishda xatolik",
+        error: normalizeApiError(e, "O'rnatuvchiga ulanib bo'lmadi"),
+      };
+    }
+  }
+
+  public async cancelVoiceRuntimeInstall(): Promise<{
+    ok: boolean;
+    message: string;
+  }> {
+    try {
+      const res = await fetch(`${API_BASE}/api/voice/runtime/cancel`, {
+        method: "POST",
+      });
+      return await res.json();
+    } catch (e: any) {
+      return { ok: false, message: "Bekor qilib bo'lmadi" };
     }
   }
 
@@ -2941,6 +3144,12 @@ class BackendService {
 
       // Backend profiliga ism va familiyani sinxronlash
       if (payload.first_name || payload.last_name) {
+        try {
+          if (payload.first_name) localStorage.setItem("misa_user_first_name", payload.first_name);
+          if (payload.last_name) localStorage.setItem("misa_user_last_name", payload.last_name);
+          if (fullName) localStorage.setItem("misa_user_name", fullName);
+        } catch {}
+
         this.updateAccount({
           first_name: payload.first_name,
           last_name: payload.last_name,
@@ -2952,6 +3161,8 @@ class BackendService {
         ? {
             id: data.user.id,
             username: payload.username,
+            first_name: payload.first_name || undefined,
+            last_name: payload.last_name || undefined,
             email: data.user.email || email,
             is_active: true,
             is_verified: Boolean(data.user.email_confirmed_at),
@@ -3010,10 +3221,22 @@ class BackendService {
         this.setAuthToken(sessionToken);
       }
 
+      const meta = data.user?.user_metadata || {};
+      const userFirstName = meta.first_name || undefined;
+      const userLastName = meta.last_name || undefined;
+      if (userFirstName) {
+        try { localStorage.setItem("misa_user_first_name", userFirstName); } catch {}
+      }
+      if (userLastName) {
+        try { localStorage.setItem("misa_user_last_name", userLastName); } catch {}
+      }
+
       const user: MikasaAuthUser | undefined = data.user
         ? {
             id: data.user.id,
-            username: data.user.user_metadata?.username || payload.username_or_email,
+            username: meta.username || payload.username_or_email,
+            first_name: userFirstName,
+            last_name: userLastName,
             email: data.user.email || targetEmail,
             is_active: true,
             is_verified: Boolean(data.user.email_confirmed_at),
@@ -4234,6 +4457,8 @@ export interface AccountSessionsResponse {
 export interface MikasaAuthUser {
   id: string;
   username: string;
+  first_name?: string;
+  last_name?: string;
   email: string;
   is_active: boolean;
   is_verified: boolean;

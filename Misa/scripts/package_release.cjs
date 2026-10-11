@@ -142,6 +142,14 @@ if (backendSourceDir && backendSourceDir !== backendTargetDir) {
   console.log(`✔ Bundled Backend Runtime (_internal bilan) mavjud: ${path.basename(backendTargetDir)}`);
 }
 
+// Har doim eng so'nggi core/ kodlarini backend runtime ga sinxronizatsiya qilish
+const internalCoreTarget = path.join(backendTargetDir, "_internal", "core");
+const workspaceCore = path.join(projectRoot, "core");
+if (fs.existsSync(internalCoreTarget) && fs.existsSync(workspaceCore)) {
+  fs.cpSync(workspaceCore, internalCoreTarget, { recursive: true, force: true });
+  console.log(`✔ Backend _internal/core ga yangi kodlar sinxronlandi`);
+}
+
 // 5. Copy MSI Installer if exists
 const msiDir = path.join(tauriBundleDir, "msi");
 if (fs.existsSync(msiDir)) {

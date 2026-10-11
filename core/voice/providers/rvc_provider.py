@@ -80,7 +80,10 @@ class RVCVoiceProvider(BaseVoiceProvider):
         if not pth_exists:
             return {
                 "status": "unavailable",
-                "reason": f"{model_name} .pth fayli topilmadi (data/rvc_models jildida yo'q)",
+                "needs_download": True,
+                "badge": "Yuklab olish zarur",
+                "reason": f"Yuklab olish zarur (model runtime not implemented / missing dependency: {model_name} .pth fayli topilmadi)",
+                "technical_reason": f"{model_name} .pth fayli topilmadi (data/rvc_models jildida yo'q)",
                 "runtime_ready": False
             }
 
@@ -96,12 +99,18 @@ class RVCVoiceProvider(BaseVoiceProvider):
         if missing_deps:
             return {
                 "status": "unavailable",
-                "reason": f"model runtime not implemented / missing dependency: {', '.join(missing_deps)}",
+                "needs_download": True,
+                "badge": "Yuklab olish zarur",
+                "reason": f"Yuklab olish zarur (model runtime not implemented / missing dependency: {', '.join(missing_deps)})",
+                "technical_reason": f"model runtime not implemented / missing dependency: {', '.join(missing_deps)}",
+                "missing_deps": missing_deps,
                 "runtime_ready": False
             }
 
         return {
             "status": "available",
+            "needs_download": False,
+            "badge": "Lokal RVC",
             "reason": "RVC inference modeli to'liq tayyor",
             "runtime_ready": True
         }

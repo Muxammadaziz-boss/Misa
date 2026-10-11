@@ -77,9 +77,10 @@ class VoiceRegistry:
                 "provider": "rvc",
                 "voice_id": "ashley_clayson",
                 "status": ashley_status.get("status", "unavailable"),
-                "reason": ashley_status.get("reason", "model runtime not implemented / missing dependency"),
+                "needs_download": ashley_status.get("needs_download", True),
+                "reason": ashley_status.get("reason", "Yuklab olish zarur (model runtime not implemented / missing dependency)"),
                 "desc": "Cyber Manhunt kiber-detektiv qahramonining xarizmatik ovoz modeli",
-                "badge": "Lokal RVC",
+                "badge": "Yuklab olish zarur" if ashley_status.get("needs_download", True) else "Lokal RVC",
                 "sample": "Salom! Men Ashley, tizim sizning barcha buyruqlaringizga tayyor."
             },
             {
@@ -89,9 +90,10 @@ class VoiceRegistry:
                 "provider": "rvc",
                 "voice_id": "discordjp_yukari",
                 "status": yukari_status.get("status", "unavailable"),
-                "reason": yukari_status.get("reason", "model runtime not implemented / missing dependency"),
+                "needs_download": yukari_status.get("needs_download", True),
+                "reason": yukari_status.get("reason", "Yuklab olish zarur (model runtime not implemented / missing dependency)"),
                 "desc": "DiscordJP yapon anime stilidagi quvnoq va yoqimli qizaloq ovoz modeli",
-                "badge": "Anime RVC",
+                "badge": "Yuklab olish zarur" if yukari_status.get("needs_download", True) else "Anime RVC",
                 "sample": "Assalomu alaykum! Men Yukari, birgalikda ajoyib ishlar qilamiz!"
             }
         ]

@@ -103,7 +103,7 @@ class TestBackendRuntimeAndHealth(unittest.TestCase):
         data = res.json()
         self.assertEqual(data.get("status"), "ok")
         self.assertEqual(data.get("app"), "Misa AI")
-        self.assertIn(data.get("version"), ("8.0.0", "9.0.0"))
+        self.assertIn(data.get("version"), ("8.0.0", "9.0.0", "9.0.1"))
 
     def test_oauth_callback_html(self):
         """Scenario G: GET /api/auth/callback serves OAuth redirect landing page."""
@@ -180,14 +180,20 @@ class TestPortableZipArchive(unittest.TestCase):
     """Scenario I & K: Portable zip self-contained archive validation."""
 
     def test_portable_zip_contains_all_components(self):
+        v91_zip = REPO_ROOT / "release" / "v9.0.1" / "Misa-AI-v9.0.1-Portable.zip"
         v9_zip = REPO_ROOT / "release" / "v9.0.0" / "Misa-AI-v9.0.0-Portable.zip"
         v8_zip = REPO_ROOT / "release" / "v8.0.0" / "Mikasa-AI-v8.0.0-Portable.zip"
-        zip_path = v9_zip if v9_zip.exists() else v8_zip
+        zip_path = v91_zip if v91_zip.exists() else (v9_zip if v9_zip.exists() else v8_zip)
         self.assertTrue(zip_path.exists(), f"Portable zip missing: {zip_path}")
         with zipfile.ZipFile(zip_path, "r") as zf:
             names = set(zf.namelist())
 
-        has_exe = any(n.endswith("Misa-AI-v9.0.0.exe") or n.endswith("Mikasa-AI-v8.0.0.exe") for n in names)
+        has_exe = any(
+            n.endswith("Misa-AI-v9.0.1.exe")
+            or n.endswith("Misa-AI-v9.0.0.exe")
+            or n.endswith("Mikasa-AI-v8.0.0.exe")
+            for n in names
+        )
         has_dll = any(n.endswith("WebView2Loader.dll") for n in names)
         has_bat = any(n.endswith("run_portable.bat") for n in names)
         has_backend = any(
@@ -195,7 +201,7 @@ class TestPortableZipArchive(unittest.TestCase):
             for n in names
         )
 
-        self.assertTrue(has_exe, "Portable zip must contain Misa-AI-v9.0.0.exe")
+        self.assertTrue(has_exe, "Portable zip must contain desktop executable")
         self.assertTrue(has_dll, "Portable zip must contain WebView2Loader.dll")
         self.assertTrue(has_bat, "Portable zip must contain run_portable.bat")
         self.assertTrue(has_backend, "Portable zip must contain backend executable")

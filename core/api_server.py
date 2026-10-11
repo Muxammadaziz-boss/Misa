@@ -1363,6 +1363,7 @@ async def handle_voice_preview(request):
         v_info = reg.get_voice_info(voice_id) or {}
         provider = v_info.get("provider", "edge_tts")
         is_fallback = False
+        needs_download = False
         fallback_reason = ""
 
         # Provider mavjudligini halol tekshirish
@@ -1370,7 +1371,11 @@ async def handle_voice_preview(request):
             rvc_stat = reg.rvc_provider.get_voice_status(voice_id)
             if not rvc_stat.get("runtime_ready"):
                 is_fallback = True
-                fallback_reason = rvc_stat.get("reason", "Lokal RVC model runtime o'rnatilmagan")
+                needs_download = rvc_stat.get("needs_download", True)
+                fallback_reason = rvc_stat.get(
+                    "reason",
+                    "Yuklab olish zarur: Ushbu ovoz uchun lokal AI modeli talab qilinadi. Vaqtincha zaxira ovoz ishlatilmoqda."
+                )
         elif provider == "fish_audio":
             if not reg.fish_provider.is_available():
                 is_fallback = True
@@ -1402,7 +1407,9 @@ async def handle_voice_preview(request):
             "voice_name": v_info.get("name", voice_id),
             "provider": provider,
             "is_fallback": is_fallback,
+            "needs_download": needs_download,
             "fallback_reason": fallback_reason,
+            "badge": "Yuklab olish zarur" if needs_download else v_info.get("badge", "Ovoz"),
             "audio_data": audio_data_uri,
             "sample_rate": 24000 if provider == "edge_tts" else 44100,
             "text": text,
@@ -1410,6 +1417,44 @@ async def handle_voice_preview(request):
         })
     except Exception as e:
         logger.error(f"[VOICE] Preview sintezida xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_voice_runtime_status(request: web.Request) -> web.Response:
+    """GET /api/voice/runtime/status - RVC lokal AI modellar va kutubxonalar holati"""
+    try:
+        from core.voice.providers.rvc_installer import get_rvc_installer
+        installer = get_rvc_installer()
+        status_data = installer.get_status()
+        return web.json_response({
+            "ok": True,
+            **status_data
+        })
+    except Exception as e:
+        logger.error(f"[VOICE] Runtime status xatosi: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_voice_runtime_install(request: web.Request) -> web.Response:
+    """POST /api/voice/runtime/install - Foydalanuvchi talabi bilan lokal AI paketlarini yuklab olish"""
+    try:
+        from core.voice.providers.rvc_installer import get_rvc_installer
+        installer = get_rvc_installer()
+        res = installer.start_install()
+        return web.json_response(res)
+    except Exception as e:
+        logger.error(f"[VOICE] Runtime install boshlash xatosi: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_voice_runtime_cancel(request: web.Request) -> web.Response:
+    """POST /api/voice/runtime/cancel - Yuklab olishni bekor qilish"""
+    try:
+        from core.voice.providers.rvc_installer import get_rvc_installer
+        installer = get_rvc_installer()
+        res = installer.cancel_install()
+        return web.json_response(res)
+    except Exception as e:
         return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 
@@ -2745,6 +2790,19 @@ async def handle_account_get(request):
         return err
     user_id = user_id or get_current_user_name() or "local_user"
 
+    # Explicit query or header bo'yicha foydalanuvchi tekshiruvi (404 Not Found)
+    req_query = getattr(request, "query", {}) or {}
+    explicit_user_id = req_query.get("user_id")
+    if explicit_user_id and str(explicit_user_id).strip().lower() not in ("me", "self", "current", "local_user"):
+        from core.v8 import AccountDeviceManager
+        adm_check = AccountDeviceManager.get_default_instance()
+        if not adm_check.get_user(str(explicit_user_id).strip()):
+            return web.json_response({
+                "ok": False,
+                "error": f"Foydalanuvchi topilmadi: {explicit_user_id}"
+            }, status=404)
+        user_id = str(explicit_user_id).strip()
+
     user_name = get_current_user_name()
     voice_type = get_current_voice_type()
     cfg = _read_config()
@@ -2791,33 +2849,62 @@ async def handle_account_get(request):
     language = user_cfg.get("language") or mem_profile.get("til", "uz")
 
     ai_keys = {}
+    has_gemini = False
+    masked_key = ""
+
+    def _mask_api_key(raw_val: Optional[str]) -> str:
+        if not raw_val:
+            return ""
+        s = str(raw_val).strip()
+        if not s:
+            return ""
+        if len(s) > 10:
+            return s[:6] + "..." + s[-4:]
+        return "●●●●●●"
+
     try:
         from core.v8.ai_key_manager import get_ai_key_manager
         ai_mgr = get_ai_key_manager()
-        status_sum = ai_mgr.get_status_summary()
-        active_keys = status_sum.get("active_keys", {})
+        status_sum = ai_mgr.get_status_summary() if ai_mgr else {}
+        active_keys = status_sum.get("active_keys", {}) if isinstance(status_sum, dict) else {}
         for prov in ("gemini", "groq", "cerebras", "openrouter", "nvidia"):
             k = active_keys.get(prov) or ""
             has_k = bool(k)
-            masked = (k[:6] + "..." + k[-4:]) if (has_k and len(k) > 10) else ("●●●●●●" if has_k else "")
             ai_keys[prov] = {
                 "has_key": has_k,
-                "masked_key": masked,
+                "masked_key": _mask_api_key(k) if has_k else "",
             }
-        active_key = ai_mgr.get_active_gemini_key(user_id=user_id)
-        has_gemini = bool(active_key)
-        if has_gemini and len(active_key) > 12:
-            masked_key = active_key[:8] + "..." + active_key[-4:]
-    except Exception:
-        has_gemini = bool(os.environ.get("GEMINI_API_KEY") or ai_cfg.get("gemini_api_key"))
-        for prov in ("gemini", "groq", "cerebras", "openrouter", "nvidia"):
-            k = os.environ.get(f"{prov.upper()}_API_KEY") or ai_cfg.get(f"{prov}_api_key") or ""
+        active_key = ai_mgr.get_active_gemini_key(user_id=user_id) if ai_mgr else None
+        if active_key:
+            has_gemini = True
+            masked_key = _mask_api_key(active_key)
+    except Exception as _ai_err:
+        logger.debug(f"[ACCOUNT] AI key manager xatosi: {_ai_err}")
+
+    # Fallback to env or config if Gemini key was not active in ai_mgr
+    if not has_gemini:
+        fallback_k = os.environ.get("GEMINI_API_KEY") or ai_cfg.get("gemini_api_key") or ""
+        if fallback_k:
+            has_gemini = True
+            masked_key = _mask_api_key(fallback_k)
+            if "gemini" in ai_keys:
+                ai_keys["gemini"]["has_key"] = True
+                ai_keys["gemini"]["masked_key"] = masked_key
+
+    # Barcha qo'llab-quvvatlanuvchi provayderlar xavfsiz qiymatga ega bo'lishini ta'minlash
+    for prov in ("gemini", "groq", "cerebras", "openrouter", "nvidia"):
+        if prov not in ai_keys:
+            k = os.environ.get(f"{prov.upper()}_API_KEY") or ai_cfg.get(f"{prov}_api_key") or ai_cfg.get(f"{prov}_key") or ""
             has_k = bool(k)
-            masked = (k[:6] + "..." + k[-4:]) if (has_k and len(k) > 10) else ("●●●●●●" if has_k else "")
             ai_keys[prov] = {
                 "has_key": has_k,
-                "masked_key": masked,
+                "masked_key": _mask_api_key(k) if has_k else "",
             }
+
+    if not masked_key and has_gemini:
+        masked_key = ai_keys.get("gemini", {}).get("masked_key", "")
+    if not masked_key:
+        masked_key = ""
 
     fish_audio_key = os.environ.get("FISH_AUDIO_API_KEY", "")
     if not fish_audio_key:
@@ -4921,8 +5008,9 @@ async def handle_health(request):
 
     return web.json_response({
         "status": "ok",
+        "ready": True,
         "app": "Misa AI",
-        "version": "9.0.0",
+        "version": get_app_version(),
         "supabase": "configured" if is_supabase_configured else "not_configured",
         "environment": env_name,
         "timestamp": time.time()
@@ -6729,6 +6817,9 @@ def create_app():
     app.router.add_get("/api/voice/devices/monitor/status", handle_voice_device_monitor_status)
     app.router.add_post("/api/voice/preview", handle_voice_preview)
     app.router.add_get("/api/voice/preview", handle_voice_preview)
+    app.router.add_get("/api/voice/runtime/status", handle_voice_runtime_status)
+    app.router.add_post("/api/voice/runtime/install", handle_voice_runtime_install)
+    app.router.add_post("/api/voice/runtime/cancel", handle_voice_runtime_cancel)
 
 
     # Buyruqlar (Commands)

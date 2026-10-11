@@ -40,7 +40,7 @@ class TestOpenWakeWordEnginePrivacyAndFallback:
         non_existent_path = os.path.join(_base_dir, "models", "wake_word", "non_existent_salom_misa.onnx")
 
         # Tarmoq so'rovlarini to'liq bloklash uchun requests va socket patch qilinadi
-        with patch("urllib.request.urlopen") as mock_url, patch("requests.get") as mock_req:
+        with patch("urllib.request.urlopen") as mock_url, patch("requests.get") as mock_req, patch("core.voice.wake_word.OPENWAKEWORD_AVAILABLE", True):
             engine = OpenWakeWordEngine(model_path=non_existent_path, phrase="Salom Misa")
 
             assert engine.status == "model_missing"

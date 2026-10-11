@@ -154,15 +154,13 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   const [email, setEmail] = useState<string>(
     () => currentUser?.email || localStorage.getItem("misa_user_email") || ""
   );
-  const [phone, setPhone] = useState<string>(
-    () => localStorage.getItem("misa_user_phone") || ""
-  );
   const [roleTitle, setRoleTitle] = useState<string>(
     () => localStorage.getItem("misa_user_role") || ""
   );
-  const [bio, setBio] = useState<string>(
-    () => localStorage.getItem("misa_user_bio") || ""
-  );
+  const [bio, setBio] = useState<string>(() => {
+    const raw = localStorage.getItem("misa_user_bio") || "";
+    return raw === "Bio hali kiritilmagan" ? "" : raw;
+  });
   const [avatarStyle, setAvatarStyle] = useState<string>(
     () => localStorage.getItem("misa_user_avatar") || "violet"
   );
@@ -254,6 +252,15 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   );
   const [githubModalOpen, setGithubModalOpen] = useState<boolean>(false);
 
+  // RVC AI Modellari Yuklab Olish Holati (Ashley Clayson va Yukari uchun)
+  const [voiceRuntimeNeedsDownload, setVoiceRuntimeNeedsDownload] = useState<boolean>(true);
+  const [voiceRuntimeStatus, setVoiceRuntimeStatus] = useState<any>(null);
+  const [installModalOpen, setInstallModalOpen] = useState<boolean>(false);
+  const [installingRuntime, setInstallingRuntime] = useState<boolean>(false);
+  const [installProgress, setInstallProgress] = useState<number>(0);
+  const [installStepMessage, setInstallStepMessage] = useState<string>("");
+  const [installError, setInstallError] = useState<string | null>(null);
+
   // Bildirishnoma va Saqlash Holati
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [savingProfile, setSavingProfile] = useState<boolean>(false);
@@ -268,7 +275,13 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     if (currentUser?.email) {
       setEmail(currentUser.email);
     }
-    if (currentUser?.username) {
+    if (currentUser?.first_name) {
+      setFirstName(currentUser.first_name);
+    }
+    if (currentUser?.last_name) {
+      setLastName(currentUser.last_name);
+    }
+    if (!currentUser?.first_name && currentUser?.username) {
       const parts = currentUser.username.trim().split(" ");
       if (!firstName && parts[0]) setFirstName(parts[0]);
       if (!lastName && parts.length > 1) setLastName(parts.slice(1).join(" "));
@@ -317,66 +330,159 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       }
     } catch {}
 
-    backendService
-      .getAccount()
-      .then((data: any) => {
-        if (data.ok) {
-          if (data.first_name) {
-            setFirstName(data.first_name);
-            localStorage.setItem("misa_user_first_name", data.first_name);
-          }
-          if (data.last_name) {
-            setLastName(data.last_name);
-            localStorage.setItem("misa_user_last_name", data.last_name);
-          }
-          if (data.name && !data.first_name) {
-            const parts = data.name.trim().split(" ");
-            setFirstName(parts[0] || "");
-            setLastName(parts.slice(1).join(" ") || "");
-          }
-          if (data.email) setEmail(data.email);
-          if (data.phone) setPhone(data.phone);
-          if (data.role !== undefined) setRoleTitle(data.role || "");
-          if (data.bio !== undefined) setBio(data.bio || "");
-          if (data.avatar) setAvatarStyle(data.avatar);
-          if (data.avatar_url) setAvatarUrl(data.avatar_url);
-          if (data.voice_type) setVoiceType(data.voice_type);
-          if (data.fish_audio_api_key) {
-            const fk = data.fish_audio_api_key;
-            setFishKeyConfigured(true);
-            setMaskedFishKey(fk.length > 10 ? `${fk.slice(0, 7)}...${fk.slice(-4)}` : "●●●●●●");
-          }
-          if (typeof data.tts_speed === "number") setTtsSpeed(data.tts_speed);
-          if (typeof data.auto_speak === "boolean") setAutoSpeak(data.auto_speak);
-          if (typeof data.vad_enabled === "boolean") setVadEnabled(data.vad_enabled);
-          if (data.ai_model) setAiModel(data.ai_model);
-          if (typeof data.thinking_enabled === "boolean") setThinkingEnabled(data.thinking_enabled);
-          if (data.ai_keys) {
-            setAiKeysStatus(data.ai_keys);
-          } else if (data.api_key_masked) {
-            setAiKeysStatus((prev) => ({
-              ...prev,
-              gemini: { configured: true, masked: data.api_key_masked },
-            }));
-          }
-        }
-      })
-      .catch(() => {});
+    const initData = async () => {
+      setMicStatusText("Backend tekshirilmoqda...");
+      const isReady = await backendService.waitForBackendReady(3500);
+      if (!isReady) {
+        setMicStatusText("Backend ishga tushmoqda...");
+      }
 
-    backendService
-      .getTelegramAccount()
-      .then((acc) => setTelegramAcc(acc))
-      .catch(() => {});
+      backendService
+        .getAccount()
+        .then((data: any) => {
+          if (data.ok) {
+            if (data.first_name) {
+              setFirstName(data.first_name);
+              try { localStorage.setItem("misa_user_first_name", data.first_name); } catch {}
+            }
+            if (data.last_name) {
+              setLastName(data.last_name);
+              try { localStorage.setItem("misa_user_last_name", data.last_name); } catch {}
+            }
+            if (data.name && !data.first_name) {
+              const parts = data.name.trim().split(" ");
+              setFirstName(parts[0] || "");
+              setLastName(parts.slice(1).join(" ") || "");
+            }
+            if (data.email) setEmail(data.email);
+            if (data.role !== undefined) setRoleTitle(data.role || "");
+            if (data.bio !== undefined) {
+              const cleanBio = data.bio === "Bio hali kiritilmagan" ? "" : data.bio;
+              setBio(cleanBio || "");
+            }
+            if (data.avatar) setAvatarStyle(data.avatar);
+            if (data.avatar_url) setAvatarUrl(data.avatar_url);
+            if (data.voice_type) setVoiceType(data.voice_type);
+            if (data.fish_audio_api_key) {
+              const fk = data.fish_audio_api_key;
+              setFishKeyConfigured(true);
+              setMaskedFishKey(fk.length > 10 ? `${fk.slice(0, 7)}...${fk.slice(-4)}` : "●●●●●●");
+            }
+            if (typeof data.tts_speed === "number") setTtsSpeed(data.tts_speed);
+            if (typeof data.auto_speak === "boolean") setAutoSpeak(data.auto_speak);
+            if (typeof data.vad_enabled === "boolean") setVadEnabled(data.vad_enabled);
+            if (data.ai_model) setAiModel(data.ai_model);
+            if (typeof data.thinking_enabled === "boolean") setThinkingEnabled(data.thinking_enabled);
+            if (data.ai_keys) {
+              setAiKeysStatus(data.ai_keys);
+            } else if (data.api_key_masked) {
+              setAiKeysStatus((prev) => ({
+                ...prev,
+                gemini: { configured: true, masked: data.api_key_masked },
+              }));
+            }
+          }
+        })
+        .catch((e) => {
+          console.warn("Account get xatosi:", normalizeApiError(e));
+        });
 
-    backendService
-      .getDevices()
-      .then((res) => {
-        if (res.ok && res.devices) setDevices(res.devices);
-      })
-      .catch(() => {});
+      backendService
+        .getTelegramAccount()
+        .then((acc) => setTelegramAcc(acc))
+        .catch(() => {});
 
-    loadMicrophoneDevices();
+      backendService
+        .getDevices()
+        .then((res) => {
+          if (res.ok && res.devices) setDevices(res.devices);
+        })
+        .catch(() => {});
+
+      await loadMicrophoneDevices();
+      loadVoiceRuntimeStatus();
+    };
+
+    initData();
   }, []);
+
+  // RVC AI Modellari holatini yuklash
+  const loadVoiceRuntimeStatus = async () => {
+    try {
+      const res = await backendService.getVoiceRuntimeStatus();
+      if (res.ok) {
+        setVoiceRuntimeStatus(res);
+        setVoiceRuntimeNeedsDownload(!!res.needs_download);
+        if (res.task && (res.task.state === "downloading_hubert" || res.task.state === "installing_packages")) {
+          setInstallingRuntime(true);
+          setInstallProgress(res.task.progress || 0);
+          setInstallStepMessage(res.task.message || "Yuklanmoqda...");
+        } else if (res.task && res.task.state === "completed") {
+          setInstallingRuntime(false);
+          setInstallProgress(100);
+          setInstallStepMessage(res.task.message || "O'rnatildi");
+        }
+      }
+    } catch {}
+  };
+
+  // Fondagi yuklab olish jarayonini kuzatish (Polling)
+  useEffect(() => {
+    let timer: any = null;
+    if (installingRuntime) {
+      timer = setInterval(async () => {
+        try {
+          const res = await backendService.getVoiceRuntimeStatus();
+          if (res.ok) {
+            setVoiceRuntimeStatus(res);
+            setVoiceRuntimeNeedsDownload(!!res.needs_download);
+            if (res.task) {
+              setInstallProgress(res.task.progress || 0);
+              setInstallStepMessage(res.task.message || "");
+              if (res.task.state === "completed") {
+                setInstallingRuntime(false);
+                setVoiceRuntimeNeedsDownload(false);
+                showToast("Lokal AI modeli muvaffaqiyatli o'rnatildi ✓");
+              } else if (res.task.state === "error" || res.task.state === "cancelled") {
+                setInstallingRuntime(false);
+                if (res.task.error) setInstallError(res.task.error);
+              }
+            }
+          }
+        } catch {}
+      }, 2000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [installingRuntime]);
+
+  const handleStartRuntimeInstall = async () => {
+    setInstallingRuntime(true);
+    setInstallProgress(5);
+    setInstallError(null);
+    setInstallStepMessage("AI paketlarini yuklab olish boshlandi...");
+    try {
+      const res = await backendService.installVoiceRuntime();
+      if (res.ok) {
+        showToast("Yuklab olish fonda boshlandi 🚀");
+      } else {
+        setInstallError(res.error || res.message || "Yuklab olishni boshlab bo'lmadi");
+        setInstallingRuntime(false);
+      }
+    } catch (err: any) {
+      setInstallError(err.message || "Xatolik yuz berdi");
+      setInstallingRuntime(false);
+    }
+  };
+
+  const handleCancelRuntimeInstall = async () => {
+    try {
+      await backendService.cancelVoiceRuntimeInstall();
+      setInstallingRuntime(false);
+      showToast("Yuklab olish bekor qilindi");
+    } catch {}
+  };
 
   // Mikrofon qurilmalarini yuklash
   const loadMicrophoneDevices = async (refresh: boolean = false) => {
@@ -430,41 +536,54 @@ export const AccountPage: React.FC<AccountPageProps> = ({
         setMicFallbackUsed(!!res.fallback_used);
         showToast(res.message || "Mikrofon tanlandi ✓");
       } else {
-        showToast("Mikrofonni tanlashda xatolik yuz berdi");
+        const msg = normalizeApiError(res.error, "Mikrofonni tanlashda xatolik yuz berdi");
+        setMicStatusText(msg);
+        showToast(msg);
       }
     } catch (err: any) {
-      showToast(err.message || "Mikrofonni saqlab bo'lmadi");
+      const msg = normalizeApiError(err, "Mikrofonni saqlab bo'lmadi");
+      setMicStatusText(msg);
+      showToast(msg);
     }
   };
 
-  // Mikrofonni real sinovdan o'tkazish
+  // Mikrofonni real-time apparat sinovidan o'tkazish (Live Loopback Monitoring)
   const handleTestMicrophone = async () => {
-    setMicTesting(true);
-    setMicTestResult(null);
-    setMicTestLevel(0);
-    try {
-      const res = await backendService.testMicrophone(selectedMicId, 1.5);
-      setMicTestResult(res);
-      if (res.ok) {
-        const peakVal = res.peak ?? 0;
-        const rmsVal = res.rms ?? 0;
-        const levelPct = Math.min(100, Math.max(0, Math.round((peakVal > 0 ? peakVal : rmsVal * 3) * 100)));
-        setMicTestLevel(levelPct);
-        showToast(res.message || "Mikrofon sinovdan o'tdi ✓");
-      } else {
-        showToast(res.message || "Mikrofon sinovida xatolik");
+    if (micMonitorActive) {
+      // 1. Monitoring faol bo'lsa -> To'xtatish (State: Stop)
+      try {
+        await backendService.stopMicrophoneMonitor();
+        setMicMonitorActive(false);
+        setMicTesting(false);
+        setMicMonitorRms(0);
+        setMicMonitorPeak(0);
+        setMicMonitorError(null);
+        showToast("Mikrofon sinovi to'xtatildi");
+      } catch (err: any) {
+        showToast(normalizeApiError(err, "Monitorni to'xtatishda xatolik"));
       }
-    } catch (err: any) {
-      showToast(err.message || "Mikrofonni ochib bo'lmadi");
-      setMicTestResult({
-        ok: false,
-        working: false,
-        level: 0,
-        status: "error",
-        message: err.message || "Mikrofonni ochib bo'lmadi",
-      });
-    } finally {
-      setMicTesting(false);
+    } else {
+      // 2. Monitoring faol bo'lmasa -> Boshlash (State: Start -> Monitoring)
+      setMicTesting(true);
+      setMicMonitorError(null);
+      try {
+        const res = await backendService.startMicrophoneMonitor(selectedMicId, micLoopbackEnabled);
+        if (res.ok) {
+          setMicMonitorActive(true);
+          setMicStatusText("Monitoring qilinmoqda (Jonli apparat signali)");
+          showToast(res.message || "Jonli apparat monitori faollashtirildi 🎙 (O'z ovozingiz eshitilmoqda)");
+        } else {
+          const errMsg = normalizeApiError(res.error || res.message, "Mikrofon monitorini ishga tushirib bo'lmadi");
+          setMicMonitorError(errMsg);
+          showToast(errMsg);
+          setMicTesting(false);
+        }
+      } catch (err: any) {
+        const errMsg = normalizeApiError(err, "Mikrofon monitoriga ulanib bo'lmadi");
+        setMicMonitorError(errMsg);
+        showToast(errMsg);
+        setMicTesting(false);
+      }
     }
   };
 
@@ -510,9 +629,9 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       localStorage.setItem("misa_user_last_name", cleanLast);
       localStorage.setItem("misa_user_name", cleanName);
       localStorage.setItem("misa_user_email", email.trim());
-      localStorage.setItem("misa_user_phone", phone.trim());
+      const cleanBio = bio.trim() === "Bio hali kiritilmagan" ? "" : bio.trim();
+      localStorage.setItem("misa_user_bio", cleanBio);
       localStorage.setItem("misa_user_role", roleTitle.trim());
-      localStorage.setItem("misa_user_bio", bio.trim());
       localStorage.setItem("misa_user_avatar", avatarStyle);
 
       await backendService.updateAccount({
@@ -520,9 +639,8 @@ export const AccountPage: React.FC<AccountPageProps> = ({
         last_name: cleanLast,
         name: cleanName,
         email: email.trim(),
-        phone: phone.trim(),
         role: roleTitle.trim(),
-        bio: bio.trim(),
+        bio: cleanBio,
         avatar: avatarStyle,
         avatar_url: avatarUrl,
         voice_type: voiceType,
@@ -604,39 +722,6 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     }
   };
 
-  // Jonli apparat audio monitor boshqaruvi
-  const handleToggleMicMonitor = async () => {
-    if (micMonitorActive) {
-      try {
-        await backendService.stopMicrophoneMonitor();
-        setMicMonitorActive(false);
-        setMicMonitorRms(0);
-        setMicMonitorPeak(0);
-        setMicMonitorError(null);
-        showToast("Mikrofon monitori to'xtatildi");
-      } catch (err: any) {
-        showToast(normalizeApiError(err, "Monitorni to'xtatishda xatolik"));
-      }
-    } else {
-      setMicMonitorError(null);
-      try {
-        const res = await backendService.startMicrophoneMonitor(selectedMicId, micLoopbackEnabled);
-        if (res.ok) {
-          setMicMonitorActive(true);
-          showToast(res.message || "Jonli apparat monitori faollashtirildi 🎙");
-        } else {
-          const errMsg = res.error || "Mikrofon monitorini ishga tushirib bo'lmadi";
-          setMicMonitorError(errMsg);
-          showToast(errMsg);
-        }
-      } catch (err: any) {
-        const errMsg = normalizeApiError(err, "Mikrofon monitoriga ulanib bo'lmadi");
-        setMicMonitorError(errMsg);
-        showToast(errMsg);
-      }
-    }
-  };
-
   const handleToggleLoopback = async () => {
     const next = !micLoopbackEnabled;
     setMicLoopbackEnabled(next);
@@ -685,9 +770,16 @@ export const AccountPage: React.FC<AccountPageProps> = ({
 
       if (res.ok && res.audio_data) {
         if (res.is_fallback) {
-          setPreviewFallbackNotice(
-            res.fallback_reason || "Madina (Edge-TTS) zaxira ovozi ishlatildi — Fish Audio / RVC sozlanmagan"
-          );
+          if (res.needs_download || voiceId === "ashley" || voiceId === "yukari") {
+            setVoiceRuntimeNeedsDownload(true);
+            setPreviewFallbackNotice(
+              res.fallback_reason || "Yuklab olish zarur: Ushbu ovoz uchun lokal AI modeli (PyTorch va HuBERT) talab qilinadi. Vaqtincha zaxira ovoz ishlatilmoqda."
+            );
+          } else {
+            setPreviewFallbackNotice(
+              res.fallback_reason || "Madina (Edge-TTS) zaxira ovozi ishlatildi"
+            );
+          }
         }
 
         const audio = new Audio(res.audio_data);
@@ -1148,7 +1240,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
               <div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
                   <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                    Telefon raqami
+                    Telefon
                   </label>
                   <span
                     style={{
@@ -1165,19 +1257,20 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                   </span>
                 </div>
                 <input
-                  type="tel"
-                  value={phone}
+                  type="text"
+                  value=""
                   disabled={true}
                   readOnly={true}
-                  placeholder="+998 (__) ___ -- -- (Tez kunda)"
+                  placeholder="[ Tez kunda ]"
                   className="misa-glass-input"
                   style={{
                     width: "100%",
                     padding: "10px 14px",
                     borderRadius: "12px",
                     fontSize: "13px",
-                    opacity: 0.6,
+                    opacity: 0.5,
                     cursor: "not-allowed",
+                    pointerEvents: "none",
                   }}
                 />
               </div>
@@ -1439,61 +1532,38 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                   </div>
                 </div>
 
-                {/* Mikrofonni tekshirish va Jonli Monitor tugmalari */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                {/* Mikrofonni tekshirish (Real-Time Audio Capture & Loopback Monitoring) */}
+                <div>
                   <button
                     type="button"
                     onClick={handleTestMicrophone}
-                    disabled={micTesting || micMonitorActive}
                     className="misa-btn-violet"
                     style={{
                       width: "100%",
                       display: "inline-flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      gap: "6px",
-                      padding: "10px 12px",
+                      gap: "8px",
+                      padding: "11px 16px",
                       borderRadius: "14px",
-                      fontSize: "12px",
-                      fontWeight: 600,
-                      cursor: (micTesting || micMonitorActive) ? "not-allowed" : "pointer",
-                      boxShadow: "0 4px 18px rgba(147, 3, 197, 0.28)",
-                      opacity: micMonitorActive ? 0.6 : 1,
-                    }}
-                  >
-                    <MicIcon size={14} color="#FFFFFF" />
-                    <span>{micTesting ? "O'lchanmoqda..." : "1.5s Sinov"}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleToggleMicMonitor}
-                    style={{
-                      width: "100%",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "6px",
-                      padding: "10px 12px",
-                      borderRadius: "14px",
-                      fontSize: "12px",
+                      fontSize: "12.5px",
                       fontWeight: 600,
                       cursor: "pointer",
                       background: micMonitorActive
-                        ? "linear-gradient(135deg, rgba(239, 68, 68, 0.3) 0%, rgba(220, 38, 38, 0.5) 100%)"
-                        : "linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.35) 100%)",
+                        ? "linear-gradient(135deg, rgba(239, 68, 68, 0.4) 0%, rgba(220, 38, 38, 0.65) 100%)"
+                        : "linear-gradient(135deg, rgba(147, 3, 197, 0.8) 0%, rgba(192, 76, 253, 0.9) 100%)",
                       border: micMonitorActive
-                        ? "1px solid rgba(248, 113, 113, 0.6)"
-                        : "1px solid rgba(52, 211, 153, 0.45)",
-                      color: micMonitorActive ? "#FECACA" : "#A7F3D0",
+                        ? "1px solid rgba(248, 113, 113, 0.7)"
+                        : "1px solid rgba(192, 76, 253, 0.5)",
+                      color: "#FFFFFF",
                       boxShadow: micMonitorActive
-                        ? "0 0 16px rgba(239, 68, 68, 0.3)"
-                        : "0 0 16px rgba(16, 185, 129, 0.2)",
-                      transition: "all 0.2s ease",
+                        ? "0 0 18px rgba(239, 68, 68, 0.45)"
+                        : "0 4px 18px rgba(147, 3, 197, 0.35)",
+                      transition: "all 0.25s ease",
                     }}
                   >
-                    {micMonitorActive ? <StopIcon size={13} color="currentColor" /> : <PlayIcon size={13} color="currentColor" />}
-                    <span>{micMonitorActive ? "Monitorni to'xtatish" : "Jonli Monitor"}</span>
+                    {micMonitorActive ? <StopIcon size={14} color="#FFFFFF" /> : <MicIcon size={14} color="#FFFFFF" />}
+                    <span>{micMonitorActive ? "Monitoring qilinmoqda... (To'xtatish)" : "Mikrofonni tekshirish"}</span>
                   </button>
                 </div>
               </div>
@@ -1762,19 +1832,38 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                             {voice.name}
                           </span>
                         </div>
-                        <span
-                          style={{
-                            fontSize: "10.5px",
-                            padding: "2px 8px",
-                            borderRadius: "8px",
-                            background: isSelected ? "rgba(192, 76, 253, 0.25)" : "rgba(255, 255, 255, 0.08)",
-                            color: isSelected ? "#F3E8FF" : "var(--text-secondary)",
-                            fontWeight: 600,
-                            border: `1px solid ${isSelected ? "rgba(192, 76, 253, 0.4)" : "rgba(255, 255, 255, 0.08)"}`,
-                          }}
-                        >
-                          {voice.badge}
-                        </span>
+                        {(voice.id === "ashley" || voice.id === "yukari") && voiceRuntimeNeedsDownload ? (
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              padding: "2px 8px",
+                              borderRadius: "6px",
+                              background: "rgba(245, 158, 11, 0.2)",
+                              color: "#FCD34D",
+                              fontWeight: 700,
+                              border: "1px solid rgba(245, 158, 11, 0.45)",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                            }}
+                          >
+                            <span>Yuklab olish zarur</span>
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              fontSize: "10.5px",
+                              padding: "2px 8px",
+                              borderRadius: "8px",
+                              background: isSelected ? "rgba(192, 76, 253, 0.25)" : "rgba(255, 255, 255, 0.08)",
+                              color: isSelected ? "#F3E8FF" : "var(--text-secondary)",
+                              fontWeight: 600,
+                              border: `1px solid ${isSelected ? "rgba(192, 76, 253, 0.4)" : "rgba(255, 255, 255, 0.08)"}`,
+                            }}
+                          >
+                            {voice.badge}
+                          </span>
+                        )}
                       </div>
 
                       <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -1799,7 +1888,31 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                         {voice.desc}
                       </p>
 
-                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "4px" }}>
+                      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "8px", marginTop: "4px" }}>
+                        {(voice.id === "ashley" || voice.id === "yukari") && voiceRuntimeNeedsDownload && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setInstallModalOpen(true);
+                            }}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              padding: "5px 10px",
+                              borderRadius: "10px",
+                              background: "rgba(245, 158, 11, 0.15)",
+                              border: "1px solid rgba(245, 158, 11, 0.35)",
+                              color: "#FCD34D",
+                              fontSize: "11px",
+                              fontWeight: 700,
+                              cursor: "pointer",
+                            }}
+                          >
+                            <span>⬇ Yuklab olish</span>
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={(e) => {
@@ -1911,18 +2024,47 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
-                            gap: "6px",
-                            padding: "3px 10px",
-                            borderRadius: "8px",
+                            gap: "8px",
+                            padding: "4px 12px",
+                            borderRadius: "10px",
                             background: "rgba(245, 158, 11, 0.15)",
                             border: "1px solid rgba(245, 158, 11, 0.4)",
                             color: "#FCD34D",
-                            fontSize: "11px",
+                            fontSize: "11.5px",
                             fontWeight: 600,
+                            flexWrap: "wrap",
                           }}
                         >
-                          <span>⚠ Zaxira:</span>
-                          <span>{previewFallbackNotice}</span>
+                          <span style={{ color: "#F59E0B", fontWeight: 700 }}>
+                            {previewVoiceId === "ashley" || previewVoiceId === "yukari" ? "⚠ Yuklab olish zarur:" : "⚠ Zaxira:"}
+                          </span>
+                          <span style={{ fontWeight: 400, opacity: 0.95 }}>
+                            {previewFallbackNotice.startsWith("model runtime not implemented")
+                              ? "Ushbu ovoz uchun lokal AI modeli (PyTorch va HuBERT) kerak. Vaqtincha zaxira ovoz ishlatilmoqda."
+                              : previewFallbackNotice}
+                          </span>
+                          {(previewVoiceId === "ashley" || previewVoiceId === "yukari") && (
+                            <button
+                              type="button"
+                              onClick={() => setInstallModalOpen(true)}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                padding: "3px 9px",
+                                borderRadius: "6px",
+                                background: "linear-gradient(135deg, #F59E0B 0%, #D97706 100%)",
+                                border: "none",
+                                color: "#000000",
+                                fontWeight: 700,
+                                fontSize: "11px",
+                                cursor: "pointer",
+                                boxShadow: "0 0 10px rgba(245, 158, 11, 0.35)",
+                              }}
+                            >
+                              <span>⬇ Yuklab olish</span>
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -3520,6 +3662,232 @@ export const AccountPage: React.FC<AccountPageProps> = ({
               >
                 Saqlash
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RVC Lokal AI Modelini Yuklab Olish Modali */}
+      {installModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 600,
+            background: "rgba(2, 6, 14, 0.85)",
+            backdropFilter: "blur(14px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px",
+          }}
+          onClick={() => {
+            if (!installingRuntime) setInstallModalOpen(false);
+          }}
+        >
+          <div
+            className="misa-ultra-glass"
+            style={{
+              width: "100%",
+              maxWidth: "520px",
+              borderRadius: "24px",
+              padding: "28px",
+              background: "linear-gradient(135deg, rgba(26, 11, 46, 0.95) 0%, rgba(10, 5, 20, 0.98) 100%)",
+              border: "1px solid rgba(192, 76, 253, 0.4)",
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(147, 3, 197, 0.3)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "18px",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div
+                  style={{
+                    width: "42px",
+                    height: "42px",
+                    borderRadius: "12px",
+                    background: "linear-gradient(135deg, rgba(245, 158, 11, 0.25) 0%, rgba(147, 3, 197, 0.25) 100%)",
+                    border: "1px solid rgba(245, 158, 11, 0.4)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "20px",
+                  }}
+                >
+                  ⚡
+                </div>
+                <div>
+                  <h3 style={{ fontSize: "17px", fontWeight: 700, color: "#FFFFFF", margin: 0 }}>
+                    Lokal AI Ovoz Paketini Yuklab Olish
+                  </h3>
+                  <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                    Ashley Clayson va Yukari xarakter modellari uchun
+                  </span>
+                </div>
+              </div>
+              {!installingRuntime && (
+                <button
+                  type="button"
+                  onClick={() => setInstallModalOpen(false)}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "rgba(255, 255, 255, 0.5)",
+                    fontSize: "20px",
+                    cursor: "pointer",
+                    padding: "4px",
+                  }}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Explanation */}
+            <p style={{ fontSize: "12.5px", color: "rgba(255, 255, 255, 0.8)", margin: 0, lineHeight: 1.5 }}>
+              Ushbu ovozlar neyrotarmoq inferensini (RVC v2) talab qiladi. Dastur hajmini yengil va mustaqil saqlash maqsadida ushbu paketlar faqat foydalanuvchi talabi bilan yuklab olinadi.
+            </p>
+
+            {/* Components Breakdown */}
+            <div
+              style={{
+                borderRadius: "14px",
+                background: "rgba(255, 255, 255, 0.04)",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                padding: "14px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "10px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "12px" }}>
+                <span style={{ color: "#E8B3FF", fontWeight: 600 }}>🧠 HuBERT xususiyat ajratgich modeli:</span>
+                <span style={{ color: voiceRuntimeStatus?.hubert_exists ? "#10B981" : "#F59E0B", fontWeight: 700 }}>
+                  {voiceRuntimeStatus?.hubert_exists ? "Mavjud ✓" : "Yuklanadi (~180 MB)"}
+                </span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "12px" }}>
+                <span style={{ color: "#E8B3FF", fontWeight: 600 }}>⚡ PyTorch CPU hisoblash moduli:</span>
+                <span style={{ color: voiceRuntimeStatus?.torch_exists ? "#10B981" : "#F59E0B", fontWeight: 700 }}>
+                  {voiceRuntimeStatus?.torch_exists ? "Mavjud ✓" : "O'rnatiladi"}
+                </span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "12px" }}>
+                <span style={{ color: "#E8B3FF", fontWeight: 600 }}>🔍 FAISS vektor indeks moduli:</span>
+                <span style={{ color: voiceRuntimeStatus?.faiss_exists ? "#10B981" : "#F59E0B", fontWeight: 700 }}>
+                  {voiceRuntimeStatus?.faiss_exists ? "Mavjud ✓" : "O'rnatiladi"}
+                </span>
+              </div>
+            </div>
+
+            {/* Progress view if installing */}
+            {installingRuntime ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px" }}>
+                  <span style={{ color: "#FCD34D", fontWeight: 600 }}>
+                    {installStepMessage || "Yuklab olinmoqda..."}
+                  </span>
+                  <span style={{ color: "#FFFFFF", fontWeight: 700 }}>{installProgress}%</span>
+                </div>
+                <div
+                  style={{
+                    width: "100%",
+                    height: "8px",
+                    borderRadius: "4px",
+                    background: "rgba(255, 255, 255, 0.1)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${installProgress}%`,
+                      height: "100%",
+                      background: "linear-gradient(90deg, #F59E0B 0%, #9303C5 100%)",
+                      transition: "width 0.3s ease",
+                    }}
+                  />
+                </div>
+                <span style={{ fontSize: "11px", color: "var(--text-secondary)", fontStyle: "italic" }}>
+                  Jarayon orqa fonda davom etadi. Ilovadan foydalanaverishingiz mumkin.
+                </span>
+              </div>
+            ) : installError ? (
+              <div
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: "10px",
+                  background: "rgba(239, 68, 68, 0.15)",
+                  border: "1px solid rgba(239, 68, 68, 0.3)",
+                  color: "#FCA5A5",
+                  fontSize: "12px",
+                }}
+              >
+                ⚠ {installError}
+              </div>
+            ) : null}
+
+            {/* Modal Actions */}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "4px" }}>
+              {installingRuntime ? (
+                <button
+                  type="button"
+                  onClick={handleCancelRuntimeInstall}
+                  style={{
+                    padding: "9px 16px",
+                    borderRadius: "10px",
+                    background: "rgba(239, 68, 68, 0.15)",
+                    border: "1px solid rgba(239, 68, 68, 0.3)",
+                    color: "#FCA5A5",
+                    fontSize: "12.5px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Bekor qilish
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setInstallModalOpen(false)}
+                    style={{
+                      padding: "9px 16px",
+                      borderRadius: "10px",
+                      background: "rgba(255, 255, 255, 0.08)",
+                      border: "1px solid rgba(255, 255, 255, 0.12)",
+                      color: "var(--text-secondary)",
+                      fontSize: "12.5px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Hozir emas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleStartRuntimeInstall}
+                    style={{
+                      padding: "9px 20px",
+                      borderRadius: "10px",
+                      background: "linear-gradient(135deg, #F59E0B 0%, #D97706 100%)",
+                      border: "none",
+                      color: "#000000",
+                      fontSize: "12.5px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      boxShadow: "0 0 16px rgba(245, 158, 11, 0.4)",
+                    }}
+                  >
+                    <span>⬇ Yuklab olishni boshlash</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

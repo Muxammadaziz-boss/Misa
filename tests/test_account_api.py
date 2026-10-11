@@ -159,6 +159,71 @@ class TestAccountAPI(unittest.TestCase):
 
         asyncio.run(_run())
 
+    def test_account_get_masked_key_safety(self):
+        """API keylar hech qachon ochiq ko'rinmasligi va masked_key xavfsiz shakllanishi"""
+        async def _run():
+            from unittest.mock import patch, MagicMock
+
+            # 1. Kalitsiz holat: barcha kalitlar bo'sh bo'lganda masked_key bo'sh bo'lishi va crash bo'lmasligi
+            mock_mgr = MagicMock()
+            mock_mgr.get_status_summary.return_value = {"active_keys": {}}
+            mock_mgr.get_active_gemini_key.return_value = None
+
+            with patch("core.v8.ai_key_manager.get_ai_key_manager", return_value=mock_mgr):
+                old_env = os.environ.pop("GEMINI_API_KEY", None)
+                try:
+                    resp = await handle_account_get(MockRequest())
+                    self.assertEqual(resp.status, 200)
+                    data = json.loads(resp.text)
+                    self.assertIn("api_key_masked", data)
+                    self.assertIn("ai_keys", data)
+                    self.assertIsInstance(data["api_key_masked"], str)
+                    self.assertEqual(data["api_key_masked"], "")
+                    self.assertFalse(data["has_gemini_key"])
+                    self.assertEqual(data["ai_status"], "missing_key")
+
+                    # 2. Kalit o'rnatilgan holat: maxfiy kalit xom holda chiqmasligi va xavfsiz maskalanishi
+                    test_secret = "AIzaSySecretTestKey123456789"
+                    mock_mgr.get_active_gemini_key.return_value = test_secret
+                    resp_with_key = await handle_account_get(MockRequest())
+                    self.assertEqual(resp_with_key.status, 200)
+                    data_with_key = json.loads(resp_with_key.text)
+                    masked = data_with_key.get("api_key_masked", "")
+
+                    self.assertNotIn(test_secret, resp_with_key.text)
+                    self.assertTrue(masked.startswith("AIzaSy...") or masked == "●●●●●●")
+                    self.assertTrue(data_with_key["has_gemini_key"])
+                    self.assertEqual(data_with_key["ai_status"], "ready")
+                finally:
+                    if old_env:
+                        os.environ["GEMINI_API_KEY"] = old_env
+
+    def test_account_get_404_for_unknown_user(self):
+        """Mavjud bo'lmagan foydalanuvchi so'ralganda 404 qaytariladi"""
+        async def _run():
+            import uuid
+            unknown_id = f"unknown_user_{uuid.uuid4().hex}"
+            req = MockRequest(query_data={"user_id": unknown_id})
+            resp = await handle_account_get(req)
+            self.assertEqual(resp.status, 404)
+            data = json.loads(resp.text)
+            self.assertFalse(data.get("ok"))
+            self.assertIn("topilmadi", data.get("error", "").lower())
+
+        asyncio.run(_run())
+
+    def test_account_get_401_for_invalid_token(self):
+        """Yaroqsiz Bearer token yuborilganda 401 Unauthorized qaytariladi"""
+        async def _run():
+            req = MockRequest(headers={"Authorization": "Bearer invalid.fake.token.12345"})
+            resp = await handle_account_get(req)
+            self.assertEqual(resp.status, 401)
+            data = json.loads(resp.text)
+            self.assertFalse(data.get("ok"))
+
+        asyncio.run(_run())
+
 
 if __name__ == "__main__":
     unittest.main()
+

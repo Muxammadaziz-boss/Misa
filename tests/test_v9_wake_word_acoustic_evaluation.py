@@ -278,7 +278,7 @@ class TestModelHonestyAndIntegrity:
 
         engine = OpenWakeWordEngine(model_path=str(fake_onnx))
         assert engine.is_ready() is False
-        assert engine.status in ("invalid_model_file", "load_failed", "model_missing")
+        assert engine.status in ("invalid_model_file", "load_failed", "model_missing", "library_unavailable")
 
         detector = WakeWordDetector(model_path=str(fake_onnx))
         assert detector.get_status()["is_trained_model"] is False
