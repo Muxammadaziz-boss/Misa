@@ -88,21 +88,28 @@ jobs:
           }
 
       - name: Clean Existing Release Assets
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $tag = "${{ github.ref_name }}"
           Write-Host "Checking if release $tag already exists on GitHub..."
-          gh release view $tag 2>$null
-          if ($LASTEXITCODE -eq 0) {
-              Write-Host "Release $tag exists. Cleaning up older assets to guarantee clean update..."
-              $assets = gh release view $tag --json assets -q ".assets[].name"
-              foreach ($asset in $assets) {
-                  if ($asset) {
-                      Write-Host "Deleting existing asset: $asset"
-                      gh release delete-asset $tag $asset --yes 2>$null
+          try {
+              $releaseJson = gh release view $tag --json assets 2>$null
+              if ($LASTEXITCODE -eq 0 -and $releaseJson) {
+                  Write-Host "Release $tag exists. Cleaning up older assets to guarantee clean update..."
+                  $assets = $releaseJson | ConvertFrom-Json | Select-Object -ExpandProperty assets -ErrorAction SilentlyContinue
+                  foreach ($asset in $assets) {
+                      if ($asset.name) {
+                          Write-Host "Deleting existing asset: $($asset.name)"
+                          gh release delete-asset $tag $asset.name --yes 2>$null
+                      }
                   }
+              } else {
+                  Write-Host "Release $tag does not exist yet. Proceeding with fresh creation."
               }
+          } catch {
+              Write-Host "No prior release found or clean skipped: $_"
           }
 
       - name: Create GitHub Release & Upload Signed Artifacts
