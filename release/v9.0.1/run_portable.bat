@@ -13,20 +13,39 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$v = (Get-ItemProperty -Path @($hklm64, $hklm32, $hkcu) -Name 'pv' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty pv -First 1); " ^
   "$dir1 = (Join-Path ${env:ProgramFiles(x86)} 'Microsoft\EdgeWebView\Application'); " ^
   "$dir2 = (Join-Path $env:ProgramFiles 'Microsoft\EdgeWebView\Application'); " ^
-  "$hasDir = (Test-Path $dir1) -or (Test-Path $dir2); " ^
+  "$dir3 = (Join-Path $env:LOCALAPPDATA 'Microsoft\EdgeWebView\Application'); " ^
+  "$hasDir = (Test-Path $dir1) -or (Test-Path $dir2) -or (Test-Path $dir3); " ^
   "if ((-not $v -or $v -eq '0.0.0.0') -and (-not $hasDir)) { " ^
   "  Write-Host '[MISA] Microsoft WebView2 Runtime topilmadi!' -ForegroundColor Yellow; " ^
-  "  Write-Host '[MISA] WebView2 Runtime o''rnatilmoqda (Evergreen Bootstrapper)...' -ForegroundColor Cyan; " ^
-  "  $setup = if (Test-Path '.\MicrosoftEdgeWebview2Setup.exe') { '.\MicrosoftEdgeWebview2Setup.exe' } else { (Join-Path $env:TEMP 'MicrosoftEdgeWebview2Setup.exe') }; " ^
-  "  try { " ^
-  "    if (-not (Test-Path $setup)) { Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $setup -UseBasicParsing }; " ^
-  "    Start-Process -FilePath $setup -ArgumentList '/silent /install' -Wait; " ^
-  "    Write-Host '[MISA] WebView2 Runtime o''rnatildi ✓' -ForegroundColor Green; " ^
-  "  } catch { " ^
-  "    Write-Host '[MISA XATOLIK] WebView2 Runtime o''rnatilmadi!' -ForegroundColor Red; " ^
-  "    [System.Windows.Forms.MessageBox]::Show('Microsoft WebView2 Runtime o''rnatilmadi. Misa UI ochilishi uchun WebView2 kerak. Iltimos, uni rasmiy saytdan o''rnating: https://developer.microsoft.com/microsoft-edge/webview2/', 'Misa AI', 'OK', 'Error'); " ^
-  "    exit 1; " ^
+  "  Write-Host '[MISA] Misa AI uchun Microsoft WebView2 Runtime kerak. O''rnatilmoqda...' -ForegroundColor Cyan; " ^
+  "  $cands = @('.\webview2\MicrosoftEdgeWebview2Setup.exe', '.\MicrosoftEdgeWebview2Setup.exe', (Join-Path $env:TEMP 'MicrosoftEdgeWebview2Setup.exe')); " ^
+  "  $setup = $cands | Where-Object { Test-Path $_ } | Select-Object -First 1; " ^
+  "  if (-not $setup) { " ^
+  "    $setup = Join-Path $env:TEMP 'MicrosoftEdgeWebview2Setup.exe'; " ^
+  "    try { " ^
+  "      Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $setup -TimeoutSec 30 -UseBasicParsing; " ^
+  "    } catch { " ^
+  "      Write-Host '[MISA XATOLIK] WebView2 bootstrapper yuklab olinmadi (Internet yo''q)!' -ForegroundColor Red; " ^
+  "      exit 1; " ^
+  "    } " ^
   "  } " ^
+  "  Write-Host ('[MISA] Bootstrapper ishga tushirilmoqda: ' + $setup) -ForegroundColor Cyan; " ^
+  "  Start-Process -FilePath $setup -ArgumentList '/silent /install' -Wait; " ^
+  "  Start-Sleep -Seconds 1; " ^
+  "  $v2 = (Get-ItemProperty -Path @($hklm64, $hklm32, $hkcu) -Name 'pv' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty pv -First 1); " ^
+  "  $hasDir2 = (Test-Path $dir1) -or (Test-Path $dir2) -or (Test-Path $dir3); " ^
+  "  if ((-not $v2 -or $v2 -eq '0.0.0.0') -and (-not $hasDir2)) { " ^
+  "    Write-Host '[MISA] Silent rejim orqali o''rnatilmadi. UAC interaktiv oyna ochilmoqda...' -ForegroundColor Yellow; " ^
+  "    Start-Process -FilePath $setup -ArgumentList '/install' -Wait; " ^
+  "    Start-Sleep -Seconds 1; " ^
+  "    $v3 = (Get-ItemProperty -Path @($hklm64, $hklm32, $hkcu) -Name 'pv' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty pv -First 1); " ^
+  "    $hasDir3 = (Test-Path $dir1) -or (Test-Path $dir2) -or (Test-Path $dir3); " ^
+  "    if ((-not $v3 -or $v3 -eq '0.0.0.0') -and (-not $hasDir3)) { " ^
+  "      Write-Host '[MISA XATOLIK] Microsoft WebView2 Runtime o''rnatilmadi!' -ForegroundColor Red; " ^
+  "      exit 1; " ^
+  "    } " ^
+  "  } " ^
+  "  Write-Host '[MISA] Misa AI ishga tushirilmoqda... ✓' -ForegroundColor Green; " ^
   "}"
 if errorlevel 1 (
   echo [MISA] WebView2 mavjud emasligi sababli ishga tushirish bekor qilindi. Backend ochilmadi.

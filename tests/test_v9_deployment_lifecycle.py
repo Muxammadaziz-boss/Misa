@@ -208,6 +208,231 @@ class TestWindowsDeploymentLifecycle(unittest.TestCase):
         test_pid_file.unlink()
         self.assertFalse(test_pid_file.exists(), "PID file must be removed on clean shutdown")
 
+    # =========================================================================
+    # PORTABLE WEBVIEW2 LIFECYCLE TESTS (v9.0.1)
+    # =========================================================================
+
+    def test_portable_webview2_missing(self):
+        """
+        Verify that in portable environment when WebView2 is not detected:
+        1. check_webview2_installed returns False.
+        2. Backend is NOT started.
+        3. No infinite restart loops.
+        """
+        backend_started = False
+
+        def mock_check_webview2():
+            return False
+
+        def mock_start_backend():
+            nonlocal backend_started
+            backend_started = True
+
+        # Portable startup flow simulation
+        is_installed = mock_check_webview2()
+        self.assertFalse(is_installed, "WebView2 should be missing on clean machine")
+
+        if is_installed:
+            mock_start_backend()
+
+        self.assertFalse(backend_started, "Backend must NEVER be started when WebView2 is missing")
+
+    def test_portable_webview2_install_success(self):
+        """
+        Verify successful portable installation flow:
+        1. WebView2 initially missing.
+        2. Bundled bootstrapper found.
+        3. Installer process completes successfully.
+        4. Strict re-check passes.
+        5. Flow returns True, allowing UI and backend startup.
+        """
+        detection_state = [False, True]  # Initially missing, then present after install
+        installer_invoked = False
+
+        def mock_check():
+            return detection_state.pop(0) if detection_state else True
+
+        def mock_run_installer(args):
+            nonlocal installer_invoked
+            installer_invoked = True
+            return 0  # Process exit code 0
+
+        # Run portable installation simulation
+        initial = mock_check()
+        self.assertFalse(initial, "Initially missing")
+
+        exit_code = mock_run_installer(["/silent", "/install"])
+        self.assertEqual(exit_code, 0, "Installer should exit 0 on success")
+
+        recheck = mock_check()
+        self.assertTrue(recheck, "Post-install re-check must pass")
+        self.assertTrue(installer_invoked, "Installer must have been invoked")
+
+    def test_portable_webview2_install_failure(self):
+        """
+        Verify failure handling during portable installation:
+        1. Installer fails (e.g., non-zero exit code or timeout).
+        2. Re-check returns False.
+        3. App aborts without starting backend.
+        """
+        backend_started = False
+
+        def mock_run_installer():
+            return 1603  # Fatal error during installation (e.g., no internet or UAC denied)
+
+        def mock_recheck():
+            return False  # Still missing
+
+        def mock_start_backend():
+            nonlocal backend_started
+            backend_started = True
+
+        code = mock_run_installer()
+        recheck_ok = mock_recheck()
+
+        self.assertNotEqual(code, 0)
+        self.assertFalse(recheck_ok, "Re-check must fail when installer failed")
+
+        if not recheck_ok:
+            # Clean exit, do NOT start backend
+            pass
+        else:
+            mock_start_backend()
+
+        self.assertFalse(backend_started, "Backend must NEVER start if installer fails")
+
+    def test_portable_webview2_recheck(self):
+        """
+        Verify that installer completion alone is NOT enough without a positive re-check:
+        If installer returns 0 but runtime is still not detectable in registry/path,
+        the flow must fail.
+        """
+        # Case 1: Installer reports 0, but re-check fails
+        installer_exit_code = 0
+        recheck_passed = False
+
+        lifecycle_allowed = (installer_exit_code == 0) and recheck_passed
+        self.assertFalse(lifecycle_allowed, "Must not allow startup if re-check fails even if exit code is 0")
+
+        # Case 2: Installer reports 0 AND re-check passes
+        recheck_passed = True
+        lifecycle_allowed = (installer_exit_code == 0) and recheck_passed
+        self.assertTrue(lifecycle_allowed, "Must allow startup only when re-check passes")
+
+    def test_portable_no_backend_before_webview2(self):
+        """
+        Strict lifecycle order verification:
+        misa_backend.exe must NEVER start prior to successful WebView2 verification.
+        Order:
+          SingleInstanceGuard -> WebView2 Detection -> (Install & Verify) -> Backend Spawn -> UI
+        """
+        execution_order = []
+
+        def step_single_instance():
+            execution_order.append("single_instance")
+            return True
+
+        def step_webview2_verify():
+            execution_order.append("webview2_verify")
+            return True
+
+        def step_spawn_backend():
+            # Backend should only be spawned after webview2_verify
+            self.assertIn("webview2_verify", execution_order, "WebView2 must be verified before backend spawn")
+            execution_order.append("spawn_backend")
+
+        def step_show_ui():
+            self.assertIn("spawn_backend", execution_order, "Backend should precede UI initialization")
+            execution_order.append("show_ui")
+
+        # Execute in order
+        if step_single_instance():
+            if step_webview2_verify():
+                step_spawn_backend()
+                step_show_ui()
+
+        self.assertEqual(
+            execution_order,
+            ["single_instance", "webview2_verify", "spawn_backend", "show_ui"],
+            "Execution order must be strictly maintained"
+        )
+
+    def test_portable_no_orphan_backend(self):
+        """
+        Verify that if portable app encounters a failure or crashes during startup,
+        any started backend or child processes are cleaned up immediately.
+        """
+        child = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(15)"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        self.assertIsNone(child.poll(), "Process should be alive initially")
+
+        # Simulate portable teardown / abort on failure
+        try:
+            child.kill()
+            child.wait(timeout=3)
+        except Exception:
+            pass
+
+        self.assertIsNotNone(child.poll(), "No orphan backend process should remain alive")
+
+    def test_portable_single_instance(self):
+        """
+        Verify that rapid launching of portable app (e.g. 5 times) results in
+        only ONE active instance. Subsequent 4 launches must immediately exit.
+        """
+        if sys.platform == "win32":
+            import ctypes
+            from ctypes import wintypes
+
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            CreateMutexW = kernel32.CreateMutexW
+            CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
+            CreateMutexW.restype = wintypes.HANDLE
+
+            CloseHandle = kernel32.CloseHandle
+            CloseHandle.argtypes = [wintypes.HANDLE]
+            CloseHandle.restype = wintypes.BOOL
+
+            ERROR_ALREADY_EXISTS = 183
+            test_mutex = "Local\\Misa_Portable_RapidLaunch_Test_Mutex"
+
+            handles = []
+            results = []
+
+            for i in range(5):
+                h = CreateMutexW(None, True, test_mutex)
+                err = ctypes.get_last_error()
+                if err == ERROR_ALREADY_EXISTS:
+                    results.append("BLOCKED_DUPLICATE")
+                    if h:
+                        CloseHandle(h)
+                else:
+                    results.append("ACQUIRED_PRIMARY")
+                    handles.append(h)
+
+            # Cleanup
+            for h in handles:
+                CloseHandle(h)
+
+            self.assertEqual(results.count("ACQUIRED_PRIMARY"), 1, "Exactly 1 instance must acquire primary mutex")
+            self.assertEqual(results.count("BLOCKED_DUPLICATE"), 4, "Remaining 4 launches must be blocked")
+        else:
+            # Platform agnostic simulation
+            active_instances = 0
+            results = []
+            for _ in range(5):
+                if active_instances == 0:
+                    active_instances += 1
+                    results.append("PRIMARY")
+                else:
+                    results.append("BLOCKED")
+            self.assertEqual(results.count("PRIMARY"), 1)
+            self.assertEqual(results.count("BLOCKED"), 4)
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -187,6 +187,7 @@ if (fs.existsSync(nsisDir)) {
 }
 
 // 7. Write Quick One-Click Launcher (run_portable.bat)
+// 7. Write Quick One-Click Launcher (run_portable.bat)
 const launcherBatContent = `@echo off
 title Misa AI ${versionName} Launcher
 cd /d "%~dp0"
@@ -202,20 +203,39 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$v = (Get-ItemProperty -Path @($hklm64, $hklm32, $hkcu) -Name 'pv' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty pv -First 1); " ^
   "$dir1 = (Join-Path \${env:ProgramFiles(x86)} 'Microsoft\\EdgeWebView\\Application'); " ^
   "$dir2 = (Join-Path \$env:ProgramFiles 'Microsoft\\EdgeWebView\\Application'); " ^
-  "$hasDir = (Test-Path \$dir1) -or (Test-Path \$dir2); " ^
+  "$dir3 = (Join-Path \$env:LOCALAPPDATA 'Microsoft\\EdgeWebView\\Application'); " ^
+  "$hasDir = (Test-Path \$dir1) -or (Test-Path \$dir2) -or (Test-Path \$dir3); " ^
   "if ((-not \$v -or \$v -eq '0.0.0.0') -and (-not \$hasDir)) { " ^
   "  Write-Host '[MISA] Microsoft WebView2 Runtime topilmadi!' -ForegroundColor Yellow; " ^
-  "  Write-Host '[MISA] WebView2 Runtime o''rnatilmoqda (Evergreen Bootstrapper)...' -ForegroundColor Cyan; " ^
-  "  \$setup = if (Test-Path '.\\MicrosoftEdgeWebview2Setup.exe') { '.\\MicrosoftEdgeWebview2Setup.exe' } else { (Join-Path \$env:TEMP 'MicrosoftEdgeWebview2Setup.exe') }; " ^
-  "  try { " ^
-  "    if (-not (Test-Path \$setup)) { Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile \$setup -UseBasicParsing }; " ^
-  "    Start-Process -FilePath \$setup -ArgumentList '/silent /install' -Wait; " ^
-  "    Write-Host '[MISA] WebView2 Runtime o''rnatildi ✓' -ForegroundColor Green; " ^
-  "  } catch { " ^
-  "    Write-Host '[MISA XATOLIK] WebView2 Runtime o''rnatilmadi!' -ForegroundColor Red; " ^
-  "    [System.Windows.Forms.MessageBox]::Show('Microsoft WebView2 Runtime o''rnatilmadi. Misa UI ochilishi uchun WebView2 kerak. Iltimos, uni rasmiy saytdan o''rnating: https://developer.microsoft.com/microsoft-edge/webview2/', 'Misa AI', 'OK', 'Error'); " ^
-  "    exit 1; " ^
+  "  Write-Host '[MISA] Misa AI uchun Microsoft WebView2 Runtime kerak. O''rnatilmoqda...' -ForegroundColor Cyan; " ^
+  "  \$cands = @('.\\webview2\\MicrosoftEdgeWebview2Setup.exe', '.\\MicrosoftEdgeWebview2Setup.exe', (Join-Path \$env:TEMP 'MicrosoftEdgeWebview2Setup.exe')); " ^
+  "  \$setup = \$cands | Where-Object { Test-Path \$_ } | Select-Object -First 1; " ^
+  "  if (-not \$setup) { " ^
+  "    \$setup = Join-Path \$env:TEMP 'MicrosoftEdgeWebview2Setup.exe'; " ^
+  "    try { " ^
+  "      Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile \$setup -TimeoutSec 30 -UseBasicParsing; " ^
+  "    } catch { " ^
+  "      Write-Host '[MISA XATOLIK] WebView2 bootstrapper yuklab olinmadi (Internet yo''q)!' -ForegroundColor Red; " ^
+  "      exit 1; " ^
+  "    } " ^
   "  } " ^
+  "  Write-Host ('[MISA] Bootstrapper ishga tushirilmoqda: ' + \$setup) -ForegroundColor Cyan; " ^
+  "  Start-Process -FilePath \$setup -ArgumentList '/silent /install' -Wait; " ^
+  "  Start-Sleep -Seconds 1; " ^
+  "  \$v2 = (Get-ItemProperty -Path @($hklm64, $hklm32, $hkcu) -Name 'pv' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty pv -First 1); " ^
+  "  \$hasDir2 = (Test-Path \$dir1) -or (Test-Path \$dir2) -or (Test-Path \$dir3); " ^
+  "  if ((-not \$v2 -or \$v2 -eq '0.0.0.0') -and (-not \$hasDir2)) { " ^
+  "    Write-Host '[MISA] Silent rejim orqali o''rnatilmadi. UAC interaktiv oyna ochilmoqda...' -ForegroundColor Yellow; " ^
+  "    Start-Process -FilePath \$setup -ArgumentList '/install' -Wait; " ^
+  "    Start-Sleep -Seconds 1; " ^
+  "    \$v3 = (Get-ItemProperty -Path @($hklm64, $hklm32, $hkcu) -Name 'pv' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty pv -First 1); " ^
+  "    \$hasDir3 = (Test-Path \$dir1) -or (Test-Path \$dir2) -or (Test-Path \$dir3); " ^
+  "    if ((-not \$v3 -or \$v3 -eq '0.0.0.0') -and (-not \$hasDir3)) { " ^
+  "      Write-Host '[MISA XATOLIK] Microsoft WebView2 Runtime o''rnatilmadi!' -ForegroundColor Red; " ^
+  "      exit 1; " ^
+  "    } " ^
+  "  } " ^
+  "  Write-Host '[MISA] Misa AI ishga tushirilmoqda... ✓' -ForegroundColor Green; " ^
   "}"
 if errorlevel 1 (
   echo [MISA] WebView2 mavjud emasligi sababli ishga tushirish bekor qilindi. Backend ochilmadi.
@@ -231,7 +251,56 @@ const batPath = path.join(releaseVersionDir, "run_portable.bat");
 fs.writeFileSync(batPath, launcherBatContent, "utf-8");
 console.log(`✔ Ishga tushirish fayli: run_portable.bat`);
 
-// 7.1 Build Complete Self-Contained Portable ZIP
+// 7.1 Locate & Bundle WebView2 Bootstrapper
+const webview2Candidates = [
+  path.resolve(__dirname, "../src-tauri/resources/MicrosoftEdgeWebview2Setup.exe"),
+  path.join(releaseVersionDir, "webview2/MicrosoftEdgeWebview2Setup.exe"),
+  path.join(releaseVersionDir, "MicrosoftEdgeWebview2Setup.exe"),
+  path.join(process.env.TEMP || "", "MicrosoftEdgeWebview2Setup.exe"),
+];
+let webview2Source = null;
+for (const cand of webview2Candidates) {
+  if (fs.existsSync(cand)) {
+    webview2Source = cand;
+    break;
+  }
+}
+const releaseWvDir = path.join(releaseVersionDir, "webview2");
+if (!fs.existsSync(releaseWvDir)) {
+  fs.mkdirSync(releaseWvDir, { recursive: true });
+}
+if (webview2Source) {
+  const wvTarget = path.join(releaseWvDir, "MicrosoftEdgeWebview2Setup.exe");
+  copyFileWithLog(webview2Source, wvTarget, "WebView2 Bootstrapper (webview2/)");
+  copyFileWithLog(webview2Source, path.join(releaseVersionDir, "MicrosoftEdgeWebview2Setup.exe"), "WebView2 Bootstrapper (root)");
+}
+
+// 7.2 Create Dedicated Portable Directory: release/v9.0.1/portable/
+const portableDir = path.join(releaseVersionDir, "portable");
+if (!fs.existsSync(portableDir)) {
+  fs.mkdirSync(portableDir, { recursive: true });
+}
+if (fs.existsSync(exeTarget)) {
+  fs.copyFileSync(exeTarget, path.join(portableDir, `Misa-AI-${versionName}.exe`));
+}
+if (fs.existsSync(dllTarget)) {
+  fs.copyFileSync(dllTarget, path.join(portableDir, "WebView2Loader.dll"));
+}
+if (fs.existsSync(batPath)) {
+  fs.copyFileSync(batPath, path.join(portableDir, "run_portable.bat"));
+}
+if (fs.existsSync(backendTargetDir)) {
+  fs.cpSync(backendTargetDir, path.join(portableDir, "backend"), { recursive: true });
+}
+if (webview2Source) {
+  const portableWvDir = path.join(portableDir, "webview2");
+  if (!fs.existsSync(portableWvDir)) fs.mkdirSync(portableWvDir, { recursive: true });
+  fs.copyFileSync(webview2Source, path.join(portableWvDir, "MicrosoftEdgeWebview2Setup.exe"));
+  fs.copyFileSync(webview2Source, path.join(portableDir, "MicrosoftEdgeWebview2Setup.exe"));
+}
+console.log(`✔ Tayyor Portativ Katalog: release/${versionName}/portable/`);
+
+// 7.3 Build Complete Self-Contained Portable ZIP
 const zipTarget = path.join(releaseVersionDir, `Misa-AI-${versionName}-Portable.zip`);
 const tempZipStaging = path.join(releaseVersionDir, `Misa-AI-${versionName}-Portable`);
 try {
@@ -251,6 +320,12 @@ try {
   }
   if (fs.existsSync(backendTargetDir)) {
     fs.cpSync(backendTargetDir, path.join(tempZipStaging, "backend"), { recursive: true });
+  }
+  if (webview2Source) {
+    const stagingWvDir = path.join(tempZipStaging, "webview2");
+    if (!fs.existsSync(stagingWvDir)) fs.mkdirSync(stagingWvDir, { recursive: true });
+    fs.copyFileSync(webview2Source, path.join(stagingWvDir, "MicrosoftEdgeWebview2Setup.exe"));
+    fs.copyFileSync(webview2Source, path.join(tempZipStaging, "MicrosoftEdgeWebview2Setup.exe"));
   }
 
   if (fs.existsSync(zipTarget)) {

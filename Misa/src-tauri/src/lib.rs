@@ -624,10 +624,57 @@ impl Drop for BackendGuard {
 #[cfg(target_os = "windows")]
 pub fn check_webview2_installed() -> bool {
     const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+    // 1. WEBVIEW2_BROWSER_EXECUTABLE_FOLDER muhit o'zgaruvchisi (Fixed Version / maxsus runtime)
+    if let Ok(fixed_dir) = std::env::var("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER") {
+        let p = PathBuf::from(&fixed_dir);
+        if p.exists() && (p.join("msedgewebview2.exe").exists() || p.join("Application").exists()) {
+            println!("[MISA] WebView2 Fixed Version muhit orqali aniqlandi: {:?}", p);
+            return true;
+        }
+    }
+
+    // 2. Mahalliy Fixed Version Runtime katalogini tekshirish (exe yonidagi offline runtime)
+    let mut fixed_candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(parent) = exe_path.parent() {
+            fixed_candidates.push(parent.join("webview2_runtime"));
+            fixed_candidates.push(parent.join("webview2_fixed"));
+            fixed_candidates.push(parent.join("FixedRuntime"));
+        }
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        fixed_candidates.push(cwd.join("webview2_runtime"));
+        fixed_candidates.push(cwd.join("webview2_fixed"));
+    }
+    for fc in fixed_candidates {
+        if fc.exists() {
+            let direct_exe = fc.join("msedgewebview2.exe");
+            if direct_exe.exists() {
+                println!("[MISA] Mahalliy WebView2 Fixed Version aniqlandi: {:?}", fc);
+                std::env::set_var("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER", &fc);
+                return true;
+            }
+            if let Ok(entries) = std::fs::read_dir(&fc) {
+                for entry in entries.flatten() {
+                    let sub = entry.path();
+                    if sub.join("msedgewebview2.exe").exists() {
+                        println!("[MISA] Mahalliy WebView2 Fixed Version aniqlandi: {:?}", sub);
+                        std::env::set_var("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER", &sub);
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Windows Registry tekshiruvi (Evergreen Runtime x86, x64, HKCU, Policies)
     let reg_paths = [
         r"HKLM\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
         r"HKLM\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
         r"HKCU\Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+        r"HKLM\SOFTWARE\Policies\Microsoft\Edge\WebView2",
+        r"HKCU\Software\Policies\Microsoft\Edge\WebView2",
     ];
 
     for path in reg_paths {
@@ -653,24 +700,21 @@ pub fn check_webview2_installed() -> bool {
         }
     }
 
-    // Physical directory check for msedgewebview2.exe (x86 and 64-bit)
+    // 4. Jismoniy papkalar tekshiruvi (ProgramFiles x86, x64 va LOCALAPPDATA)
+    let mut check_dirs: Vec<PathBuf> = Vec::new();
     if let Ok(prog_files_x86) = std::env::var("ProgramFiles(x86)") {
-        let wv_dir = PathBuf::from(prog_files_x86).join("Microsoft").join("EdgeWebView").join("Application");
-        if wv_dir.exists() {
-            if let Ok(entries) = std::fs::read_dir(wv_dir) {
-                for entry in entries.flatten() {
-                    if entry.path().join("msedgewebview2.exe").exists() {
-                        println!("[MISA] WebView2 Application binarisi aniqlandi: {:?}", entry.path());
-                        return true;
-                    }
-                }
-            }
-        }
+        check_dirs.push(PathBuf::from(prog_files_x86).join("Microsoft").join("EdgeWebView").join("Application"));
     }
     if let Ok(prog_files) = std::env::var("ProgramFiles") {
-        let wv_dir = PathBuf::from(prog_files).join("Microsoft").join("EdgeWebView").join("Application");
+        check_dirs.push(PathBuf::from(prog_files).join("Microsoft").join("EdgeWebView").join("Application"));
+    }
+    if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+        check_dirs.push(PathBuf::from(local_app_data).join("Microsoft").join("EdgeWebView").join("Application"));
+    }
+
+    for wv_dir in check_dirs {
         if wv_dir.exists() {
-            if let Ok(entries) = std::fs::read_dir(wv_dir) {
+            if let Ok(entries) = std::fs::read_dir(&wv_dir) {
                 for entry in entries.flatten() {
                     if entry.path().join("msedgewebview2.exe").exists() {
                         println!("[MISA] WebView2 Application binarisi aniqlandi: {:?}", entry.path());
@@ -692,30 +736,47 @@ pub fn check_webview2_installed() -> bool {
 #[cfg(target_os = "windows")]
 pub fn try_install_webview2() -> bool {
     const CREATE_NO_WINDOW: u32 = 0x08000000;
-    println!("[MISA] WebView2 Runtime tekshiruvi: Evergreen Bootstrapper orqali o'rnatish tekshirilmoqda...");
+    println!("[MISA] WebView2 Runtime o'rnatish jarayoni boshlanmoqda...");
 
     let mut setup_cands: Vec<PathBuf> = Vec::new();
+
+    // 1. Portable / Standalone EXE yonidagi kandidatlar
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(parent) = exe_path.parent() {
+            setup_cands.push(parent.join("webview2").join("MicrosoftEdgeWebview2Setup.exe"));
             setup_cands.push(parent.join("MicrosoftEdgeWebview2Setup.exe"));
+            setup_cands.push(parent.join("resources").join("webview2").join("MicrosoftEdgeWebview2Setup.exe"));
             setup_cands.push(parent.join("resources").join("MicrosoftEdgeWebview2Setup.exe"));
         }
     }
+
+    // 2. Joriy ishchi katalogdagi kandidatlar (CWD)
+    if let Ok(cwd) = std::env::current_dir() {
+        setup_cands.push(cwd.join("webview2").join("MicrosoftEdgeWebview2Setup.exe"));
+        setup_cands.push(cwd.join("MicrosoftEdgeWebview2Setup.exe"));
+        setup_cands.push(cwd.join("release").join("v9.0.1").join("webview2").join("MicrosoftEdgeWebview2Setup.exe"));
+        setup_cands.push(cwd.join("release").join("v9.0.1").join("MicrosoftEdgeWebview2Setup.exe"));
+        setup_cands.push(cwd.join("Misa").join("src-tauri").join("resources").join("MicrosoftEdgeWebview2Setup.exe"));
+    }
+
+    // 3. Vaqtinchalik katalogdagi kandidat
     let temp_setup = std::env::temp_dir().join("MicrosoftEdgeWebview2Setup.exe");
     setup_cands.push(temp_setup.clone());
 
     let mut found_setup: Option<PathBuf> = None;
     for cand in setup_cands {
         if cand.exists() {
+            println!("[MISA] Mahalliy WebView2 Bootstrapper aniqlandi: {:?}", cand);
             found_setup = Some(cand);
             break;
         }
     }
 
+    // 4. Agar mahalliy bootstrapper topilmasa, Microsoft rasmiy serveridan yuklab olish
     if found_setup.is_none() {
-        println!("[MISA] MicrosoftEdgeWebview2Setup.exe yuklab olinmoqda...");
+        println!("[MISA] Mahalliy bootstrapper topilmadi. Microsoft rasmiy serveridan yuklab olinmoqda...");
         let dl_cmd = format!(
-            "Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile '{}' -UseBasicParsing",
+            "Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile '{}' -TimeoutSec 30 -UseBasicParsing",
             temp_setup.display()
         );
         let dl_res = Command::new("powershell")
@@ -724,19 +785,97 @@ pub fn try_install_webview2() -> bool {
             .status();
 
         if dl_res.map(|s| s.success()).unwrap_or(false) && temp_setup.exists() {
+            println!("[MISA] MicrosoftEdgeWebview2Setup.exe yuklab olindi ✓");
             found_setup = Some(temp_setup);
+        } else {
+            eprintln!("[ERROR] WebView2 bootstrapper yuklab olinmadi (Internet aloqasi mavjud emas)!");
+            return false;
         }
     }
 
-    if let Some(setup_path) = found_setup {
-        println!("[MISA] WebView2 bootstrapper ishga tushirilmoqda: {:?}", setup_path);
-        let _ = Command::new(&setup_path)
-            .args(["/silent", "/install"])
-            .creation_flags(CREATE_NO_WINDOW)
-            .status();
+    let setup_path = match found_setup {
+        Some(p) => p,
+        None => return false,
+    };
+
+    println!("[MISA] WebView2 Bootstrapper ishga tushirilmoqda: {:?}", setup_path);
+
+    // 5. Bosqich A: Silent rejim (/silent /install) - 90 soniya timeout va process monitoring bilan
+    let mut _silent_spawned = false;
+    match Command::new(&setup_path)
+        .args(["/silent", "/install"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn()
+    {
+        Ok(mut child) => {
+            _silent_spawned = true;
+            let start = std::time::Instant::now();
+            let timeout = Duration::from_secs(90);
+            while start.elapsed() < timeout {
+                if let Ok(Some(st)) = child.try_wait() {
+                    println!("[MISA] Silent bootstrapper jarayoni yakunlandi: {:?}", st);
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(500));
+            }
+            if child.try_wait().ok().flatten().is_none() {
+                println!("[MISA] Silent o'rnatish 90 soniyadan oshdi. Jarayon to'xtatilmoqda...");
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+        Err(e) => {
+            println!("[ERROR] Silent bootstrapper ishga tushirishda xatolik: {}", e);
+        }
     }
 
-    check_webview2_installed()
+    // Registry yangilanishi uchun kutiladi
+    std::thread::sleep(Duration::from_millis(1500));
+
+    // Qayta tekshirish (Re-check)
+    if check_webview2_installed() {
+        println!("[MISA] Silent o'rnatish muvaffaqiyatli: WebView2 o'rnatildi va tasdiqlandi ✓");
+        return true;
+    }
+
+    // 6. Bosqich B: Agar silent o'rnatish UAC talab qilsa, interaktiv rejimda ishga tushirish
+    println!("[MISA] Silent rejim orqali o'rnatilmadi. Foydalanuvchi UAC ruxsati uchun interaktiv oyna ochilmoqda...");
+    match Command::new(&setup_path)
+        .args(["/install"])
+        .spawn()
+    {
+        Ok(mut child) => {
+            let start = std::time::Instant::now();
+            let timeout = Duration::from_secs(120);
+            while start.elapsed() < timeout {
+                if let Ok(Some(st)) = child.try_wait() {
+                    println!("[MISA] Interaktiv o'rnatuvchi yakunlandi: {:?}", st);
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(500));
+            }
+            if child.try_wait().ok().flatten().is_none() {
+                println!("[MISA] Interaktiv o'rnatuvchi 120 soniyadan oshdi. Jarayon to'xtatilmoqda...");
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+        Err(e) => {
+            println!("[ERROR] Interaktiv bootstrapper ishga tushirishda xatolik: {}", e);
+        }
+    }
+
+    // Registry yangilanishi uchun kutiladi
+    std::thread::sleep(Duration::from_millis(1500));
+
+    // Yakuniy qayta tekshiruv (Strict Re-check)
+    let verified = check_webview2_installed();
+    if verified {
+        println!("[MISA] WebView2 Runtime muvaffaqiyatli o'rnatildi va qayta tekshiruvdan o'tdi ✓");
+    } else {
+        eprintln!("[ERROR] WebView2 o'rnatilmadi yoki jarayon bekor qilindi!");
+    }
+    verified
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -803,27 +942,32 @@ pub fn run() {
         old_panic_hook(info);
     }));
 
-    // 4. Windows WebView2 Runtime tekshiruvi (UI boshlanishidan oldin)
+    // 4. Windows WebView2 Runtime tekshiruvi (UI va Backend boshlanishidan oldin)
     #[cfg(target_os = "windows")]
     {
         println!("[WEBVIEW2] Microsoft Edge WebView2 Runtime mavjudligi tekshirilmoqda...");
         if !check_webview2_installed() {
-            println!("[WEBVIEW2] Runtime topilmadi! O'rnatishga 1 marta urinilmoqda...");
+            println!("[WEBVIEW2] Runtime topilmadi! O'rnatish haqida xabar ko'rsatilmoqda...");
+            show_native_message_box(
+                "Misa AI — WebView2 Runtime",
+                "Misa AI uchun Microsoft WebView2 Runtime kerak.\nO'rnatilmoqda...",
+                false,
+            );
             let installed = try_install_webview2();
             if !installed {
-                eprintln!("[ERROR] WebView2 Runtime not found");
-                eprintln!("[INFO] UI startup aborted");
-                eprintln!("[INFO] Backend process cleanup completed");
-                eprintln!("[INFO] Automatic restart disabled because dependency is missing");
+                eprintln!("[ERROR] Microsoft WebView2 Runtime o'rnatilmadi.");
+                eprintln!("[INFO] UI startup aborted.");
+                eprintln!("[INFO] Backend process was NOT started.");
+                eprintln!("[INFO] Automatic restart disabled because dependency is missing.");
                 stop_backend(&supervisor_state);
                 show_native_message_box(
                     "Misa AI v9.0.1 — WebView2 Runtime Xatoligi",
-                    "Microsoft WebView2 Runtime o'rnatilmadi.\n\nMisa Desktop UI ishga tushishi uchun Microsoft Edge WebView2 Runtime talab qilinadi.\n\nIltimos, uni rasmiy Microsoft saytidan yuklab oling yoki Misa Setup orqali qayta o'rnating:\nhttps://developer.microsoft.com/microsoft-edge/webview2/\n\nMisa xavfsiz to'xtatildi.",
+                    "Microsoft WebView2 Runtime o'rnatilmadi.\n\nInternet ulanishini tekshiring yoki Windows uchun WebView2 Runtime'ni o'rnating:\nhttps://developer.microsoft.com/microsoft-edge/webview2/\n\nMisa xavfsiz to'xtatildi.",
                     true,
                 );
                 return;
             }
-            println!("[WEBVIEW2] WebView2 muvaffaqiyatli o'rnatildi ✓");
+            println!("[WEBVIEW2] Misa AI ishga tushirilmoqda... ✓");
         } else {
             println!("[WEBVIEW2] Runtime tekshiruvi muvaffaqiyatli: WebView2 mavjud ✓");
         }
