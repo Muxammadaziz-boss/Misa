@@ -319,7 +319,7 @@ pub fn ensure_backend_running(state: &SupervisorState) {
 
     // 1. Agar 127.0.0.1:18420 da backend allaqachon ishlab turgan bo'lsa va sog'lom bo'lsa
     if check_http_health("127.0.0.1:18420", "/api/health") {
-        println!("[BACKEND] Mavjud sog'lom backend aniqlandi (127.0.0.1:18420) — yangi jarayon ochilmaydi ✓");
+        println!("[BACKEND] Mavjud backend aniqlandi va faol (127.0.0.1:18420) — yangi jarayon ochilmaydi ✓");
         if let Ok(mut m) = state.is_managed.lock() {
             *m = false;
         }

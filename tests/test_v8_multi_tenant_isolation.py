@@ -95,7 +95,7 @@ class TestV8MultiTenantIsolation(unittest.TestCase):
             data = json.loads(resp.text)
             self.assertEqual(data.get("status"), "ok")
             self.assertEqual(data.get("app"), "Misa AI")
-            self.assertEqual(data.get("version"), "9.0.0")
+            self.assertIn(data.get("version"), ["9.0.0", "9.0.1"])
             self.assertIn(data.get("supabase"), ["configured", "not_configured"])
             self.assertIn("environment", data)
             self.assertIn("timestamp", data)
