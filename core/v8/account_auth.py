@@ -72,6 +72,8 @@ class SupabaseSessionClaims:
     exp: float = 0.0
     iat: float = field(default_factory=time.time)
     username: str = ""
+    first_name: str = ""
+    last_name: str = ""
     display_name: str = ""
     avatar_url: str = ""
     raw_claims: Dict[str, Any] = field(default_factory=dict)
@@ -93,6 +95,8 @@ class SupabaseSessionClaims:
             "exp": self.exp,
             "is_valid": self.is_valid,
             "username": self.username,
+            "first_name": self.first_name,
+            "last_name": self.last_name,
             "display_name": self.display_name,
             "avatar_url": self.avatar_url
         }
@@ -568,6 +572,8 @@ class SupabaseAuthManager:
             or username
         )
         avatar_url = user_meta.get("avatar_url") or user_meta.get("picture", "")
+        first_name = str(user_meta.get("first_name", "")).strip()
+        last_name = str(user_meta.get("last_name", "")).strip()
 
         claims = SupabaseSessionClaims(
             user_id=str(user_id).strip(),
@@ -576,6 +582,8 @@ class SupabaseAuthManager:
             exp=float(exp) if exp else 0.0,
             iat=float(payload.get("iat", now)),
             username=str(username).strip(),
+            first_name=first_name,
+            last_name=last_name,
             display_name=str(display_name).strip(),
             avatar_url=str(avatar_url).strip(),
             raw_claims=payload,
@@ -597,6 +605,13 @@ class SupabaseAuthManager:
             logger.debug(f"[SupabaseAuth] Token verifikatsiyasi muvaffaqiyatsiz: {msg}")
             return None, None
 
+        user_metadata = claims.raw_claims.get("user_metadata") if isinstance(claims.raw_claims.get("user_metadata"), dict) else {}
+        meta_dict = dict(user_metadata)
+        if claims.first_name:
+            meta_dict["first_name"] = claims.first_name
+        if claims.last_name:
+            meta_dict["last_name"] = claims.last_name
+
         # Supabase auth.users -> Misa public.profiles avtomatik sinxronizatsiyasi
         profile = self.account_device_mgr.upsert_profile_from_supabase(
             user_id=claims.user_id,
@@ -604,7 +619,8 @@ class SupabaseAuthManager:
             username=claims.username,
             display_name=claims.display_name,
             avatar_url=claims.avatar_url,
-            is_verified=True
+            is_verified=True,
+            metadata=meta_dict
         )
 
         return claims, profile

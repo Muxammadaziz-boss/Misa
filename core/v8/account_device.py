@@ -40,9 +40,19 @@ class MisaUser:
     def is_active(self) -> bool:
         return self.status.upper() == "ACTIVE"
 
+    @property
+    def first_name(self) -> str:
+        return self.metadata.get("first_name", "") if isinstance(self.metadata, dict) else ""
+
+    @property
+    def last_name(self) -> str:
+        return self.metadata.get("last_name", "") if isinstance(self.metadata, dict) else ""
+
     def to_dict(self, include_sensitive: bool = False) -> Dict[str, Any]:
         data = asdict(self)
         data["is_active"] = self.is_active
+        data["first_name"] = self.first_name
+        data["last_name"] = self.last_name
         return data
 
     @classmethod

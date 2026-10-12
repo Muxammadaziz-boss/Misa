@@ -106,14 +106,7 @@ class MicrophoneManager:
         PortAudio quyi tizimini qayta initsializatsiya qilib, yangi ulangan yoki
         uzilgan Windows audio qurilmalarini to'liq yangidan skanerlash.
         """
-        try:
-            import sounddevice as sd
-            sd._terminate()
-            sd._initialize()
-            logger.info("[MicrophoneManager] PortAudio muvaffaqiyatli qayta initsializatsiya qilindi (hot-plug refresh)")
-        except Exception as e:
-            logger.warning(f"[MicrophoneManager] PortAudio qayta initsializatsiyasida xatolik: {e}")
-        return self.get_input_devices(force_refresh=False)
+        return self.get_input_devices(force_refresh=True)
 
     def get_input_devices(self, force_refresh: bool = False) -> List[Dict[str, Any]]:
         """
@@ -132,8 +125,9 @@ class MicrophoneManager:
             try:
                 sd._terminate()
                 sd._initialize()
-            except Exception:
-                pass
+                logger.info("[MicrophoneManager] PortAudio muvaffaqiyatli qayta initsializatsiya qilindi (hot-plug refresh)")
+            except Exception as e:
+                logger.warning(f"[MicrophoneManager] PortAudio qayta initsializatsiyasida xatolik: {e}")
 
         devices_list: List[Dict[str, Any]] = []
         try:
@@ -598,7 +592,13 @@ class RealtimeAudioMonitor:
                 if not self._is_active:
                     return
                 try:
-                    flat = indata.flatten()
+                    # Stereo -> Mono konvertatsiyasi
+                    if indata.ndim > 1 and indata.shape[1] > 1:
+                        mono_data = np.mean(indata, axis=1, keepdims=True)
+                    else:
+                        mono_data = indata
+
+                    flat = mono_data.flatten()
                     rms = float(np.sqrt(np.mean(np.square(flat))))
                     peak = float(np.max(np.abs(flat)))
                     level = min(1.0, max(0.0, peak if peak > 0 else rms * 3.0))
@@ -615,9 +615,9 @@ class RealtimeAudioMonitor:
                     self._current_level = round(level, 3)
                     self._current_status = st
 
-                    # Agar loopback yoqilgan bo'lsa, navbatga uzatish (soft clipping bilan)
+                    # Agar loopback yoqilgan bo'lsa, navbatga uzatish (soft clipping bilan mono signal)
                     if self._enable_loopback and self._output_stream:
-                        processed = np.clip(indata * 0.95, -0.98, 0.98)
+                        processed = np.clip(mono_data * 0.95, -0.98, 0.98)
                         if not self._loopback_queue.full():
                             self._loopback_queue.put_nowait(processed.copy())
 
@@ -653,30 +653,31 @@ class RealtimeAudioMonitor:
                 except Exception:
                     outdata.fill(0)
 
-            # Streamlarni ochish
+            # Streamlarni ochish (16kHz / native va mono / stereo apparat moslashuvi)
             try:
                 # 1. Input stream
-                try:
-                    self._input_stream = sd.InputStream(
-                        device=target_index,
-                        samplerate=target_sr,
-                        channels=1,
-                        dtype="float32",
-                        blocksize=block_size,
-                        callback=input_callback,
-                    )
-                    used_sr = target_sr
-                except Exception as e_sr:
-                    logger.info(f"[RealtimeMonitor] 16000Hz ochilmadi ({e_sr}), native {native_sr}Hz ga o'tilmoqda")
-                    self._input_stream = sd.InputStream(
-                        device=target_index,
-                        samplerate=native_sr,
-                        channels=1,
-                        dtype="float32",
-                        blocksize=block_size,
-                        callback=input_callback,
-                    )
-                    used_sr = native_sr
+                opened = False
+                for try_sr in (target_sr, native_sr):
+                    if opened:
+                        break
+                    for try_ch in (1, 2):
+                        try:
+                            self._input_stream = sd.InputStream(
+                                device=target_index,
+                                samplerate=try_sr,
+                                channels=try_ch,
+                                dtype="float32",
+                                blocksize=block_size,
+                                callback=input_callback,
+                            )
+                            used_sr = try_sr
+                            opened = True
+                            break
+                        except Exception as e_stream_try:
+                            logger.debug(f"[RealtimeMonitor] Stream ochilmadi (SR={try_sr}, CH={try_ch}): {e_stream_try}")
+
+                if not opened or not self._input_stream:
+                    raise RuntimeError("Audio apparat input oqimini ochib bo'lmadi")
 
                 self._sample_rate = used_sr
 

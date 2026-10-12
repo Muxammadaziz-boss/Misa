@@ -2785,6 +2785,11 @@ def _write_config(cfg):
 
 async def handle_account_get(request):
     """GET /api/account - Foydalanuvchi profili va tizim sozlamalari"""
+    # Xavfsizlik: barcha control-flow shoxlarida masked_key xavfsiz qiymatga ega bo'lishi shart
+    masked_key: str = ""
+    ai_keys: Dict[str, Any] = {}
+    has_gemini: bool = False
+
     user_id, user, session, err = resolve_auth_identity(request, required=False)
     if err:
         return err
@@ -2830,8 +2835,9 @@ async def handle_account_get(request):
     auth_display_name = (getattr(user, "display_name", "") or getattr(user, "username", "")) if user else ""
     auth_avatar_url = getattr(user, "avatar_url", "") if user else ""
 
-    first_name = user_cfg.get("first_name") or getattr(user, "first_name", "") or ""
-    last_name = user_cfg.get("last_name") or getattr(user, "last_name", "") or ""
+    user_meta = getattr(user, "metadata", {}) if hasattr(user, "metadata") and isinstance(getattr(user, "metadata", {}), dict) else {}
+    first_name = user_cfg.get("first_name") or getattr(user, "first_name", "") or user_meta.get("first_name", "") or ""
+    last_name = user_cfg.get("last_name") or getattr(user, "last_name", "") or user_meta.get("last_name", "") or ""
     name = user_cfg.get("name") or auth_display_name or user_name or mem_profile.get("ism", "")
 
     # Agar first_name va last_name alohida kiritilmagan bo'lsa, mavjud ismdan ajratish
@@ -2847,10 +2853,6 @@ async def handle_account_get(request):
     phone = user_cfg.get("phone") or mem_profile.get("telefon", "")
     bio = user_cfg.get("bio") or mem_profile.get("bio", "")
     language = user_cfg.get("language") or mem_profile.get("til", "uz")
-
-    ai_keys = {}
-    has_gemini = False
-    masked_key = ""
 
     def _mask_api_key(raw_val: Optional[str]) -> str:
         if not raw_val:
@@ -6757,6 +6759,9 @@ async def cors_middleware(request, handler):
         response = await handler(request)
     except web.HTTPException as ex:
         response = ex
+    except Exception as ex:
+        logger.error(f"[API] Serverda kutilmagan ichki xatolik: {ex}")
+        response = web.json_response({"ok": False, "error": str(ex)}, status=500)
 
     allowed_header_origin = origin if (origin and is_allowed) else ("*" if is_prod else "tauri://localhost")
     response.headers["Access-Control-Allow-Origin"] = allowed_header_origin
@@ -6771,7 +6776,8 @@ async def cors_middleware(request, handler):
 
 # ========== Ilovani sozlash va marshrutlash ==========
 def create_app():
-    app = web.Application(middlewares=[auth_enforcement_middleware, cors_middleware])
+    # cors_middleware birinchi (tashqi) o'rinda turishi shart — shunda 401/403/500 xatolarida ham CORS sarlavhalari to'g'ri biriktiriladi
+    app = web.Application(middlewares=[cors_middleware, auth_enforcement_middleware])
 
     async def handle_health_liveness(request):
         """GET /health — Railway liveness probe (no secrets, no user data)."""

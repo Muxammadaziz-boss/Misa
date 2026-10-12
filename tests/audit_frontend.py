@@ -1,7 +1,12 @@
 import os
 import re
+import sys
 
-page_dir = r"d:\Ishchi stoli\Misa\yordamchi_9.0.0\Misa\src"
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+page_dir = os.path.join(BASE_DIR, "Misa", "src")
 findings = []
 
 for root, dirs, files in os.walk(page_dir):

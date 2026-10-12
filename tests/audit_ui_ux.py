@@ -1,7 +1,8 @@
 import os
 import re
 
-page_dir = r"d:\Ishchi stoli\Misa\yordamchi_9.0.0\Misa\src\pages"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+page_dir = os.path.join(BASE_DIR, "Misa", "src", "pages")
 issues = []
 
 for f in os.listdir(page_dir):

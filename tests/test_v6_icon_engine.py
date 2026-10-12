@@ -194,9 +194,9 @@ class TestVectorIconEngine(unittest.TestCase):
         sheet.save(out_path)
         self.assertTrue(os.path.exists(out_path))
 
-        # Also copy to artifact dir for report embedding
-        artifact_dir = r"C:\Users\Administrator\.gemini\antigravity\brain\49f1e145-411f-49d6-8248-f2bfd2e96ed3"
-        if os.path.isdir(artifact_dir):
+        # Also copy to artifact dir for report embedding if configured in environment
+        artifact_dir = os.environ.get("ANTIGRAVITY_ARTIFACT_DIR", "")
+        if artifact_dir and os.path.isdir(artifact_dir):
             artifact_img = os.path.join(artifact_dir, "icon_showcase.png")
             sheet.save(artifact_img)
             print(f"\n[QA] Copied showcase to artifact: {artifact_img}")

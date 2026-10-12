@@ -1396,9 +1396,21 @@ class BackendService {
       if (res.ok) {
         return await res.json();
       }
-      return { ok: false, devices: [], selected_device_id: "default", selected_device_name: "Default", error: `HTTP ${res.status}` };
+      return {
+        ok: false,
+        devices: [],
+        selected_device_id: "default",
+        selected_device_name: "Default",
+        error: normalizeApiError(`HTTP ${res.status}`),
+      };
     } catch (e: any) {
-      return { ok: false, devices: [], selected_device_id: "default", selected_device_name: "Default", error: String(e) };
+      return {
+        ok: false,
+        devices: [],
+        selected_device_id: "default",
+        selected_device_name: "Default",
+        error: normalizeApiError(e, "Backend ishga tushmoqda... (127.0.0.1:18420)"),
+      };
     }
   }
 
@@ -1426,9 +1438,13 @@ class BackendService {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ device_id: deviceId, device_name: deviceName }),
       });
-      return await res.json();
+      if (res.ok) {
+        return await res.json();
+      }
+      const errText = await res.text().catch(() => "");
+      return { ok: false, error: normalizeApiError(errText || `HTTP ${res.status}`) };
     } catch (e: any) {
-      return { ok: false, error: String(e) };
+      return { ok: false, error: normalizeApiError(e, "Qurilmani tanlashda xatolik yuz berdi") };
     }
   }
 
@@ -1441,19 +1457,20 @@ class BackendService {
       });
       if (!res.ok) {
         const errText = await res.text().catch(() => "");
+        const normMsg = normalizeApiError(errText, `Server xatosi (HTTP ${res.status})`);
         return {
           ok: false,
           working: false,
           level: 0,
           status: "error",
-          message: normalizeApiError(errText, `Server xatosi (HTTP ${res.status})`),
-          error: `HTTP ${res.status}`,
+          message: normMsg,
+          error: normMsg,
         };
       }
       return await res.json();
     } catch (e: any) {
       const normMsg = normalizeApiError(e, "Mikrofonni ochib bo'lmadi");
-      return { ok: false, working: false, level: 0, status: "error", message: normMsg, error: String(e) };
+      return { ok: false, working: false, level: 0, status: "error", message: normMsg, error: normMsg };
     }
   }
 
@@ -1469,11 +1486,14 @@ class BackendService {
         body: JSON.stringify({ device_id: deviceId, loopback }),
       });
       if (!res.ok) {
-        return { ok: false, message: `HTTP xatosi ${res.status}`, error: `HTTP ${res.status}` };
+        const errText = await res.text().catch(() => "");
+        const normErr = normalizeApiError(errText || `HTTP ${res.status}`, `HTTP xatosi ${res.status}`);
+        return { ok: false, message: normErr, error: normErr };
       }
       return await res.json();
     } catch (e: any) {
-      return { ok: false, message: normalizeApiError(e, "Monitoringni boshlab bo'lmadi"), error: String(e) };
+      const normMsg = normalizeApiError(e, "Monitoringni boshlab bo'lmadi");
+      return { ok: false, message: normMsg, error: normMsg };
     }
   }
 
@@ -3677,19 +3697,25 @@ class BackendService {
         }
       } catch {}
 
+      const userMeta = session.user.user_metadata || {};
+      const userFirstName = userMeta.first_name || localStorage.getItem("misa_user_first_name") || undefined;
+      const userLastName = userMeta.last_name || localStorage.getItem("misa_user_last_name") || undefined;
+
       const user: MikasaAuthUser = {
         id: session.user.id,
         username:
-          session.user.user_metadata?.full_name ||
-          session.user.user_metadata?.name ||
-          session.user.user_metadata?.username ||
+          userMeta.full_name ||
+          userMeta.name ||
+          userMeta.username ||
           session.user.email?.split("@")[0] ||
           "User",
+        first_name: userFirstName,
+        last_name: userLastName,
         email: session.user.email || "",
         is_active: true,
         is_verified: Boolean(session.user.email_confirmed_at),
         created_at: Date.now() / 1000,
-        avatar_url: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || undefined,
+        avatar_url: userMeta.avatar_url || userMeta.picture || undefined,
         provider: session.user.app_metadata?.provider || (session.user.app_metadata?.providers?.[0]) || "email",
       };
       this.notifyAuthChange(user);

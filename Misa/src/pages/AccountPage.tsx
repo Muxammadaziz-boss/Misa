@@ -487,6 +487,10 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   // Mikrofon qurilmalarini yuklash
   const loadMicrophoneDevices = async (refresh: boolean = false) => {
     try {
+      if (!backendService.isHealthy()) {
+        setMicStatusText("Backend ishga tushmoqda... (127.0.0.1:18420)");
+        await backendService.waitForBackendReady(3000);
+      }
       const res = await backendService.getAudioInputDevices(refresh);
       if (res.ok) {
         setAudioDevices(res.devices || []);
@@ -494,8 +498,13 @@ export const AccountPage: React.FC<AccountPageProps> = ({
         setSelectedMicName(res.selected_device_name || "Tizim standarti");
         setMicStatusText(res.message || "Ulangan / Ishlamoqda");
         setMicFallbackUsed(!!res.fallback_used);
+      } else {
+        const errorMsg = normalizeApiError(res.error, "Mikrofon qurilmalarini yuklab bo'lmadi");
+        setMicStatusText(errorMsg);
       }
     } catch (err) {
+      const errorMsg = normalizeApiError(err, "Mikrofon qurilmalarini yuklashda xatolik");
+      setMicStatusText(errorMsg);
       console.warn("Mikrofon qurilmalarini yuklashda xatolik:", err);
     }
   };
@@ -504,6 +513,10 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   const handleRefreshMicrophones = async () => {
     setMicRefreshing(true);
     try {
+      if (!backendService.isHealthy()) {
+        setMicStatusText("Backend ishga tushmoqda... (127.0.0.1:18420)");
+        await backendService.waitForBackendReady(3000);
+      }
       const res = await backendService.refreshAudioInputDevices();
       if (res.ok) {
         setAudioDevices(res.devices || []);
@@ -513,10 +526,14 @@ export const AccountPage: React.FC<AccountPageProps> = ({
         setMicFallbackUsed(!!res.fallback_used);
         showToast("Audio qurilmalar ro'yxati yangilandi ✓");
       } else {
-        showToast("Qurilmalarni yangilab bo'lmadi");
+        const errText = normalizeApiError(res.error, "Qurilmalarni yangilab bo'lmadi");
+        setMicStatusText(errText);
+        showToast(errText);
       }
-    } catch {
-      showToast("Qurilmalarni yangilashda xatolik");
+    } catch (err: any) {
+      const errText = normalizeApiError(err, "Qurilmalarni yangilashda xatolik");
+      setMicStatusText(errText);
+      showToast(errText);
     } finally {
       setMicRefreshing(false);
     }
@@ -2684,7 +2701,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                         <a
                           href={info.url}
                           target="_blank"
-                          rel="noreferrer"
+                          rel="noopener noreferrer"
                           style={{ color: "#38BDF8", textDecoration: "none", fontSize: "11px" }}
                         >
                           Kalit olish ↗
