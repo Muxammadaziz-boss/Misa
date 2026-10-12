@@ -89,12 +89,18 @@ function copyFileWithLog(src, dest, friendlyName) {
     const stat = fs.statSync(dest);
     const hash = calculateSha256(dest);
     console.log(`✔ ${friendlyName}: ${path.basename(dest)} (${(stat.size / (1024 * 1024)).toFixed(2)} MB)`);
-    manifest.files.push({
+    const existingIdx = manifest.files.findIndex(f => f.name === path.basename(dest));
+    const entry = {
       name: path.basename(dest),
       size_bytes: stat.size,
       size_mb: parseFloat((stat.size / (1024 * 1024)).toFixed(2)),
       sha256: hash,
-    });
+    };
+    if (existingIdx >= 0) {
+      manifest.files[existingIdx] = entry;
+    } else {
+      manifest.files.push(entry);
+    }
     return true;
   } else {
     console.warn(`⚠ Topilmadi: ${src}`);
