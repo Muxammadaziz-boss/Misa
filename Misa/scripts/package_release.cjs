@@ -223,30 +223,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-REM 2. Check if backend is already healthy on port 18420 (No duplicate processes)
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$isHealthy = \$false; " ^
-  "try { \$r = Invoke-WebRequest -Uri 'http://127.0.0.1:18420/api/health' -TimeoutSec 1 -UseBasicParsing -ErrorAction SilentlyContinue; if (\$r.StatusCode -eq 200) { \$isHealthy = \$true } } catch {}; " ^
-  "if (\$isHealthy) { " ^
-  "  Write-Host '[MISA] Backend allaqachon faol (127.0.0.1:18420) — yangi backend ochilmaydi ✓' -ForegroundColor Green; " ^
-  "} else { " ^
-  "  \$stale = (Get-NetTCPConnection -LocalPort 18420 -State Listen -ErrorAction SilentlyContinue).OwningProcess; " ^
-  "  if (\$stale) { Write-Host '[MISA] Stale jarayon tozalanmoqda (PID: '\$stale')...' -ForegroundColor Yellow; Stop-Process -Id \$stale -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 400 }; " ^
-  "  Write-Host '[MISA] Backend xizmati ishga tushirilmoqda (127.0.0.1:18420)...' -ForegroundColor Cyan; " ^
-  "  \$bExe = if (Test-Path '.\\backend\\misa_backend.exe') { '.\\backend\\misa_backend.exe' } elseif (Test-Path '.\\backend\\mikasa_backend.exe') { '.\\backend\\mikasa_backend.exe' } else { \$null }; " ^
-  "  if (\$bExe) { " ^
-  "    Start-Process -FilePath \$bExe -WorkingDirectory '.\\backend' -WindowStyle Hidden; " ^
-  "  } else { " ^
-  "    \$workDir = if (Test-Path '.\\core\\api_server.py') { (Resolve-Path '.').Path } elseif (Test-Path '..\\..\\core\\api_server.py') { (Resolve-Path '..\\..').Path } else { (Resolve-Path '.').Path }; " ^
-  "    \$cands = @('.\\python\\python.exe', '.\\runtime\\python.exe', (Join-Path \$workDir '.venv\\Scripts\\python.exe'), (Join-Path \$workDir '..\\.venv\\Scripts\\python.exe'), 'python'); " ^
-  "    \$chosen = 'python'; " ^
-  "    foreach (\$c in \$cands) { if (\$c -eq 'python') { \$chosen = 'python'; break } elseif (Test-Path \$c) { \$chosen = (Resolve-Path \$c).Path; break } } " ^
-  "    Start-Process -FilePath \$chosen -ArgumentList 'core\\api_server.py' -WorkingDirectory \$workDir -WindowStyle Hidden; " ^
-  "  }; " ^
-  "  Start-Sleep -Seconds 2; " ^
-  "}"
-
-REM 3. Start Desktop App
+REM 2. Launch Desktop App (Tauri UI manages backend lifecycle as parent process)
 start "" "Misa-AI-${versionName}.exe"
 `;
 

@@ -18,6 +18,78 @@ pub struct SupervisorState {
     pub backend_pid: Arc<Mutex<Option<u32>>>,
     pub is_managed: Arc<Mutex<bool>>,
     pub is_spawning: Arc<Mutex<bool>>,
+    pub spawn_attempts: Arc<Mutex<u32>>,
+    pub is_permanently_failed: Arc<Mutex<bool>>,
+}
+
+#[cfg(target_os = "windows")]
+pub struct SingleInstanceGuard {
+    handle: isize,
+}
+
+#[cfg(target_os = "windows")]
+impl SingleInstanceGuard {
+    pub fn acquire(name: &str) -> Option<Self> {
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+
+        extern "system" {
+            fn CreateMutexW(lpMutexAttributes: *mut std::ffi::c_void, bInitialOwner: i32, lpName: *const u16) -> isize;
+            fn GetLastError() -> u32;
+            fn CloseHandle(hObject: isize) -> i32;
+            fn FindWindowW(lpClassName: *const u16, lpWindowName: *const u16) -> isize;
+            fn SetForegroundWindow(hWnd: isize) -> i32;
+            fn ShowWindow(hWnd: isize, nCmdShow: i32) -> i32;
+        }
+
+        const ERROR_ALREADY_EXISTS: u32 = 183;
+        const SW_RESTORE: i32 = 9;
+
+        let wide_name: Vec<u16> = OsStr::new(name).encode_wide().chain(std::iter::once(0)).collect();
+        let handle = unsafe { CreateMutexW(std::ptr::null_mut(), 1, wide_name.as_ptr()) };
+
+        if handle == 0 {
+            return None;
+        }
+
+        let last_err = unsafe { GetLastError() };
+        if last_err == ERROR_ALREADY_EXISTS {
+            println!("[INSTANCE] Boshqa Misa AI nusxasi allaqachon faol (Single Instance Lock).");
+            let win_title: Vec<u16> = OsStr::new("MISA AI v9.0.1").encode_wide().chain(std::iter::once(0)).collect();
+            let hwnd = unsafe { FindWindowW(std::ptr::null(), win_title.as_ptr()) };
+            if hwnd != 0 {
+                unsafe {
+                    ShowWindow(hwnd, SW_RESTORE);
+                    SetForegroundWindow(hwnd);
+                }
+            }
+            unsafe { CloseHandle(handle); }
+            return None;
+        }
+
+        Some(SingleInstanceGuard { handle })
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for SingleInstanceGuard {
+    fn drop(&mut self) {
+        if self.handle != 0 {
+            extern "system" {
+                fn CloseHandle(hObject: isize) -> i32;
+            }
+            unsafe { CloseHandle(self.handle); }
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub struct SingleInstanceGuard;
+#[cfg(not(target_os = "windows"))]
+impl SingleInstanceGuard {
+    pub fn acquire(_name: &str) -> Option<Self> {
+        Some(SingleInstanceGuard)
+    }
 }
 
 /// HTTP GET /api/health tekshiruvi (Pure Rust stdlib, uchinchi tomon kutubxonalarisiz)
@@ -34,7 +106,7 @@ pub fn check_http_health(addr_str: &str, path: &str) -> bool {
     let _ = stream.set_write_timeout(Some(Duration::from_millis(1500)));
 
     let request = format!(
-        "GET {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: MisaDesktopSupervisor/9.0.0\r\nConnection: close\r\n\r\n",
+        "GET {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: MisaDesktopSupervisor/9.0.1\r\nConnection: close\r\n\r\n",
         path, addr_str
     );
     if stream.write_all(request.as_bytes()).is_err() {
@@ -52,17 +124,13 @@ pub fn check_http_health(addr_str: &str, path: &str) -> bool {
 }
 
 pub fn stop_backend(state: &SupervisorState) {
-    // Faqat o'zimiz ishga tushirgan (managed) backendni to'xtatamiz
+    println!("[SHUTDOWN] Backend jarayonini to'xtatish va tozalash...");
     let is_managed = state.is_managed.lock().map(|m| *m).unwrap_or(false);
-    if !is_managed {
-        println!("[MISA] Backend tashqi/mavjud jarayon bo'lgani uchun to'xtatilmadi (unmanaged)");
-        return;
-    }
 
     if let Ok(mut lock) = state.backend_child.lock() {
         if let Some(mut child) = lock.take() {
             let pid = child.id();
-            println!("[MISA] Backend jarayoni to'xtatilmoqda (PID: {})...", pid);
+            println!("[BACKEND] Managed backend jarayoni to'xtatilmoqda (PID: {})...", pid);
             #[cfg(target_os = "windows")]
             {
                 const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -73,7 +141,7 @@ pub fn stop_backend(state: &SupervisorState) {
             }
             let _ = child.kill();
             let _ = child.wait();
-            println!("[MISA] Backend jarayoni muvaffaqiyatli to'xtatildi");
+            println!("[BACKEND] Backend jarayoni muvaffaqiyatli to'xtatildi (PID: {}) ✓", pid);
         }
     }
     if let Ok(mut pid_lock) = state.backend_pid.lock() {
@@ -81,6 +149,14 @@ pub fn stop_backend(state: &SupervisorState) {
     }
     if let Ok(mut managed_lock) = state.is_managed.lock() {
         *managed_lock = false;
+    }
+
+    if is_managed {
+        // Managed backend to'xtatilgandan keyin portni tozalash
+        cleanup_port_process(18420);
+        println!("[SHUTDOWN] 18420-port tekshirildi va tozalandi ✓");
+    } else {
+        println!("[BACKEND] Backend tashqi/mavjud mustaqil jarayon bo'lgani uchun majburan o'ldirilmadi (Unmanaged)");
     }
 }
 
@@ -239,29 +315,55 @@ fn cleanup_port_process(port: u16) {
 fn cleanup_port_process(_port: u16) {}
 
 pub fn ensure_backend_running(state: &SupervisorState) {
-    println!("[MISA] Desktop ishga tushmoqda: backend holati tekshirilmoqda...");
+    println!("[BACKEND] Backend holati tekshirilmoqda (127.0.0.1:18420)...");
 
     // 1. Agar 127.0.0.1:18420 da backend allaqachon ishlab turgan bo'lsa va sog'lom bo'lsa
     if check_http_health("127.0.0.1:18420", "/api/health") {
-        println!("[MISA] Mavjud backend aniqlandi va faol (127.0.0.1:18420) — yangi jarayon ochilmaydi");
+        println!("[BACKEND] Mavjud sog'lom backend aniqlandi (127.0.0.1:18420) — yangi jarayon ochilmaydi ✓");
         if let Ok(mut m) = state.is_managed.lock() {
             *m = false;
+        }
+        if let Ok(mut a) = state.spawn_attempts.lock() {
+            *a = 0;
+        }
+        if let Ok(mut f) = state.is_permanently_failed.lock() {
+            *f = false;
         }
         return;
     }
 
-    // 2. Bir vaqtning o'zida bir nechta backend ishga tushishini bloklash (Concurrency guard)
+    // 2. Barqaror xatolik va cheksiz qayta urinishdan himoya
+    if let Ok(f) = state.is_permanently_failed.lock() {
+        if *f {
+            println!("[BACKEND] Avvalgi urinishlar muvaffaqiyatsiz bo'lgan (Permanent failure guard). Cheksiz qayta urinish bloklandi.");
+            return;
+        }
+    }
+
+    if let Ok(mut attempts) = state.spawn_attempts.lock() {
+        if *attempts >= 3 {
+            println!("[ERROR] Backend ishga tushirish uchun maksimal 3 ta urinish tugadi. Avtomatik qayta urinish to'xtatildi.");
+            if let Ok(mut f) = state.is_permanently_failed.lock() {
+                *f = true;
+            }
+            return;
+        }
+        *attempts += 1;
+        println!("[BACKEND] Backend ishga tushirish urinishi: {}/3", *attempts);
+    }
+
+    // 3. Concurrency guard (bir vaqtda bir nechta spawn chaqirilmasligi uchun)
     if let Ok(mut spawning) = state.is_spawning.lock() {
         if *spawning {
-            println!("[MISA] Backend allaqachon ishga tushirilmoqda, kutilmoqda...");
+            println!("[BACKEND] Backend allaqachon initsializatsiya jarayonida, kutilmoqda...");
             return;
         }
         *spawning = true;
     }
 
-    // 3. Agar 18420-port band bo'lsa, lekin /api/health javob bermasa (Stale/zombie jarayon)
+    // 4. Stale port jarayonini tozalash (agar port band, lekin /api/health javob bermasa)
     if is_port_listening(18420) {
-        println!("[MISA] 18420-port band, lekin /api/health javob bermayapti (Stale process). Tozalanmoqda...");
+        println!("[BACKEND] 18420-port band, ammo /api/health javob bermayapti (Stale process). Tozalanmoqda...");
         cleanup_port_process(18420);
         std::thread::sleep(Duration::from_millis(400));
     }
@@ -275,9 +377,9 @@ pub fn ensure_backend_running(state: &SupervisorState) {
 
     let mut child_opt: Option<Child> = None;
 
-    // 3. Variant A: Standalone bundled backend (misa_backend.exe)
+    // 5. Variant A: Standalone bundled backend (misa_backend.exe)
     if let Some((backend_bin, work_dir)) = find_bundled_backend_binary() {
-        println!("[MISA] Standalone bundled backend ishga tushirilmoqda: {:?}", backend_bin);
+        println!("[BACKEND] Standalone bundled backend ishga tushirilmoqda: {:?}", backend_bin);
         let sup_url = std::env::var("SUPABASE_URL")
             .unwrap_or_else(|_| "https://vdcssmzguxfknqkfxbed.supabase.co".to_string());
         let sup_key = std::env::var("SUPABASE_PUBLISHABLE_KEY")
@@ -299,15 +401,15 @@ pub fn ensure_backend_running(state: &SupervisorState) {
 
         match cmd.spawn() {
             Ok(c) => child_opt = Some(c),
-            Err(e) => println!("[MISA] Bundled backendni ishga tushirishda xatolik: {}", e),
+            Err(e) => println!("[ERROR] Bundled backendni ishga tushirishda xatolik: {}", e),
         }
     }
 
-    // 4. Variant B: Rivojlantirish muhiti orqali python fallback
+    // 6. Variant B: Rivojlantirish muhiti orqali python fallback (faqat dev muhitda mavjud bo'lsa)
     if child_opt.is_none() {
         if let Some(base_dir) = resolve_dev_base_dir() {
             let py_exe = find_dev_python_executable(&base_dir).unwrap_or_else(|| PathBuf::from("python"));
-            println!("[MISA] Python fallback orqali ishga tushirilmoqda: {:?} core/api_server.py", py_exe);
+            println!("[BACKEND] Python fallback orqali ishga tushirilmoqda: {:?} core/api_server.py", py_exe);
             let mut cmd = Command::new(&py_exe);
             cmd.arg("core/api_server.py")
                 .current_dir(&base_dir)
@@ -320,15 +422,15 @@ pub fn ensure_backend_running(state: &SupervisorState) {
 
             match cmd.spawn() {
                 Ok(c) => child_opt = Some(c),
-                Err(e) => println!("[MISA] Python orqali ishga tushirishda xatolik: {}", e),
+                Err(e) => println!("[ERROR] Python orqali ishga tushirishda xatolik: {}", e),
             }
         }
     }
 
-    // 5. Jarayon qayd etildi
+    // 7. Jarayon qayd etildi
     if let Some(child) = child_opt {
         let pid = child.id();
-        println!("[MISA] Backend jarayoni boshlandi (PID: {})", pid);
+        println!("[BACKEND] Backend jarayoni boshlandi (PID: {})", pid);
         if let Ok(mut lock) = state.backend_child.lock() {
             *lock = Some(child);
         }
@@ -339,15 +441,15 @@ pub fn ensure_backend_running(state: &SupervisorState) {
             *managed_lock = true;
         }
     } else {
-        println!("[MISA] Xatolik: Hech qanday backend ijrochi fayli topilmadi!");
+        println!("[ERROR] Hech qanday backend ijrochi fayli topilmadi!");
         if let Ok(mut spawning) = state.is_spawning.lock() {
             *spawning = false;
         }
         return;
     }
 
-    // 6. Eksponentsial kutish bilan /api/health tekshiruvi (Health check with backoff)
-    println!("[MISA] /api/health tayyor bo'lishi kutilmoqda...");
+    // 8. Eksponentsial kutish bilan /api/health tekshiruvi (Health check with backoff)
+    println!("[BACKEND] /api/health tayyor bo'lishi kutilmoqda...");
     let backoff_delays = [100, 250, 500, 1000, 1500, 2000, 2000, 2000, 2000, 2000];
     let mut is_ready = false;
 
@@ -356,7 +458,7 @@ pub fn ensure_backend_running(state: &SupervisorState) {
         if let Ok(mut lock) = state.backend_child.lock() {
             if let Some(ref mut child) = *lock {
                 if let Ok(Some(status)) = child.try_wait() {
-                    println!("[MISA] Xatolik: Backend jarayoni kutilmaganda to'xtadi: {:?}", status);
+                    println!("[ERROR] Backend jarayoni kutilmaganda to'xtadi: {:?}", status);
                     break;
                 }
             } else {
@@ -372,50 +474,15 @@ pub fn ensure_backend_running(state: &SupervisorState) {
     }
 
     if is_ready {
-        println!("[MISA] Backend 127.0.0.1:18420 da muvaffaqiyatli tayyor bo'ldi (READY) ✓");
+        println!("[BACKEND] Backend 127.0.0.1:18420 da muvaffaqiyatli tayyor bo'ldi (READY) ✓");
+        if let Ok(mut a) = state.spawn_attempts.lock() {
+            *a = 0;
+        }
+        if let Ok(mut f) = state.is_permanently_failed.lock() {
+            *f = false;
+        }
     } else {
-        println!("[MISA] Bundled backend tayyor bo'lmadi yoki to'xtadi. Python fallback ishga tushirilmoqda...");
-        if let Some(base_dir) = resolve_dev_base_dir() {
-            let py_exe = find_dev_python_executable(&base_dir).unwrap_or_else(|| PathBuf::from("python"));
-            println!("[MISA] Python backend boshlanmoqda: {:?} core/api_server.py", py_exe);
-            let mut cmd = Command::new(&py_exe);
-            cmd.arg("core/api_server.py")
-                .current_dir(&base_dir)
-                .env("MISA_API_HOST", "127.0.0.1")
-                .env("MISA_API_PORT", "18420")
-                .env("PORT", "18420");
-
-            #[cfg(target_os = "windows")]
-            cmd.creation_flags(creation_flags);
-
-            match cmd.spawn() {
-                Ok(c) => {
-                    let pid = c.id();
-                    println!("[MISA] Python backend boshlandi (PID: {})", pid);
-                    if let Ok(mut lock) = state.backend_child.lock() {
-                        *lock = Some(c);
-                    }
-                    if let Ok(mut pid_lock) = state.backend_pid.lock() {
-                        *pid_lock = Some(pid);
-                    }
-                    if let Ok(mut managed_lock) = state.is_managed.lock() {
-                        *managed_lock = true;
-                    }
-                    for delay in [300, 500, 800, 1200, 1500, 2000] {
-                        if check_http_health("127.0.0.1:18420", "/api/health") {
-                            is_ready = true;
-                            println!("[MISA] Python backend muvaffaqiyatli tayyor bo'ldi (READY) ✓");
-                            break;
-                        }
-                        std::thread::sleep(Duration::from_millis(delay));
-                    }
-                }
-                Err(e) => println!("[MISA] Python fallback xatoligi: {}", e),
-            }
-        }
-        if !is_ready {
-            println!("[MISA] Ogohlantirish: Backend health check vaqt chegarasiga yetdi (Timeout)");
-        }
+        println!("[ERROR] Backend health check vaqt chegarasiga yetdi (Timeout)");
     }
 
     if let Ok(mut spawning) = state.is_spawning.lock() {
@@ -478,7 +545,6 @@ fn app_start_resize(window: tauri::Window, direction: String) -> Result<(), Stri
 
 #[tauri::command]
 fn backend_get_status(state: tauri::State<SupervisorState>) -> serde_json::Value {
-    // Check if tracked child process has exited unexpectedly
     if let Ok(mut lock) = state.backend_child.lock() {
         if let Some(ref mut child) = *lock {
             if let Ok(Some(_exit_status)) = child.try_wait() {
@@ -495,8 +561,11 @@ fn backend_get_status(state: tauri::State<SupervisorState>) -> serde_json::Value
 
     let is_healthy = check_http_health("127.0.0.1:18420", "/api/health");
     let is_spawning = state.is_spawning.lock().map(|s| *s).unwrap_or(false);
+    let permanently_failed = state.is_permanently_failed.lock().map(|f| *f).unwrap_or(false);
+    let attempts = state.spawn_attempts.lock().map(|a| *a).unwrap_or(0);
 
-    if !is_healthy && !is_spawning {
+    // Qayta urinish faqat limit doirasida va barqaror xato holatida bo'lmasa
+    if !is_healthy && !is_spawning && !permanently_failed && attempts < 3 {
         let state_clone = state.inner().clone();
         std::thread::spawn(move || {
             ensure_backend_running(&state_clone);
@@ -509,16 +578,17 @@ fn backend_get_status(state: tauri::State<SupervisorState>) -> serde_json::Value
     serde_json::json!({
         "running": is_healthy,
         "healthy": is_healthy,
-        "spawning": is_spawning || !is_healthy,
+        "spawning": is_spawning || (!is_healthy && !permanently_failed),
         "port": 18420,
         "pid": pid,
-        "managed": is_managed
+        "managed": is_managed,
+        "permanently_failed": permanently_failed,
+        "attempts": attempts
     })
 }
 
 #[tauri::command]
 fn backend_restart(state: tauri::State<SupervisorState>) -> Result<bool, String> {
-    // Agar backend hozirgina ishga tushayotgan bo'lsa (spawning) yoki allaqachon sog'lom bo'lsa, uni o'ldirmaymiz
     let currently_spawning = state.is_spawning.lock().map(|s| *s).unwrap_or(false);
     if currently_spawning || check_http_health("127.0.0.1:18420", "/api/health") {
         return Ok(true);
@@ -526,6 +596,12 @@ fn backend_restart(state: tauri::State<SupervisorState>) -> Result<bool, String>
     stop_backend(&state);
     if let Ok(mut spawning) = state.is_spawning.lock() {
         *spawning = false;
+    }
+    if let Ok(mut attempts) = state.spawn_attempts.lock() {
+        *attempts = 0;
+    }
+    if let Ok(mut f) = state.is_permanently_failed.lock() {
+        *f = false;
     }
     std::thread::sleep(Duration::from_millis(300));
     let state_clone = state.inner().clone();
@@ -696,30 +772,49 @@ pub fn show_native_message_box(_title: &str, _message: &str, _is_error: bool) {}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    println!("[BOOT] MISA AI v9.0.1 Desktop Application ishga tushmoqda...");
+
+    // 1. Single-Instance Guard tekshiruvi (faqat 1 ta Misa UI instansiyasi ishlaydi)
+    println!("[INSTANCE] Yagona nusxa (Single-Instance) tekshirilmoqda...");
+    let _instance_guard = match SingleInstanceGuard::acquire("Local\\Misa_AI_SingleInstance_Mutex_v9.0.1") {
+        Some(g) => {
+            println!("[INSTANCE] Yagona nusxa qulfi o'rnatildi (Primary instance) ✓");
+            g
+        }
+        None => {
+            println!("[INSTANCE] Mavjud Misa AI nusxasi topildi. Yangi jarayon to'xtatildi (No duplicate instance).");
+            return;
+        }
+    };
+
     let supervisor_state = SupervisorState::default();
 
-    // 1. Backend Guard o'rnatish: Jarayon har qanday holatda yopilganda backendni to'xtatadi
+    // 2. Backend Guard o'rnatish: Jarayon har qanday holatda yopilganda backendni to'xtatadi
     let _guard = BackendGuard {
         state: supervisor_state.clone(),
     };
 
-    // 2. Panic hook: Kutilmagan qulashlarda backend bolalar jarayonini o'ldirish
+    // 3. Panic hook: Kutilmagan qulashlarda backend bolalar jarayonini o'ldirish
     let state_for_panic = supervisor_state.clone();
     let old_panic_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        eprintln!("[MISA FATAL] Kutilmagan qulash (Panic): {:?}", info);
+        eprintln!("[ERROR] Kutilmagan qulash (Panic): {:?}", info);
         stop_backend(&state_for_panic);
         old_panic_hook(info);
     }));
 
-    // 3. Windows WebView2 Runtime tekshiruvi (UI boshlanishidan oldin)
+    // 4. Windows WebView2 Runtime tekshiruvi (UI boshlanishidan oldin)
     #[cfg(target_os = "windows")]
     {
+        println!("[WEBVIEW2] Microsoft Edge WebView2 Runtime mavjudligi tekshirilmoqda...");
         if !check_webview2_installed() {
-            println!("[MISA] DIQQAT: Microsoft WebView2 Runtime topilmadi! O'rnatishga urinilmoqda...");
+            println!("[WEBVIEW2] Runtime topilmadi! O'rnatishga 1 marta urinilmoqda...");
             let installed = try_install_webview2();
             if !installed {
-                eprintln!("[MISA] Xatolik: WebView2 Runtime o'rnatilmadi!");
+                eprintln!("[ERROR] WebView2 Runtime not found");
+                eprintln!("[INFO] UI startup aborted");
+                eprintln!("[INFO] Backend process cleanup completed");
+                eprintln!("[INFO] Automatic restart disabled because dependency is missing");
                 stop_backend(&supervisor_state);
                 show_native_message_box(
                     "Misa AI v9.0.1 — WebView2 Runtime Xatoligi",
@@ -728,19 +823,24 @@ pub fn run() {
                 );
                 return;
             }
+            println!("[WEBVIEW2] WebView2 muvaffaqiyatli o'rnatildi ✓");
+        } else {
+            println!("[WEBVIEW2] Runtime tekshiruvi muvaffaqiyatli: WebView2 mavjud ✓");
         }
     }
 
-    // 4. Tauri App Builder
+    // 5. Tauri App Builder
     let state_for_setup = supervisor_state.clone();
     let state_for_window = supervisor_state.clone();
     let state_for_exit = supervisor_state.clone();
     let state_for_build_err = supervisor_state.clone();
 
+    println!("[UI] Tauri oynasi va muhiti initsializatsiya qilinmoqda...");
     let builder = tauri::Builder::default()
         .manage(supervisor_state)
         .setup(move |app| {
             use tauri::Manager;
+            println!("[UI] Tauri asosiy oynasi sozlanmoqda...");
             if let Some(win) = app.get_webview_window("main") {
                 let _ = win.set_background_color(Some(tauri::window::Color(6, 3, 12, 255)));
             }
@@ -751,6 +851,7 @@ pub fn run() {
         })
         .on_window_event(move |_window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed = event {
+                println!("[UI] Oyna yopilish so'rovi qabul qilindi. Backend to'xtatilmoqda...");
                 stop_backend(&state_for_window);
             }
         })
@@ -769,7 +870,7 @@ pub fn run() {
     let app = match builder.build(tauri::generate_context!()) {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("[MISA FATAL] Tauri oynasini yaratishda xatolik: {}", e);
+            eprintln!("[ERROR] Tauri oynasini yaratishda xatolik: {}", e);
             stop_backend(&state_for_build_err);
             #[cfg(target_os = "windows")]
             show_native_message_box(
@@ -781,9 +882,11 @@ pub fn run() {
         }
     };
 
+    println!("[UI] Misa AI Desktop dasturi muvaffaqiyatli ochildi ✓");
     app.run(move |_app_handle, event| {
         match event {
             tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+                println!("[SHUTDOWN] Ilovadan chiqish hodisasi. Backend to'xtatilmoqda...");
                 stop_backend(&state_for_exit);
             }
             _ => {}
