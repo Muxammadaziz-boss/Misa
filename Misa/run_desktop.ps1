@@ -6,10 +6,82 @@ Write-Host "===================================================" -ForegroundColo
 Write-Host "   MISA AI 9.0 - DESKTOP ISHCHI STOLI ILOVASI    " -ForegroundColor Cyan
 Write-Host "===================================================" -ForegroundColor Cyan
 
-# 1. Start Python backend on port 18420 if not already running
-$bConn = Get-NetTCPConnection -LocalPort 18420 -ErrorAction SilentlyContinue
-if (-not $bConn) {
-    Write-Host "[1/3] Backend xizmati ishga tushirilmoqda (127.0.0.1:18420)..." -ForegroundColor Yellow
+# 1. WebView2 Runtime pre-flight validation
+Write-Host "[1/3] Microsoft WebView2 Runtime tekshirilmoqda..." -ForegroundColor Cyan
+
+function Test-WebView2Installed {
+    $keys = @(
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+        "HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+        "HKCU:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+    )
+    foreach ($k in $keys) {
+        if (Test-Path $k) {
+            $pv = (Get-ItemProperty -Path $k -ErrorAction SilentlyContinue).pv
+            if ($pv -and $pv -ne "0.0.0.0" -and $pv -ne "") { return $true }
+        }
+    }
+    $paths = @(
+        "${env:ProgramFiles(x86)}\Microsoft\EdgeWebView\Application",
+        "${env:ProgramFiles}\Microsoft\EdgeWebView\Application"
+    )
+    foreach ($p in $paths) {
+        if (Test-Path $p) {
+            $exe = Get-ChildItem -Path $p -Filter "msedgewebview2.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($exe) { return $true }
+        }
+    }
+    return $false
+}
+
+$hasWv2 = Test-WebView2Installed
+if (-not $hasWv2) {
+    Write-Host "[OGOHLANTIRISH] Microsoft WebView2 Runtime topilmadi!" -ForegroundColor Yellow
+    Write-Host "Evergreen Bootstrapper yuklab olinmoqda va o'rnatilmoqda..." -ForegroundColor Yellow
+    $setupUrl = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
+    $tempSetup = Join-Path $env:TEMP "MicrosoftEdgeWebview2Setup.exe"
+    try {
+        Invoke-WebRequest -Uri $setupUrl -OutFile $tempSetup -UseBasicParsing
+        $proc = Start-Process -FilePath $tempSetup -ArgumentList "/silent", "/install" -PassThru -Wait
+        Start-Sleep -Seconds 3
+    } catch {
+        Write-Host "Avtomatik yuklab olishda xatolik yuz berdi." -ForegroundColor Red
+    }
+
+    if (-not (Test-WebView2Installed)) {
+        Write-Host "XATOLIK: Microsoft WebView2 Runtime o'rnatilmadi." -ForegroundColor Red
+        Write-Host "Misa UI ishga tushishi uchun WebView2 kerak." -ForegroundColor Red
+        Write-Host "Iltimos, WebView2 Runtime'ni qo'lda o'rnating: https://go.microsoft.com/fwlink/p/?LinkId=2124703" -ForegroundColor Yellow
+        [System.Windows.Forms.MessageBox]::Show("Microsoft WebView2 Runtime o'rnatilmadi.`nMisa UI ishga tushishi uchun WebView2 kerak.", "Misa AI - Xatolik", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+        exit 1
+    }
+    Write-Host "Microsoft WebView2 Runtime muvaffaqiyatli o'rnatildi!" -ForegroundColor Green
+} else {
+    Write-Host "[1/3] Microsoft WebView2 Runtime mavjud." -ForegroundColor Green
+}
+
+# 2. Start Python backend on port 18420 if not already healthy
+Write-Host "[2/3] Backend xizmati tekshirilmoqda (127.0.0.1:18420)..." -ForegroundColor Cyan
+$isHealthy = $false
+try {
+    $resp = Invoke-RestMethod -Uri "http://127.0.0.1:18420/api/health" -TimeoutSec 2 -ErrorAction Stop
+    if ($resp.status -eq "ok" -or $resp.version) { $isHealthy = $true }
+} catch {
+    $isHealthy = $false
+}
+
+if (-not $isHealthy) {
+    # Check if a stale process is holding port 18420
+    $bConn = Get-NetTCPConnection -LocalPort 18420 -ErrorAction SilentlyContinue
+    if ($bConn) {
+        Write-Host "Nosoz/qotib qolgan jarayon port 18420 ni egallagan, tozalanmoqda..." -ForegroundColor Yellow
+        foreach ($c in $bConn) {
+            Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue
+        }
+        Start-Sleep -Milliseconds 500
+    }
+
+    Write-Host "Backend xizmati ishga tushirilmoqda..." -ForegroundColor Yellow
     $rootDir = (Resolve-Path "..").Path
     $parentDir = Split-Path $rootDir -Parent
     $pyCandidates = @(
@@ -26,47 +98,47 @@ if (-not $bConn) {
             break
         }
     }
-    Write-Host "[1/3] Python interpreter: $chosenPy" -ForegroundColor Cyan
+    Write-Host "Python interpreter: $chosenPy" -ForegroundColor Cyan
     Start-Process -FilePath $chosenPy -ArgumentList "core\api_server.py" -WorkingDirectory $rootDir -WindowStyle Hidden
-    Start-Sleep -Seconds 2
-    Write-Host "[1/3] Backend muvaffaqiyatli ishga tushirildi (Port 18420)." -ForegroundColor Green
+    
+    # Wait for backend health check
+    $retries = 15
+    while ($retries -gt 0 -and -not $isHealthy) {
+        Start-Sleep -Milliseconds 600
+        try {
+            $resp = Invoke-RestMethod -Uri "http://127.0.0.1:18420/api/health" -TimeoutSec 1 -ErrorAction Stop
+            if ($resp.status -eq "ok" -or $resp.version) { $isHealthy = $true }
+        } catch {}
+        $retries--
+    }
+    if ($isHealthy) {
+        Write-Host "[2/3] Backend muvaffaqiyatli ishga tushirildi va faol (Port 18420)." -ForegroundColor Green
+    } else {
+        Write-Host "[OGOHLANTIRISH] Backend hali javob bermadi, ammo davom etilmoqda." -ForegroundColor Yellow
+    }
 } else {
-    Write-Host "[1/3] Backend allaqachon faol (Port 18420)." -ForegroundColor Green
+    Write-Host "[2/3] Backend allaqachon faol (Port 18420)." -ForegroundColor Green
 }
 
-# 2. Start dev server in background if not already running
-$conn = Get-NetTCPConnection -LocalPort 1420 -ErrorAction SilentlyContinue
-if (-not $conn) {
-    Write-Host "[2/3] Frontend serveri ishga tushirilmoqda (Port 1420)..." -ForegroundColor Yellow
-    Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "npm run dev" -WindowStyle Hidden
-    Start-Sleep -Seconds 2
-} else {
-    Write-Host "[2/3] Frontend serveri allaqachon faol (Port 1420)." -ForegroundColor Green
-}
-
-# 3. Launch native desktop or web window
+# 3. Launch native desktop Tauri UI (No browser fallback)
 Write-Host "[3/3] Misa AI Desktop oynasi ochilmoqda..." -ForegroundColor Cyan
 
 $nativeExe = "..\release\v9.0.1\Misa-AI-v9.0.1.exe"
 if (-not (Test-Path $nativeExe)) {
     $nativeExe = "..\release\v9.0.0\Misa-AI-v9.0.0.exe"
 }
+if (-not (Test-Path $nativeExe)) {
+    $nativeExe = "src-tauri\target\release\misa-ai.exe"
+}
+
 if (Test-Path $nativeExe) {
     Start-Process $nativeExe
     Write-Host "Misa AI Native Desktop oynasi ochildi!" -ForegroundColor Green
     exit 0
 }
 
-$chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
-$edgePath = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+# If no built binary exists in dev mode, launch via Tauri dev runner
+Write-Host "Mahalliy ishlab chiquvchi (development) rejimida Tauri ishga tushirilmoqda..." -ForegroundColor Yellow
+Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "node scripts/tauri.js dev" -NoNewWindow
 
-if (Test-Path $chromePath) {
-    Start-Process -FilePath $chromePath -ArgumentList "--app=http://localhost:1420", "--window-size=1280,800"
-} elseif (Test-Path $edgePath) {
-    Start-Process -FilePath $edgePath -ArgumentList "--app=http://localhost:1420", "--window-size=1280,800"
-} else {
-    Start-Process "http://localhost:1420"
-}
-
-Write-Host "Misa AI 9.0 Desktop oynasi ochildi!" -ForegroundColor Green
 

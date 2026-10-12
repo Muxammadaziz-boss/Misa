@@ -217,10 +217,31 @@ fn find_dev_python_executable(base_dir: &PathBuf) -> Option<PathBuf> {
     None
 }
 
+fn is_port_listening(port: u16) -> bool {
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+    TcpStream::connect_timeout(&addr, Duration::from_millis(300)).is_ok()
+}
+
+#[cfg(target_os = "windows")]
+fn cleanup_port_process(port: u16) {
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    let cmd_str = format!(
+        "$p = (Get-NetTCPConnection -LocalPort {} -State Listen -ErrorAction SilentlyContinue).OwningProcess; if ($p) {{ Stop-Process -Id $p -Force -ErrorAction SilentlyContinue }}",
+        port
+    );
+    let _ = Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", &cmd_str])
+        .creation_flags(CREATE_NO_WINDOW)
+        .status();
+}
+
+#[cfg(not(target_os = "windows"))]
+fn cleanup_port_process(_port: u16) {}
+
 pub fn ensure_backend_running(state: &SupervisorState) {
     println!("[MISA] Desktop ishga tushmoqda: backend holati tekshirilmoqda...");
 
-    // 1. Agar 127.0.0.1:18420 da backend allaqachon ishlab turgan bo'lsa
+    // 1. Agar 127.0.0.1:18420 da backend allaqachon ishlab turgan bo'lsa va sog'lom bo'lsa
     if check_http_health("127.0.0.1:18420", "/api/health") {
         println!("[MISA] Mavjud backend aniqlandi va faol (127.0.0.1:18420) — yangi jarayon ochilmaydi");
         if let Ok(mut m) = state.is_managed.lock() {
@@ -236,6 +257,13 @@ pub fn ensure_backend_running(state: &SupervisorState) {
             return;
         }
         *spawning = true;
+    }
+
+    // 3. Agar 18420-port band bo'lsa, lekin /api/health javob bermasa (Stale/zombie jarayon)
+    if is_port_listening(18420) {
+        println!("[MISA] 18420-port band, lekin /api/health javob bermayapti (Stale process). Tozalanmoqda...");
+        cleanup_port_process(18420);
+        std::thread::sleep(Duration::from_millis(400));
     }
 
     #[cfg(target_os = "windows")]
@@ -507,14 +535,209 @@ fn backend_restart(state: tauri::State<SupervisorState>) -> Result<bool, String>
     Ok(true)
 }
 
+pub struct BackendGuard {
+    pub state: SupervisorState,
+}
+
+impl Drop for BackendGuard {
+    fn drop(&mut self) {
+        stop_backend(&self.state);
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub fn check_webview2_installed() -> bool {
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    let reg_paths = [
+        r"HKLM\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+        r"HKLM\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+        r"HKCU\Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+    ];
+
+    for path in reg_paths {
+        if let Ok(output) = Command::new("reg")
+            .args(["query", path, "/v", "pv"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+        {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for line in stdout.lines() {
+                    if line.contains("pv") && !line.contains("0.0.0.0") {
+                        let parts: Vec<&str> = line.split_whitespace().collect();
+                        if let Some(ver) = parts.last() {
+                            if *ver != "0.0.0.0" && ver.contains('.') {
+                                println!("[MISA] WebView2 Runtime aniqlandi (Registry): {} ({})", ver, path);
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Physical directory check for msedgewebview2.exe (x86 and 64-bit)
+    if let Ok(prog_files_x86) = std::env::var("ProgramFiles(x86)") {
+        let wv_dir = PathBuf::from(prog_files_x86).join("Microsoft").join("EdgeWebView").join("Application");
+        if wv_dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(wv_dir) {
+                for entry in entries.flatten() {
+                    if entry.path().join("msedgewebview2.exe").exists() {
+                        println!("[MISA] WebView2 Application binarisi aniqlandi: {:?}", entry.path());
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    if let Ok(prog_files) = std::env::var("ProgramFiles") {
+        let wv_dir = PathBuf::from(prog_files).join("Microsoft").join("EdgeWebView").join("Application");
+        if wv_dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(wv_dir) {
+                for entry in entries.flatten() {
+                    if entry.path().join("msedgewebview2.exe").exists() {
+                        println!("[MISA] WebView2 Application binarisi aniqlandi: {:?}", entry.path());
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    false
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn check_webview2_installed() -> bool {
+    true
+}
+
+#[cfg(target_os = "windows")]
+pub fn try_install_webview2() -> bool {
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    println!("[MISA] WebView2 Runtime tekshiruvi: Evergreen Bootstrapper orqali o'rnatish tekshirilmoqda...");
+
+    let mut setup_cands: Vec<PathBuf> = Vec::new();
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(parent) = exe_path.parent() {
+            setup_cands.push(parent.join("MicrosoftEdgeWebview2Setup.exe"));
+            setup_cands.push(parent.join("resources").join("MicrosoftEdgeWebview2Setup.exe"));
+        }
+    }
+    let temp_setup = std::env::temp_dir().join("MicrosoftEdgeWebview2Setup.exe");
+    setup_cands.push(temp_setup.clone());
+
+    let mut found_setup: Option<PathBuf> = None;
+    for cand in setup_cands {
+        if cand.exists() {
+            found_setup = Some(cand);
+            break;
+        }
+    }
+
+    if found_setup.is_none() {
+        println!("[MISA] MicrosoftEdgeWebview2Setup.exe yuklab olinmoqda...");
+        let dl_cmd = format!(
+            "Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile '{}' -UseBasicParsing",
+            temp_setup.display()
+        );
+        let dl_res = Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &dl_cmd])
+            .creation_flags(CREATE_NO_WINDOW)
+            .status();
+
+        if dl_res.map(|s| s.success()).unwrap_or(false) && temp_setup.exists() {
+            found_setup = Some(temp_setup);
+        }
+    }
+
+    if let Some(setup_path) = found_setup {
+        println!("[MISA] WebView2 bootstrapper ishga tushirilmoqda: {:?}", setup_path);
+        let _ = Command::new(&setup_path)
+            .args(["/silent", "/install"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .status();
+    }
+
+    check_webview2_installed()
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn try_install_webview2() -> bool {
+    true
+}
+
+#[cfg(target_os = "windows")]
+pub fn show_native_message_box(title: &str, message: &str, is_error: bool) {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+
+    let wide_title: Vec<u16> = OsStr::new(title).encode_wide().chain(std::iter::once(0)).collect();
+    let wide_msg: Vec<u16> = OsStr::new(message).encode_wide().chain(std::iter::once(0)).collect();
+
+    extern "system" {
+        fn MessageBoxW(hwnd: isize, text: *const u16, caption: *const u16, u_type: u32) -> i32;
+    }
+
+    const MB_OK: u32 = 0x00000000;
+    const MB_ICONERROR: u32 = 0x00000010;
+    const MB_ICONINFORMATION: u32 = 0x00000040;
+    const MB_TOPMOST: u32 = 0x00040000;
+
+    let flags = MB_OK | MB_TOPMOST | if is_error { MB_ICONERROR } else { MB_ICONINFORMATION };
+    unsafe {
+        MessageBoxW(0, wide_msg.as_ptr(), wide_title.as_ptr(), flags);
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn show_native_message_box(_title: &str, _message: &str, _is_error: bool) {}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let supervisor_state = SupervisorState::default();
+
+    // 1. Backend Guard o'rnatish: Jarayon har qanday holatda yopilganda backendni to'xtatadi
+    let _guard = BackendGuard {
+        state: supervisor_state.clone(),
+    };
+
+    // 2. Panic hook: Kutilmagan qulashlarda backend bolalar jarayonini o'ldirish
+    let state_for_panic = supervisor_state.clone();
+    let old_panic_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        eprintln!("[MISA FATAL] Kutilmagan qulash (Panic): {:?}", info);
+        stop_backend(&state_for_panic);
+        old_panic_hook(info);
+    }));
+
+    // 3. Windows WebView2 Runtime tekshiruvi (UI boshlanishidan oldin)
+    #[cfg(target_os = "windows")]
+    {
+        if !check_webview2_installed() {
+            println!("[MISA] DIQQAT: Microsoft WebView2 Runtime topilmadi! O'rnatishga urinilmoqda...");
+            let installed = try_install_webview2();
+            if !installed {
+                eprintln!("[MISA] Xatolik: WebView2 Runtime o'rnatilmadi!");
+                stop_backend(&supervisor_state);
+                show_native_message_box(
+                    "Misa AI v9.0.1 — WebView2 Runtime Xatoligi",
+                    "Microsoft WebView2 Runtime o'rnatilmadi.\n\nMisa Desktop UI ishga tushishi uchun Microsoft Edge WebView2 Runtime talab qilinadi.\n\nIltimos, uni rasmiy Microsoft saytidan yuklab oling yoki Misa Setup orqali qayta o'rnating:\nhttps://developer.microsoft.com/microsoft-edge/webview2/\n\nMisa xavfsiz to'xtatildi.",
+                    true,
+                );
+                return;
+            }
+        }
+    }
+
+    // 4. Tauri App Builder
     let state_for_setup = supervisor_state.clone();
     let state_for_window = supervisor_state.clone();
     let state_for_exit = supervisor_state.clone();
+    let state_for_build_err = supervisor_state.clone();
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .manage(supervisor_state)
         .setup(move |app| {
             use tauri::Manager;
@@ -527,7 +750,7 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(move |_window, event| {
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
+            if let tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed = event {
                 stop_backend(&state_for_window);
             }
         })
@@ -541,12 +764,29 @@ pub fn run() {
             app_start_resize,
             backend_get_status,
             backend_restart
-        ])
-        .build(tauri::generate_context!())
-        .expect("error while building tauri application")
-        .run(move |_app_handle, event| {
-            if let tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit = event {
+        ]);
+
+    let app = match builder.build(tauri::generate_context!()) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("[MISA FATAL] Tauri oynasini yaratishda xatolik: {}", e);
+            stop_backend(&state_for_build_err);
+            #[cfg(target_os = "windows")]
+            show_native_message_box(
+                "Misa AI — Oynani ochishda xatolik",
+                &format!("Misa Desktop ilovasi oynasini ochib bo'lmadi:\n{}\n\nBackend jarayoni to'xtatildi.", e),
+                true,
+            );
+            return;
+        }
+    };
+
+    app.run(move |_app_handle, event| {
+        match event {
+            tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
                 stop_backend(&state_for_exit);
             }
-        });
+            _ => {}
+        }
+    });
 }

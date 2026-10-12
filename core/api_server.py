@@ -7005,6 +7005,43 @@ def run_server(host=None, port=None):
         f"MISA AI 9.0.0 Background API Server boshlanmoqda: "
         f"http://{resolved_host}:{resolved_port}"
     )
+
+    # Single-instance tekshiruvi: agar ushbu portda allaqachon sog'lom Misa server ishlab turgan bo'lsa
+    try:
+        import urllib.request
+        req = urllib.request.Request(
+            f"http://{resolved_host}:{resolved_port}/api/health",
+            headers={"User-Agent": "MisaSingleInstanceCheck/9.0.1"}
+        )
+        with urllib.request.urlopen(req, timeout=0.8) as resp:
+            if resp.status == 200:
+                logger.info(
+                    f"[SERVER] Misa API Server allaqachon http://{resolved_host}:{resolved_port} da "
+                    f"faol ishlab turibdi (Healthy). Takroriy jarayon ochilmaydi."
+                )
+                return
+    except Exception:
+        pass
+
+    # PID faylini qayd etish
+    try:
+        pid_dir = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "MisaAI")
+        os.makedirs(pid_dir, exist_ok=True)
+        pid_file = os.path.join(pid_dir, "misa_backend.pid")
+        with open(pid_file, "w", encoding="utf-8") as pf:
+            pf.write(str(os.getpid()))
+
+        import atexit
+        def _cleanup_pid():
+            try:
+                if os.path.exists(pid_file):
+                    os.remove(pid_file)
+            except Exception:
+                pass
+        atexit.register(_cleanup_pid)
+    except Exception:
+        pass
+
     get_modules()
     app = create_app()
 

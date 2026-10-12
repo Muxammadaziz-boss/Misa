@@ -7,12 +7,53 @@ echo.
 
 cd /d "%~dp0"
 
-echo [1/3] Backend xizmati tekshirilmoqda (127.0.0.1:18420)...
-powershell -NoProfile -Command "$conn = Test-NetConnection -ComputerName 127.0.0.1 -Port 18420 -WarningAction SilentlyContinue -InformationLevel Quiet; if (-not $conn) { Write-Host 'Backend ishga tushirilmoqda...' -ForegroundColor Yellow; $root = (Resolve-Path '..').Path; $parentRoot = (Split-Path $root -Parent); $pyCandidates = @((Join-Path $parentRoot '.venv\Scripts\python.exe'), (Join-Path $root '.venv\Scripts\python.exe'), (Join-Path $root 'python\python.exe'), (Join-Path $root 'runtime\python.exe'), 'python'); $chosenPy = 'python'; foreach ($py in $pyCandidates) { if ($py -ne 'python' -and (Test-Path $py)) { $chosenPy = $py; break; } } Write-Host \"Python tanlandi: $chosenPy\" -ForegroundColor Cyan; Start-Process -FilePath $chosenPy -ArgumentList 'core\api_server.py' -WorkingDirectory $root -WindowStyle Hidden; Start-Sleep -Seconds 2; Write-Host 'Backend muvaffaqiyatli ishga tushirildi (Port 18420).' -ForegroundColor Green; } else { Write-Host 'Backend allaqachon faol (Port 18420).' -ForegroundColor Green; }"
+echo [1/3] Microsoft WebView2 Runtime tekshirilmoqda...
+powershell -NoProfile -Command ^
+  "$keys = @('HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'HKCU:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'); " ^
+  "$found = $false; " ^
+  "foreach ($k in $keys) { if (Test-Path $k) { $pv = (Get-ItemProperty -Path $k -ErrorAction SilentlyContinue).pv; if ($pv -and $pv -ne '0.0.0.0' -and $pv -ne '') { $found = $true; break; } } } " ^
+  "if (-not $found) { " ^
+  "  $paths = @(\"${env:ProgramFiles(x86)}\Microsoft\EdgeWebView\Application\", \"${env:ProgramFiles}\Microsoft\EdgeWebView\Application\"); " ^
+  "  foreach ($p in $paths) { if (Test-Path $p) { $exe = Get-ChildItem -Path $p -Filter 'msedgewebview2.exe' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1; if ($exe) { $found = $true; break; } } } " ^
+  "} " ^
+  "if (-not $found) { exit 1; } else { exit 0; }"
+
+if %ERRORLEVEL% NEQ 0 (
+    echo [OGOHLANTIRISH] Microsoft WebView2 Runtime topilmadi!
+    echo Evergreen Bootstrapper yuklab olinmoqda va o'rnatilmoqda...
+    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile '$env:TEMP\MicrosoftEdgeWebview2Setup.exe' -UseBasicParsing; Start-Process -FilePath \"$env:TEMP\MicrosoftEdgeWebview2Setup.exe\" -ArgumentList '/silent', '/install' -Wait"
+    rem Check again
+    powershell -NoProfile -Command ^
+      "$keys = @('HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'HKCU:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'); " ^
+      "$found = $false; foreach ($k in $keys) { if (Test-Path $k) { $pv = (Get-ItemProperty -Path $k -ErrorAction SilentlyContinue).pv; if ($pv -and $pv -ne '0.0.0.0') { $found = $true; break; } } } " ^
+      "if (-not $found) { exit 1; } else { exit 0; }"
+    if %ERRORLEVEL% NEQ 0 (
+        echo.
+        echo XATOLIK: Microsoft WebView2 Runtime o'rnatilmadi.
+        echo Misa UI ishga tushishi uchun WebView2 kerak.
+        echo Iltimos, WebView2 Runtime'ni qo'lda o'rnating: https://go.microsoft.com/fwlink/p/?LinkId=2124703
+        pause
+        exit /b 1
+    )
+)
+echo [1/3] Microsoft WebView2 Runtime mavjud.
 
 echo.
-echo [2/3] Frontend serveri tekshirilmoqda (Port 1420)...
-powershell -NoProfile -Command "$conn = Test-NetConnection -ComputerName 127.0.0.1 -Port 1420 -WarningAction SilentlyContinue -InformationLevel Quiet; if (-not $conn) { Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', 'npm run dev' -WindowStyle Hidden; Start-Sleep -Seconds 2; }"
+echo [2/3] Backend xizmati tekshirilmoqda (127.0.0.1:18420)...
+powershell -NoProfile -Command ^
+  "$isHealthy = $false; " ^
+  "try { $resp = Invoke-RestMethod -Uri 'http://127.0.0.1:18420/api/health' -TimeoutSec 2 -ErrorAction Stop; if ($resp.status -eq 'ok' -or $resp.version) { $isHealthy = $true; } } catch {}; " ^
+  "if (-not $isHealthy) { " ^
+  "  $bConn = Get-NetTCPConnection -LocalPort 18420 -ErrorAction SilentlyContinue; " ^
+  "  if ($bConn) { foreach ($c in $bConn) { Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue; } Start-Sleep -Milliseconds 500; } " ^
+  "  Write-Host 'Backend ishga tushirilmoqda...' -ForegroundColor Yellow; " ^
+  "  $root = (Resolve-Path '..').Path; $parentRoot = (Split-Path $root -Parent); " ^
+  "  $pyCandidates = @((Join-Path $parentRoot '.venv\Scripts\python.exe'), (Join-Path $root '.venv\Scripts\python.exe'), (Join-Path $root 'python\python.exe'), (Join-Path $root 'runtime\python.exe'), 'python'); " ^
+  "  $chosenPy = 'python'; foreach ($py in $pyCandidates) { if ($py -ne 'python' -and (Test-Path $py)) { $chosenPy = $py; break; } }; " ^
+  "  Start-Process -FilePath $chosenPy -ArgumentList 'core\api_server.py' -WorkingDirectory $root -WindowStyle Hidden; " ^
+  "  Start-Sleep -Seconds 2; " ^
+  "  Write-Host 'Backend muvaffaqiyatli ishga tushirildi (Port 18420).' -ForegroundColor Green; " ^
+  "} else { Write-Host 'Backend allaqachon faol (Port 18420).' -ForegroundColor Green; }"
 
 echo.
 echo [3/3] Misa AI 9.0 Desktop oynasi ochilmoqda...
@@ -21,24 +62,16 @@ set NATIVE_EXE="..\release\v9.0.1\Misa-AI-v9.0.1.exe"
 if not exist %NATIVE_EXE% (
     set NATIVE_EXE="..\release\v9.0.0\Misa-AI-v9.0.0.exe"
 )
+if not exist %NATIVE_EXE% (
+    set NATIVE_EXE="src-tauri\target\release\misa-ai.exe"
+)
 if exist %NATIVE_EXE% (
     start "" %NATIVE_EXE%
     echo Misa AI Native Desktop oynasi ochildi!
     exit /b 0
 )
 
-set CHROME="C:\Program Files\Google\Chrome\Application\chrome.exe"
-set EDGE="C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+echo Mahalliy ishlab chiquvchi rejimida Tauri ishga tushirilmoqda...
+node scripts\tauri.js dev
 
-if exist %CHROME% (
-    start "" %CHROME% --app="http://localhost:1420" --window-size=1280,800 --app-id=misa-ai-9
-) else if exist %EDGE% (
-    start "" %EDGE% --app="http://localhost:1420" --window-size=1280,800
-) else (
-    start http://localhost:1420
-)
-
-echo.
-echo Misa AI 9.0 Desktop oynasi muvaffaqiyatli ochildi!
-echo.
 
