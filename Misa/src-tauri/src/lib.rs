@@ -12,6 +12,9 @@ use std::time::Duration;
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
+pub mod preflight;
+pub use preflight::{run_native_preflight, check_webview2_installed_version, find_or_fetch_bootstrapper};
+
 #[derive(Clone, Default)]
 pub struct SupervisorState {
     pub backend_child: Arc<Mutex<Option<Child>>>,
@@ -942,35 +945,20 @@ pub fn run() {
         old_panic_hook(info);
     }));
 
-    // 4. Windows WebView2 Runtime tekshiruvi (UI va Backend boshlanishidan oldin)
+    // 4. Windows Native Misa Preflight: WebView2 tekshiruvi va avtomatik o'rnatish
     #[cfg(target_os = "windows")]
     {
-        println!("[WEBVIEW2] Microsoft Edge WebView2 Runtime mavjudligi tekshirilmoqda...");
-        if !check_webview2_installed() {
-            println!("[WEBVIEW2] Runtime topilmadi! O'rnatish haqida xabar ko'rsatilmoqda...");
-            show_native_message_box(
-                "Misa AI — WebView2 Runtime",
-                "Misa AI uchun Microsoft WebView2 Runtime kerak.\nO'rnatilmoqda...",
-                false,
-            );
-            let installed = try_install_webview2();
-            if !installed {
-                eprintln!("[ERROR] Microsoft WebView2 Runtime o'rnatilmadi.");
-                eprintln!("[INFO] UI startup aborted.");
-                eprintln!("[INFO] Backend process was NOT started.");
-                eprintln!("[INFO] Automatic restart disabled because dependency is missing.");
-                stop_backend(&supervisor_state);
-                show_native_message_box(
-                    "Misa AI v9.0.1 — WebView2 Runtime Xatoligi",
-                    "Microsoft WebView2 Runtime o'rnatilmadi.\n\nInternet ulanishini tekshiring yoki Windows uchun WebView2 Runtime'ni o'rnating:\nhttps://developer.microsoft.com/microsoft-edge/webview2/\n\nMisa xavfsiz to'xtatildi.",
-                    true,
-                );
-                return;
-            }
-            println!("[WEBVIEW2] Misa AI ishga tushirilmoqda... ✓");
-        } else {
-            println!("[WEBVIEW2] Runtime tekshiruvi muvaffaqiyatli: WebView2 mavjud ✓");
+        println!("[PREFLIGHT] Misa Native Preflight tekshiruvi boshlanmoqda...");
+        let preflight_ok = preflight::run_native_preflight();
+        if !preflight_ok {
+            eprintln!("[ERROR] Microsoft WebView2 Runtime o'rnatilmadi.");
+            eprintln!("[INFO] UI startup aborted.");
+            eprintln!("[INFO] Backend process was NOT started.");
+            eprintln!("[INFO] Automatic restart disabled because dependency is missing.");
+            stop_backend(&supervisor_state);
+            return;
         }
+        println!("[PREFLIGHT] WebView2 Runtime muvaffaqiyatli tasdiqlandi ✓");
     }
 
     // 5. Tauri App Builder
