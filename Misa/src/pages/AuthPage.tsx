@@ -22,6 +22,7 @@ import {
 } from "../components/icons/Icons";
 import { MisaLogo } from "../components/MisaLogo";
 import { WindowControls } from "../components/WindowControls";
+import { ServerDiagnosticModal } from "../components/ServerDiagnosticModal";
 
 interface AuthPageProps {
   onAuthSuccess: (user: MikasaAuthUser) => void;
@@ -49,6 +50,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
   const [oauthState, setOauthState] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [diagModalOpen, setDiagModalOpen] = useState(false);
 
   // Clear messages on tab change
   const handleTabChange = (tab: AuthTab) => {
@@ -633,7 +635,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
           <div
             style={{
               display: "flex",
-              alignItems: "center",
+              flexDirection: "column",
               gap: "10px",
               padding: "12px 14px",
               borderRadius: "10px",
@@ -645,8 +647,36 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               lineHeight: 1.4,
             }}
           >
-            <AlertTriangleIcon size={18} color="#EF4444" />
-            <span style={{ flex: 1 }}>{errorMsg}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <AlertTriangleIcon size={18} color="#EF4444" />
+              <span style={{ flex: 1 }}>{errorMsg}</span>
+            </div>
+            {(errorMsg.toLowerCase().includes("server") ||
+              errorMsg.toLowerCase().includes("ulanib") ||
+              errorMsg.toLowerCase().includes("tarmoq") ||
+              errorMsg.toLowerCase().includes("aloqa")) && (
+              <button
+                type="button"
+                onClick={() => setDiagModalOpen(true)}
+                style={{
+                  alignSelf: "flex-start",
+                  background: "rgba(192, 76, 253, 0.22)",
+                  border: "1px solid rgba(192, 76, 253, 0.5)",
+                  borderRadius: "8px",
+                  padding: "5px 12px",
+                  color: "#FFFFFF",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                <span>🔍 Server Diagnostikasi & Sozlamalar</span>
+              </button>
+            )}
           </div>
         )}
 
@@ -1674,9 +1704,35 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
             <ShieldIcon size={14} color="#4EDEA3" />
             <span style={{ color: "#4EDEA3", fontWeight: 500 }}>Secured by Supabase Auth</span>
           </div>
-          <span style={{ color: "#94A3B8" }}>Ultra Glass Edition</span>
+          <button
+            type="button"
+            onClick={() => setDiagModalOpen(true)}
+            title="Server ulanish holatini tekshirish"
+            style={{
+              background: "none",
+              border: "none",
+              color: "#A78BFA",
+              cursor: "pointer",
+              fontSize: "11.5px",
+              padding: "2px 6px",
+              borderRadius: "4px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+            }}
+          >
+            <span>🌐 Server sozlamalari</span>
+          </button>
         </div>
       </div>
+
+      <ServerDiagnosticModal
+        isOpen={diagModalOpen}
+        onClose={() => setDiagModalOpen(false)}
+        onServerChanged={() => {
+          setErrorMsg(null);
+        }}
+      />
     </div>
   );
 };

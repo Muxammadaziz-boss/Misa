@@ -488,7 +488,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   const loadMicrophoneDevices = async (refresh: boolean = false) => {
     try {
       if (!backendService.isHealthy()) {
-        setMicStatusText("Backend ishga tushmoqda... (127.0.0.1:18420)");
+        setMicStatusText("Serverga ulanmoqda...");
         await backendService.waitForBackendReady(3000);
       }
       const res = await backendService.getAudioInputDevices(refresh);
@@ -514,7 +514,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     setMicRefreshing(true);
     try {
       if (!backendService.isHealthy()) {
-        setMicStatusText("Backend ishga tushmoqda... (127.0.0.1:18420)");
+        setMicStatusText("Serverga ulanmoqda...");
         await backendService.waitForBackendReady(3000);
       }
       const res = await backendService.refreshAudioInputDevices();

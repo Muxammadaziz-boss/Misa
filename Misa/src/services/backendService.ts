@@ -627,8 +627,9 @@ export interface RemoteAuditItem {
 
 export type AuditItem = RemoteAuditItem;
 
-export const DEFAULT_API_URL = "http://127.0.0.1:18420";
+export const LOCAL_BACKEND_URL = "http://127.0.0.1:18420";
 export const PRODUCTION_API_URL = "https://misa.up.railway.app";
+export const DEFAULT_API_URL = PRODUCTION_API_URL;
 
 const FORBIDDEN_FRONTEND_PORTS = new Set(["140", "1420", "1421", "5173"]);
 const OAUTH_STATE_REGEX = /^[A-Za-z0-9_\-.:]{1,256}$/;
@@ -702,31 +703,59 @@ export function resolveApiBase(win?: any, envOverride?: Record<string, any>): st
 
   if (w) {
     let customUrl = "";
+    let serverMode = "";
     try {
       customUrl = String(w.localStorage?.getItem("misa_backend_url") || "").trim();
+      serverMode = String(w.localStorage?.getItem("misa_server_mode") || "").trim().toLowerCase();
     } catch {}
 
+    // 1. Foydalanuvchi belgilagan maxsus backend URL
+    if (customUrl && !isInvalidFrontendPortUrl(customUrl)) {
+      return customUrl.replace(/\/$/, "");
+    }
+
+    // 2. Foydalanuvchi tanlagan rejim
+    if (serverMode === "local") {
+      return LOCAL_BACKEND_URL;
+    }
+    if (serverMode === "cloud" || serverMode === "remote") {
+      return PRODUCTION_API_URL;
+    }
+
     const isProdWeb = isProductionWebRuntime(w);
+    const isLocalDev = isLocalDevRuntime(w);
 
     if (isProdWeb) {
-      if (customUrl && !isLocalhostUrl(customUrl) && !isInvalidFrontendPortUrl(customUrl)) {
-        return customUrl.replace(/\/$/, "");
-      }
       if (envUrl && !isLocalhostUrl(envUrl) && !isInvalidFrontendPortUrl(envUrl)) {
         return envUrl.replace(/\/$/, "");
       }
       return PRODUCTION_API_URL;
     }
 
-    if (customUrl && !isInvalidFrontendPortUrl(customUrl)) {
-      return customUrl.replace(/\/$/, "");
+    if (isLocalDev) {
+      // Local development running in browser with Vite dev server
+      if (envUrl && !isInvalidFrontendPortUrl(envUrl)) {
+        return envUrl.replace(/\/$/, "");
+      }
+      return LOCAL_BACKEND_URL;
     }
+
+    // 3. Desktop (Tauri) Production Runtime:
+    // Agar envUrl aniq belgilangan va localhost bo'lmasa, uni ishlatamiz
+    if (envUrl && !isLocalhostUrl(envUrl) && !isInvalidFrontendPortUrl(envUrl)) {
+      return envUrl.replace(/\/$/, "");
+    }
+
+    // IMPORTANT: Toza Windows kompyuterida (Clean PC) desktop ilova
+    // localhost:18420 ga ulanishni majburlamasligi shart.
+    // Ishlab chiqarish bulutli serveri (https://misa.up.railway.app) standart manzil hisoblanadi:
+    return PRODUCTION_API_URL;
   }
 
-  if (envUrl && !isInvalidFrontendPortUrl(envUrl)) {
+  if (envUrl && !isLocalhostUrl(envUrl) && !isInvalidFrontendPortUrl(envUrl)) {
     return envUrl.replace(/\/$/, "");
   }
-  return DEFAULT_API_URL;
+  return PRODUCTION_API_URL;
 }
 
 export function resolveOAuthCallbackBase(options?: {
@@ -777,13 +806,29 @@ export function resolveOAuthRedirectUrl(
   return `${base}/api/auth/callback?state=${encodeURIComponent(cleanState)}`;
 }
 
-const API_BASE = resolveApiBase();
-const WS_BASE = (import.meta.env.VITE_WS_URL || API_BASE.replace(/^http/, "ws")) + "/api/ws";
+export let API_BASE = resolveApiBase();
+export let WS_BASE = (import.meta.env.VITE_WS_URL || API_BASE.replace(/^http/, "ws")) + "/api/ws";
+
+export function refreshApiBaseUrls(): string {
+  API_BASE = resolveApiBase();
+  WS_BASE = (import.meta.env.VITE_WS_URL || API_BASE.replace(/^http/, "ws")) + "/api/ws";
+  return API_BASE;
+}
 
 export function normalizeApiError(error: any, fallbackMessage: string = "Xatolik yuz berdi"): string {
   if (!error) return fallbackMessage;
   const msg = String(error?.message || error || "").trim();
   const lower = msg.toLowerCase();
+
+  // Dinamik server nomi
+  const currentUrl = resolveApiBase();
+  const hostDisplay = (() => {
+    try {
+      return new URL(currentUrl).host;
+    } catch {
+      return currentUrl;
+    }
+  })();
 
   // HTTP status codes
   if (lower.includes("401") || lower.includes("unauthorized") || lower.includes("avtorizatsiya")) {
@@ -801,7 +846,7 @@ export function normalizeApiError(error: any, fallbackMessage: string = "Xatolik
 
   // Network & connection diagnostics
   if (lower.includes("connection refused") || lower.includes("econnrefused")) {
-    return "Backend ishga tushmoqda yoki ulanib bo'lmadi (127.0.0.1:18420 Connection Refused).";
+    return `Serverga ulanib bo'lmadi (${hostDisplay} aloqani rad etdi - Port yopiq yoki server o'chiq).`;
   }
   if (
     lower.includes("failed to fetch") ||
@@ -809,7 +854,7 @@ export function normalizeApiError(error: any, fallbackMessage: string = "Xatolik
     lower.includes("load failed") ||
     lower.includes("network request failed")
   ) {
-    return "Backend ishga tushmoqda... (127.0.0.1:18420 portida xizmat yuklanmoqda)";
+    return `Serverga ulanib bo'lmadi (${hostDisplay} bilan aloqa yo'q yoki internet uzilgan).`;
   }
   if (lower.includes("timeout") || lower.includes("aborted") || lower.includes("aborterror")) {
     return "So'rov vaqti tugadi (Timeout). Server juda sekin javob berdi.";
@@ -854,6 +899,48 @@ class BackendService {
 
   public isHealthy(): boolean {
     return this.isBackendHealthy;
+  }
+
+  public getApiBase(): string {
+    return resolveApiBase();
+  }
+
+  public getWsBase(): string {
+    return (import.meta.env.VITE_WS_URL || this.getApiBase().replace(/^http/, "ws")) + "/api/ws";
+  }
+
+  public setServerConfiguration(mode: "cloud" | "local" | "custom", customUrl?: string): string {
+    if (typeof window !== "undefined" && window.localStorage) {
+      if (mode === "cloud") {
+        window.localStorage.setItem("misa_server_mode", "cloud");
+        window.localStorage.removeItem("misa_backend_url");
+      } else if (mode === "local") {
+        window.localStorage.setItem("misa_server_mode", "local");
+        window.localStorage.removeItem("misa_backend_url");
+      } else if (mode === "custom" && customUrl) {
+        window.localStorage.setItem("misa_server_mode", "custom");
+        window.localStorage.setItem("misa_backend_url", customUrl.trim().replace(/\/$/, ""));
+      }
+    }
+    refreshApiBaseUrls();
+    this.reconnect();
+    return resolveApiBase();
+  }
+
+  public reconnect(): void {
+    if (this.wsReconnectTimer) {
+      clearTimeout(this.wsReconnectTimer);
+      this.wsReconnectTimer = null;
+    }
+    if (this.ws) {
+      try {
+        this.ws.close();
+      } catch {}
+      this.ws = null;
+    }
+    this.isConnectingWs = false;
+    this.connectWs();
+    this.checkStatus().catch(() => {});
   }
 
   public async waitForBackendReady(maxWaitMs: number = 6000): Promise<boolean> {
@@ -1409,7 +1496,7 @@ class BackendService {
         devices: [],
         selected_device_id: "default",
         selected_device_name: "Default",
-        error: normalizeApiError(e, "Backend ishga tushmoqda... (127.0.0.1:18420)"),
+        error: normalizeApiError(e, "Audio qurilmalar xizmatiga ulanib bo'lmadi"),
       };
     }
   }

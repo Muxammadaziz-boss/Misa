@@ -2,8 +2,9 @@
 // Misa AI v9.0.0 — Desktop Auto-Update Client Service
 // Interacts with backend update routes: /api/updates/*
 
-const DEFAULT_API_URL = "http://127.0.0.1:18420";
-const API_BASE = (import.meta.env.VITE_API_URL || DEFAULT_API_URL).replace(/\/$/, "");
+import { resolveApiBase } from "./backendService";
+
+const getApiBase = () => resolveApiBase();
 
 export type UpdateState =
   | "IDLE"
@@ -70,7 +71,7 @@ export class UpdateService {
       if (force) params.append("force", "true");
       if (channel) params.append("channel", channel);
 
-      const res = await fetch(`${API_BASE}/api/updates/check?${params.toString()}`, {
+      const res = await fetch(`${getApiBase()}/api/updates/check?${params.toString()}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
       });
@@ -93,7 +94,7 @@ export class UpdateService {
 
   public static async getStatus(): Promise<UpdateStatusResponse | null> {
     try {
-      const res = await fetch(`${API_BASE}/api/updates/status`, {
+      const res = await fetch(`${getApiBase()}/api/updates/status`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
       });
@@ -107,7 +108,7 @@ export class UpdateService {
   public static async startDownload(artifact?: UpdateArtifact): Promise<{ ok: boolean; error?: string }> {
     try {
       const body = artifact ? { artifact } : {};
-      const res = await fetch(`${API_BASE}/api/updates/download`, {
+      const res = await fetch(`${getApiBase()}/api/updates/download`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -120,7 +121,7 @@ export class UpdateService {
 
   public static async applyUpdate(): Promise<{ ok: boolean; message?: string; error?: string }> {
     try {
-      const res = await fetch(`${API_BASE}/api/updates/apply`, {
+      const res = await fetch(`${getApiBase()}/api/updates/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
@@ -132,7 +133,7 @@ export class UpdateService {
 
   public static async rollback(): Promise<{ ok: boolean; message?: string; error?: string }> {
     try {
-      const res = await fetch(`${API_BASE}/api/updates/rollback`, {
+      const res = await fetch(`${getApiBase()}/api/updates/rollback`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });

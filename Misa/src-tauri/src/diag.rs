@@ -173,3 +173,35 @@ pub fn install_crash_handlers() {
         default_hook(info);
     }));
 }
+
+/// URL dagi maxfiy kalitlar (token, key, password) ni yashirish
+pub fn mask_sensitive_url(url: &str) -> String {
+    let mut sanitized = url.to_string();
+    for param in &["token=", "key=", "apikey=", "password=", "secret=", "auth="] {
+        if let Some(pos) = sanitized.to_lowercase().find(param) {
+            let val_start = pos + param.len();
+            let val_end = sanitized[val_start..].find('&').map(|p| val_start + p).unwrap_or(sanitized.len());
+            sanitized.replace_range(val_start..val_end, "[REDACTED]");
+        }
+    }
+    sanitized
+}
+
+/// %LOCALAPPDATA%\MisaAI\logs\network.log ga tarmoq audit qaydlarini yozish
+pub fn network_log(msg: &str) {
+    let _lock = LOG_MUTEX.lock();
+    let ts = get_timestamp();
+    let sanitized = mask_sensitive_url(msg);
+    let line = format!("{} [NETWORK] {}\n", ts, sanitized);
+
+    print!("{}", line);
+
+    let log_dir = get_log_dir();
+    let _ = create_dir_all(&log_dir);
+    let log_file = log_dir.join("network.log");
+
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(log_file) {
+        let _ = file.write_all(line.as_bytes());
+        let _ = file.flush();
+    }
+}

@@ -13,10 +13,13 @@ use std::time::Duration;
 use std::os::windows::process::CommandExt;
 
 pub mod diag;
-pub use diag::{startup_log, crash_log, install_crash_handlers, current_pid, current_tid};
+pub use diag::{startup_log, crash_log, network_log, install_crash_handlers, current_pid, current_tid};
 
 pub mod preflight;
 pub use preflight::{run_native_preflight, check_webview2_installed_version, find_or_fetch_bootstrapper};
+
+pub mod network_diag;
+pub use network_diag::{run_full_diagnostics, NetworkDiagnosticReport};
 
 #[derive(Clone, Default)]
 pub struct SupervisorState {
@@ -623,6 +626,24 @@ fn backend_restart(state: tauri::State<SupervisorState>) -> Result<bool, String>
     Ok(true)
 }
 
+#[tauri::command]
+fn network_diagnostic_check(url: Option<String>) -> Result<crate::network_diag::NetworkDiagnosticReport, String> {
+    let target = url.unwrap_or_else(|| "https://misa.up.railway.app/api/health".to_string());
+    Ok(crate::network_diag::run_full_diagnostics(&target))
+}
+
+#[tauri::command]
+fn get_network_log_path() -> Result<String, String> {
+    let log_file = crate::diag::get_log_dir().join("network.log");
+    Ok(log_file.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn append_network_log(message: String) -> Result<(), String> {
+    crate::diag::network_log(&message);
+    Ok(())
+}
+
 pub struct BackendGuard {
     pub state: SupervisorState,
 }
@@ -1036,7 +1057,10 @@ pub fn run() {
             app_is_maximized,
             app_start_resize,
             backend_get_status,
-            backend_restart
+            backend_restart,
+            network_diagnostic_check,
+            get_network_log_path,
+            append_network_log
         ]);
 
     startup_log("TAURI", "Calling builder.build(tauri::generate_context!())...");

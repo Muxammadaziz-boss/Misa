@@ -22,6 +22,7 @@ import {
   SystemTelemetry,
   AgentStepItem,
 } from "../services/backendService";
+import { ServerDiagnosticModal } from "../components/ServerDiagnosticModal";
 
 interface LandingPageProps {
   userName?: string;
@@ -111,6 +112,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [startupBriefing, setStartupBriefing] = useState<string | null>(null);
   const [briefingSeverity, setBriefingSeverity] = useState<"success" | "warning" | "error">("success");
   const [isBriefingVisible, setIsBriefingVisible] = useState<boolean>(true);
+  const [isDiagModalOpen, setIsDiagModalOpen] = useState<boolean>(false);
 
   // Telemetry & Agent Loop
   const [telemetry, setTelemetry] = useState<SystemTelemetry | null>(null);
@@ -151,7 +153,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           setTelemetry(data);
           // Backend aloqada ekanligi tasdiqlandi -> xatolik bannerini darhol yopamiz
           setStartupBriefing((prev) => {
-            if (prev && prev.includes("18420-portda ishga tushirilishi kutilmoqda")) {
+            if (prev && (prev.includes("18420") || prev.includes("server bilan aloqa"))) {
               return null;
             }
             return prev;
@@ -179,7 +181,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       setBackendStatus(status);
       if (status.status === "online") {
         setStartupBriefing((prev) => {
-          if (prev && prev.includes("18420-portda ishga tushirilishi kutilmoqda")) {
+          if (prev && (prev.includes("18420") || prev.includes("server bilan aloqa"))) {
             return null;
           }
           return prev;
@@ -278,7 +280,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         }
       } else {
         severity = "error";
-        textToSpeak = `Salom Ustoz! Menda xatolik bor: mahalliy backend serveriga ulanib bo'lmadi. Server 18420-portda ishga tushirilishi kutilmoqda.`;
+        const currentTarget = backendService.getApiBase();
+        let targetHost = "server";
+        try {
+          targetHost = new URL(currentTarget).host;
+        } catch {
+          targetHost = currentTarget;
+        }
+        textToSpeak = `Salom Ustoz! Menda xatolik bor: server bilan aloqa o'rnatib bo'lmadi (${targetHost}). Tarmoq yoki server holatini tekshirishingizni so'rayman.`;
       }
 
       setStartupBriefing(textToSpeak);
@@ -836,7 +845,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         return (
           micError ||
           (backendStatus.status === "offline"
-            ? "Menda xatolik bor: server bilan aloqa uzilgan (Port 18420)"
+            ? "Menda xatolik bor: server bilan aloqa uzilgan"
             : "Tizim holatini tekshiring yoki qayta urinib ko'ring")
         );
       case "idle":
@@ -1031,6 +1040,28 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <VolumeIcon size={12} color="currentColor" />
               <span>Ovozda</span>
             </button>
+            {briefingSeverity === "error" && (
+              <button
+                type="button"
+                onClick={() => setIsDiagModalOpen(true)}
+                title="Server diagnostikasi"
+                style={{
+                  background: "rgba(192, 76, 253, 0.22)",
+                  border: "1px solid rgba(192, 76, 253, 0.5)",
+                  borderRadius: "8px",
+                  padding: "4px 9px",
+                  color: "#F5F0FF",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  fontSize: "11px",
+                  fontWeight: 600,
+                }}
+              >
+                <span>Diagnostika</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setIsBriefingVisible(false)}
@@ -1564,6 +1595,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
         </form>
       </div>
+
+      <ServerDiagnosticModal
+        isOpen={isDiagModalOpen}
+        onClose={() => setIsDiagModalOpen(false)}
+        onServerChanged={() => {
+          backendService.checkStatus().then(setBackendStatus).catch(() => {});
+        }}
+      />
     </div>
   );
 };
