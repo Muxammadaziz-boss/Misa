@@ -411,6 +411,13 @@ mod win32 {
             psz_face_name: *const u16,
         ) -> HFONT;
         pub fn DrawTextW(hdc: HDC, lpch_text: *const u16, cch_text: i32, lprc: *mut RECT, format: UINT) -> i32;
+        pub fn IsWindow(hwnd: HWND) -> BOOL;
+        pub fn IsWindowVisible(hwnd: HWND) -> BOOL;
+        pub fn GetWindowRect(hwnd: HWND, rect: *mut RECT) -> BOOL;
+        pub fn GetLastError() -> u32;
+        pub fn GetStockObject(i: i32) -> HGDIOBJ;
+        pub fn SetLayeredWindowAttributes(hwnd: HWND, cr_key: u32, b_alpha: u8, dw_flags: u32) -> BOOL;
+        pub fn GetCurrentThreadId() -> u32;
     }
 }
 
@@ -431,9 +438,10 @@ unsafe fn paint_preflight_ui(hdc: win32::HDC, client_w: i32, client_h: i32, mode
     // Tashqi binafsharang nozik chegara (#2A1045)
     let border_pen = CreatePen(0, 1, rgb(42, 16, 69));
     let old_pen = SelectObject(hdc, border_pen);
-    let null_brush = SelectObject(hdc, CreateSolidBrush(rgb(0, 0, 0))); // Null brush simulation
+    let null_brush = GetStockObject(5 /* NULL_BRUSH */);
+    let old_brush = SelectObject(hdc, null_brush);
     RoundRect(hdc, 0, 0, client_w - 1, client_h - 1, 16, 16);
-    SelectObject(hdc, null_brush);
+    SelectObject(hdc, old_brush);
     SelectObject(hdc, old_pen);
     DeleteObject(border_pen);
 
@@ -702,6 +710,8 @@ unsafe fn paint_preflight_ui(hdc: win32::HDC, client_w: i32, client_h: i32, mode
 // 5. WIN32 WINDOW PROCEDURE & EVENT LOOP
 // =========================================================================
 
+static PAINT_COUNT: Mutex<u32> = Mutex::new(0);
+
 #[cfg(target_os = "windows")]
 unsafe extern "system" fn preflight_wndproc(
     hwnd: win32::HWND,
@@ -710,10 +720,20 @@ unsafe extern "system" fn preflight_wndproc(
     lparam: win32::LPARAM,
 ) -> win32::LRESULT {
     use win32::*;
+    use crate::diag::startup_log;
 
     match msg {
         0x000F => {
             // WM_PAINT (Flicker-free Double Buffering)
+            let count = {
+                let mut c = PAINT_COUNT.lock().unwrap();
+                *c += 1;
+                *c
+            };
+            if count == 1 || count % 100 == 0 {
+                startup_log("PREFLIGHT", &format!("WM_PAINT handled (count={})", count));
+            }
+
             let mut ps: PAINTSTRUCT = std::mem::zeroed();
             let hdc = BeginPaint(hwnd, &mut ps);
 
@@ -724,6 +744,9 @@ unsafe extern "system" fn preflight_wndproc(
 
             let mem_dc = CreateCompatibleDC(hdc);
             let mem_bm = CreateCompatibleBitmap(hdc, cw, ch);
+            if mem_dc == 0 || mem_bm == 0 {
+                startup_log("PREFLIGHT", &format!("GDI error in WM_PAINT: mem_dc=0x{:X}, mem_bm=0x{:X}, GetLastError={}", mem_dc, mem_bm, GetLastError()));
+            }
             let old_bm = SelectObject(mem_dc, mem_bm);
 
             if let Ok(guard) = GLOBAL_UI_MODEL.lock() {
@@ -742,6 +765,10 @@ unsafe extern "system" fn preflight_wndproc(
             EndPaint(hwnd, &ps);
             0
         }
+        0x0014 => {
+            // WM_ERASEBKGND: Return 1 to prevent flicker (we paint full background in WM_PAINT)
+            1
+        }
         0x0113 => {
             // WM_TIMER (~33 FPS animatsiya va progress silliqlash)
             if let Ok(guard) = GLOBAL_UI_MODEL.lock() {
@@ -756,6 +783,7 @@ unsafe extern "system" fn preflight_wndproc(
                         }
 
                         if model.should_close {
+                            startup_log("PREFLIGHT", "model.should_close=true in WM_TIMER. Destroying preflight window...");
                             KillTimer(hwnd, 1);
                             DestroyWindow(hwnd);
                             return 0;
@@ -771,8 +799,9 @@ unsafe extern "system" fn preflight_wndproc(
             let x = (lparam & 0xFFFF) as i32;
             let y = ((lparam >> 16) & 0xFFFF) as i32;
 
-            // 1. Oyna yopish [✕] tugmasi (X: 715..745, Y: 15..45)
+            // 1. Oyna yopish [✕] tugmasi (X: 710..745, Y: 12..45)
             if x >= 710 && x <= 745 && y >= 12 && y <= 45 {
+                startup_log("PREFLIGHT", "Close button [X] clicked by user");
                 if let Ok(guard) = GLOBAL_UI_MODEL.lock() {
                     if let Some(ref model_arc) = *guard {
                         if let Ok(mut model) = model_arc.lock() {
@@ -798,6 +827,7 @@ unsafe extern "system" fn preflight_wndproc(
             if is_failed {
                 // [ Qayta urinish ] tugmasi (X: 52..192, Y: 440..472)
                 if x >= 52 && x <= 192 && y >= 440 && y <= 472 {
+                    startup_log("PREFLIGHT", "[ Qayta urinish ] button clicked by user");
                     if let Ok(guard) = GLOBAL_UI_MODEL.lock() {
                         if let Some(ref model_arc) = *guard {
                             if let Ok(mut model) = model_arc.lock() {
@@ -813,6 +843,7 @@ unsafe extern "system" fn preflight_wndproc(
 
                 // [ Chiqish ] tugmasi (X: 204..314, Y: 440..472)
                 if x >= 204 && x <= 314 && y >= 440 && y <= 472 {
+                    startup_log("PREFLIGHT", "[ Chiqish ] button clicked by user");
                     if let Ok(guard) = GLOBAL_UI_MODEL.lock() {
                         if let Some(ref model_arc) = *guard {
                             if let Ok(mut model) = model_arc.lock() {
@@ -837,6 +868,7 @@ unsafe extern "system" fn preflight_wndproc(
         }
         0x0010 => {
             // WM_CLOSE
+            startup_log("PREFLIGHT", "WM_CLOSE received");
             if let Ok(guard) = GLOBAL_UI_MODEL.lock() {
                 if let Some(ref model_arc) = *guard {
                     if let Ok(mut model) = model_arc.lock() {
@@ -848,8 +880,8 @@ unsafe extern "system" fn preflight_wndproc(
             0
         }
         0x0002 => {
-            // WM_DESTROY
-            PostQuitMessage(0);
+            // WM_DESTROY (Do NOT call PostQuitMessage; that would poison Tauri event loop!)
+            startup_log("PREFLIGHT", "WM_DESTROY received for preflight window");
             0
         }
         _ => DefWindowProcW(hwnd, msg, wparam, lparam),
@@ -864,18 +896,11 @@ pub fn run_native_preflight() -> bool {
     #[cfg(target_os = "windows")]
     {
         use win32::*;
+        use crate::diag::startup_log;
 
-        println!("[WebView2] detection started");
-        let initial_check = check_webview2_installed_version();
-        println!("[WebView2] installed: {}", initial_check.is_some());
-
-        // Agar WebView2 allaqachon mavjud bo'lsa, tezkor tasdiqlash
-        if let Some(ref ver) = initial_check {
-            println!("[WebView2] Runtime allaqachon mavjud: {} ✓", ver);
-            return true;
-        }
-
-        println!("[WebView2] Runtime topilmadi. Native Misa Preflight UI ochilmoqda...");
+        startup_log("PREFLIGHT", "run_native_preflight() entered");
+        let tid = unsafe { GetCurrentThreadId() };
+        startup_log("PREFLIGHT", &format!("Preflight UI thread ID: {}", tid));
 
         let model = Arc::new(Mutex::new(PreflightUiModel::default()));
         {
@@ -902,22 +927,35 @@ pub fn run_native_preflight() -> bool {
             h_icon_sm: 0,
         };
 
-        unsafe { RegisterClassExW(&wc) };
+        let reg_atom = unsafe { RegisterClassExW(&wc) };
+        let reg_err = unsafe { GetLastError() };
+        startup_log("PREFLIGHT", &format!("RegisterClassExW returned atom=0x{:X}, GetLastError={}", reg_atom, reg_err));
 
         let win_w = 760;
         let win_h = 520;
         let screen_w = unsafe { GetSystemMetrics(0 /* SM_CXSCREEN */) };
         let screen_h = unsafe { GetSystemMetrics(1 /* SM_CYSCREEN */) };
-        let win_x = (screen_w - win_w) / 2;
-        let win_y = (screen_h - win_h) / 2;
+        let win_x = ((screen_w - win_w) / 2).max(20);
+        let win_y = ((screen_h - win_h) / 2).max(20);
+        startup_log("PREFLIGHT", &format!(
+            "Calculated layout: screen={}x{}, window target pos=({}, {}), size={}x{}",
+            screen_w, screen_h, win_x, win_y, win_w, win_h
+        ));
 
         let title_wide = to_wide("MISA AI — Runtime Preflight");
+
+        // Style: WS_POPUP | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS
+        let style = 0x80000000 | 0x10000000 | 0x02000000 | 0x04000000;
+        // ExStyle: WS_EX_APPWINDOW (0x00040000) | WS_EX_TOPMOST (0x00000008)
+        let ex_style = 0x00040000 | 0x00000008;
+
+        startup_log("PREFLIGHT", "Calling CreateWindowExW...");
         let hwnd = unsafe {
             CreateWindowExW(
-                0x00080000 /* WS_EX_LAYERED */ | 0x00000008 /* WS_EX_TOPMOST */,
+                ex_style,
                 class_name.as_ptr(),
                 title_wide.as_ptr(),
-                0x80000000 /* WS_POPUP */ | 0x10000000 /* WS_VISIBLE */,
+                style,
                 win_x,
                 win_y,
                 win_w,
@@ -929,15 +967,31 @@ pub fn run_native_preflight() -> bool {
             )
         };
 
+        let create_err = unsafe { GetLastError() };
+        startup_log("PREFLIGHT", &format!("CreateWindowExW returned HWND=0x{:X}, GetLastError={}", hwnd, create_err));
+
         if hwnd == 0 {
+            startup_log("PREFLIGHT", "CRITICAL ERROR: Native preflight HWND is 0!");
             eprintln!("[ERROR] Native preflight oynasini yaratib bo'lmadi!");
             return false;
         }
 
-        // DWM Windows 11 yumaloq burchaklar va qorong'u sarlavhani faollashtirish
+        let is_win = unsafe { IsWindow(hwnd) } != 0;
+        let mut rect: RECT = unsafe { std::mem::zeroed() };
+        unsafe { GetWindowRect(hwnd, &mut rect) };
+        let is_vis = unsafe { IsWindowVisible(hwnd) } != 0;
+        startup_log("PREFLIGHT", &format!(
+            "Window validation: IsWindow={}, IsWindowVisible={}, Rect=[left={}, top={}, right={}, bottom={}, width={}, height={}]",
+            is_win, is_vis, rect.left, rect.top, rect.right, rect.bottom, rect.right - rect.left, rect.bottom - rect.top
+        ));
+
+        // DWM Windows 11 dark mode / rounded corners (non-fatal)
         unsafe {
             if let Ok(lib) = libloading_load_dwmapi() {
+                startup_log("PREFLIGHT", "DWM attributes applied successfully");
                 let _ = lib;
+            } else {
+                startup_log("PREFLIGHT", "DWM not available (fallback to classic GDI frame)");
             }
         }
 
@@ -948,39 +1002,49 @@ pub fn run_native_preflight() -> bool {
             SetForegroundWindow(hwnd);
             SetTimer(hwnd, 1, 30, None);
         }
+        let is_vis_after = unsafe { IsWindowVisible(hwnd) } != 0;
+        startup_log("PREFLIGHT", &format!("ShowWindow(SW_SHOW) executed. IsWindowVisible={}", is_vis_after));
 
-        // Fon rejimida haqiqiy o'rnatish jarayoni oqimi (Worker Thread)
+        // Start worker thread for lifecycle
         let worker_model = model.clone();
+        startup_log("PREFLIGHT", "Spawning worker lifecycle thread...");
         std::thread::spawn(move || {
             run_worker_lifecycle(worker_model);
         });
 
-        // Win32 Message Loop
+        // Win32 Message Loop on UI thread
+        startup_log("PREFLIGHT", "Starting UI thread message loop...");
         let mut msg: MSG = unsafe { std::mem::zeroed() };
-        loop {
-            let res = unsafe { win32::GetMessageW(&mut msg, 0, 0, 0) };
+        while unsafe { IsWindow(hwnd) } != 0 {
+            let res = unsafe { GetMessageW(&mut msg, 0, 0, 0) };
             if res <= 0 {
+                startup_log("PREFLIGHT", &format!("GetMessageW returned {}", res));
                 break;
             }
             unsafe {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
+        }
+        startup_log("PREFLIGHT", "UI message loop exited.");
 
-            // Oyna yopilganligini tekshirish
-            if let Ok(m) = model.lock() {
-                if m.should_close {
-                    break;
+        // Drain any remaining messages from queue so Tauri gets a clean queue
+        while unsafe { PeekMessageW(&mut msg, 0, 0, 0, 1 /* PM_REMOVE */) } != 0 {
+            if msg.message != 0x0012 /* WM_QUIT */ {
+                unsafe {
+                    TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
                 }
             }
         }
+        startup_log("PREFLIGHT", "Message queue drained and clean ✓");
 
         unsafe {
             UnregisterClassW(class_name.as_ptr(), instance);
         }
 
         let is_ok = model.lock().map(|m| m.success).unwrap_or(false);
-        println!("[WebView2] Preflight yakunlandi. Natija: {}", is_ok);
+        startup_log("PREFLIGHT", &format!("run_native_preflight finished. Result success={}", is_ok));
         is_ok
     }
 
@@ -995,16 +1059,21 @@ pub fn run_native_preflight() -> bool {
 // =========================================================================
 
 fn run_worker_lifecycle(model_arc: Arc<Mutex<PreflightUiModel>>) {
+    use crate::diag::startup_log;
     const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+    startup_log("WORKER", "Worker lifecycle thread started");
 
     loop {
         // 0. Tarmoq tekshiruvi
         let net_ok = check_network_connectivity();
+        startup_log("WORKER", &format!("Network connectivity check: {}", if net_ok { "Connected" } else { "Disconnected" }));
         if let Ok(mut m) = model_arc.lock() {
             m.diagnostics.network = if net_ok { "Ulangan".to_string() } else { "Ulanmagan".to_string() };
         }
 
         // 1. Initial Detection
+        startup_log("WORKER", "State = Detecting, target_percent = 10%");
         if let Ok(mut m) = model_arc.lock() {
             m.state = PreflightState::Detecting;
             m.target_percent = 10.0;
@@ -1014,8 +1083,10 @@ fn run_worker_lifecycle(model_arc: Arc<Mutex<PreflightUiModel>>) {
         }
         std::thread::sleep(Duration::from_millis(350));
 
+        startup_log("WEBVIEW2", "Checking installed version via registry and directories...");
         let ver_opt = check_webview2_installed_version();
         if let Some(ver) = ver_opt {
+            startup_log("WEBVIEW2", &format!("WebView2 already installed: {}", ver));
             println!("[WebView2] Allaqachon o'rnatilgan aniqlandi: {}", ver);
             if let Ok(mut m) = model_arc.lock() {
                 m.state = PreflightState::AlreadyInstalled;
@@ -1025,16 +1096,19 @@ fn run_worker_lifecycle(model_arc: Arc<Mutex<PreflightUiModel>>) {
                 m.diagnostics.status_color = rgb(16, 185, 129);
                 m.diagnostics.version = ver;
             }
+            startup_log("WORKER", "Displaying READY state for 500ms before closing...");
             std::thread::sleep(Duration::from_millis(500));
             if let Ok(mut m) = model_arc.lock() {
                 m.state = PreflightState::Ready;
                 m.success = true;
                 m.should_close = true;
             }
+            startup_log("WORKER", "Preflight success signaled (should_close=true). Worker exiting.");
             return;
         }
 
         // 2. Searching Bootstrapper
+        startup_log("WEBVIEW2", "WebView2 NOT found in system! Starting bootstrapper search...");
         println!("[WebView2] bootstrapper search started");
         if let Ok(mut m) = model_arc.lock() {
             m.state = PreflightState::SearchingBootstrapper;
@@ -1047,6 +1121,7 @@ fn run_worker_lifecycle(model_arc: Arc<Mutex<PreflightUiModel>>) {
         std::thread::sleep(Duration::from_millis(300));
 
         let setup_path_opt = find_or_fetch_bootstrapper();
+        startup_log("WORKER", &format!("Bootstrapper search result: path={:?}", setup_path_opt));
         println!("[WebView2] bootstrapper path: {:?}", setup_path_opt);
         println!("[WebView2] bootstrapper found: {}", setup_path_opt.is_some());
 
@@ -1062,6 +1137,7 @@ fn run_worker_lifecycle(model_arc: Arc<Mutex<PreflightUiModel>>) {
                 p
             }
             None => {
+                startup_log("WORKER", "ERROR: Bootstrapper not found and cannot download!");
                 eprintln!("[ERROR] WebView2 bootstrapper topilmadi va yuklab bo'lmadi!");
                 if let Ok(mut m) = model_arc.lock() {
                     m.state = PreflightState::Failed;
@@ -1082,6 +1158,7 @@ fn run_worker_lifecycle(model_arc: Arc<Mutex<PreflightUiModel>>) {
         std::thread::sleep(Duration::from_millis(400));
 
         // 3. Launching Installer (/silent /install)
+        startup_log("WORKER", &format!("Launching installer: {:?}", setup_path));
         println!("[WebView2] installer launch started");
         if let Ok(mut m) = model_arc.lock() {
             m.state = PreflightState::LaunchingInstaller;
@@ -1100,6 +1177,7 @@ fn run_worker_lifecycle(model_arc: Arc<Mutex<PreflightUiModel>>) {
         let mut child: Child = match spawn_res {
             Ok(c) => {
                 let pid = c.id();
+                startup_log("WORKER", &format!("Installer process spawned with PID={}", pid));
                 println!("[WebView2] installer PID: {}", pid);
                 if let Ok(mut m) = model_arc.lock() {
                     m.installer_pid = Some(pid);
@@ -1110,6 +1188,7 @@ fn run_worker_lifecycle(model_arc: Arc<Mutex<PreflightUiModel>>) {
                 c
             }
             Err(e) => {
+                startup_log("WORKER", &format!("ERROR spawning installer: {}", e));
                 eprintln!("[ERROR] Bootstrapperni ishga tushirishda xatolik: {}", e);
                 if let Ok(mut m) = model_arc.lock() {
                     m.state = PreflightState::Failed;
@@ -1126,7 +1205,7 @@ fn run_worker_lifecycle(model_arc: Arc<Mutex<PreflightUiModel>>) {
             }
         };
 
-        // 4. Installer jarayoni tugashini real monitoring qilish (35% dan 80% gacha silliq)
+        // 4. Installer jarayoni tugashini monitoring qilish
         let start_time = Instant::now();
         let timeout = Duration::from_secs(120);
         let mut exit_code: Option<i32> = None;
@@ -1135,6 +1214,7 @@ fn run_worker_lifecycle(model_arc: Arc<Mutex<PreflightUiModel>>) {
             match child.try_wait() {
                 Ok(Some(status)) => {
                     exit_code = status.code();
+                    startup_log("WORKER", &format!("Installer completed with exit_code={:?}", exit_code));
                     println!("[WebView2] installer exit code: {:?}", exit_code);
                     break;
                 }
@@ -1148,6 +1228,7 @@ fn run_worker_lifecycle(model_arc: Arc<Mutex<PreflightUiModel>>) {
                     std::thread::sleep(Duration::from_millis(300));
                 }
                 Err(e) => {
+                    startup_log("WORKER", &format!("try_wait error on installer: {}", e));
                     eprintln!("[ERROR] try_wait xatoligi: {}", e);
                     break;
                 }
@@ -1155,6 +1236,7 @@ fn run_worker_lifecycle(model_arc: Arc<Mutex<PreflightUiModel>>) {
         }
 
         if exit_code.is_none() {
+            startup_log("WORKER", "Installer timed out (120s)! Killing installer process.");
             println!("[WebView2] Installer vaqt chegarasiga yetdi (120s). Majburiy to'xtatildi.");
             let _ = child.kill();
             let _ = child.wait();
@@ -1172,6 +1254,7 @@ fn run_worker_lifecycle(model_arc: Arc<Mutex<PreflightUiModel>>) {
         std::thread::sleep(Duration::from_millis(1500));
 
         // 5. Verification (Yakuniy Haqiqat Manbasi)
+        startup_log("WORKER", "Running strict post-install verification...");
         println!("[WebView2] verification started");
         if let Ok(mut m) = model_arc.lock() {
             m.state = PreflightState::Verifying;
@@ -1182,6 +1265,7 @@ fn run_worker_lifecycle(model_arc: Arc<Mutex<PreflightUiModel>>) {
         std::thread::sleep(Duration::from_millis(400));
 
         let verified_ver = check_webview2_installed_version();
+        startup_log("WORKER", &format!("Post-install verification result: {:?}", verified_ver));
         println!("[WebView2] installed after installer: {}", verified_ver.is_some());
 
         if let Some(ver) = verified_ver {
@@ -1199,9 +1283,11 @@ fn run_worker_lifecycle(model_arc: Arc<Mutex<PreflightUiModel>>) {
                 m.success = true;
                 m.should_close = true;
             }
+            startup_log("WORKER", "Preflight completed successfully (READY).");
             return;
         } else {
-            // O'rnatuvchi ishladi, ammo runtime tasdiqlanmadi (masalan, UAC rad etildi yoki tarmoq uzildi)
+            // O'rnatuvchi ishladi, ammo runtime tasdiqlanmadi
+            startup_log("WORKER", "ERROR: Runtime verification failed after installation!");
             eprintln!("[ERROR] WebView2 o'rnatilmadi yoki tasdiqlanmadi!");
             if let Ok(mut m) = model_arc.lock() {
                 m.state = PreflightState::Failed;

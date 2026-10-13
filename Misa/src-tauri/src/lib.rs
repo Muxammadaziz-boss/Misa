@@ -12,6 +12,9 @@ use std::time::Duration;
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
+pub mod diag;
+pub use diag::{startup_log, crash_log, install_crash_handlers, current_pid, current_tid};
+
 pub mod preflight;
 pub use preflight::{run_native_preflight, check_webview2_installed_version, find_or_fetch_bootstrapper};
 
@@ -48,18 +51,23 @@ impl SingleInstanceGuard {
         const ERROR_ALREADY_EXISTS: u32 = 183;
         const SW_RESTORE: i32 = 9;
 
+        startup_log("SINGLE_INSTANCE", &format!("Acquiring mutex: {}", name));
         let wide_name: Vec<u16> = OsStr::new(name).encode_wide().chain(std::iter::once(0)).collect();
         let handle = unsafe { CreateMutexW(std::ptr::null_mut(), 1, wide_name.as_ptr()) };
+        let last_err = unsafe { GetLastError() };
+        startup_log("SINGLE_INSTANCE", &format!("CreateMutexW returned handle=0x{:X}, GetLastError={}", handle, last_err));
 
         if handle == 0 {
+            startup_log("SINGLE_INSTANCE", "CreateMutexW returned NULL handle!");
             return None;
         }
 
-        let last_err = unsafe { GetLastError() };
         if last_err == ERROR_ALREADY_EXISTS {
+            startup_log("SINGLE_INSTANCE", "ERROR_ALREADY_EXISTS: existing instance detected!");
             println!("[INSTANCE] Boshqa Misa AI nusxasi allaqachon faol (Single Instance Lock).");
             let win_title: Vec<u16> = OsStr::new("MISA AI v9.0.1").encode_wide().chain(std::iter::once(0)).collect();
             let hwnd = unsafe { FindWindowW(std::ptr::null(), win_title.as_ptr()) };
+            startup_log("SINGLE_INSTANCE", &format!("FindWindowW('MISA AI v9.0.1') returned HWND=0x{:X}", hwnd));
             if hwnd != 0 {
                 unsafe {
                     ShowWindow(hwnd, SW_RESTORE);
@@ -70,6 +78,7 @@ impl SingleInstanceGuard {
             return None;
         }
 
+        startup_log("SINGLE_INSTANCE", "SingleInstanceGuard acquired successfully (Primary instance) ✓");
         Some(SingleInstanceGuard { handle })
     }
 }
@@ -914,16 +923,27 @@ pub fn show_native_message_box(_title: &str, _message: &str, _is_error: bool) {}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    install_crash_handlers();
+
+    let exe_path = std::env::current_exe()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|_| "unknown".to_string());
+    startup_log("STARTUP", "Misa AI process started");
+    startup_log("STARTUP", &format!("Executable path: {}", exe_path));
+    startup_log("STARTUP", &format!("PID: {} TID: {}", current_pid(), current_tid()));
     println!("[BOOT] MISA AI v9.0.1 Desktop Application ishga tushmoqda...");
 
     // 1. Single-Instance Guard tekshiruvi (faqat 1 ta Misa UI instansiyasi ishlaydi)
+    startup_log("SINGLE_INSTANCE", "Checking single instance guard...");
     println!("[INSTANCE] Yagona nusxa (Single-Instance) tekshirilmoqda...");
     let _instance_guard = match SingleInstanceGuard::acquire("Local\\Misa_AI_SingleInstance_Mutex_v9.0.1") {
         Some(g) => {
+            startup_log("SINGLE_INSTANCE", "Acquired mutex successfully (Primary instance)");
             println!("[INSTANCE] Yagona nusxa qulfi o'rnatildi (Primary instance) ✓");
             g
         }
         None => {
+            startup_log("SINGLE_INSTANCE", "Existing instance detected! Exiting process cleanly.");
             println!("[INSTANCE] Mavjud Misa AI nusxasi topildi. Yangi jarayon to'xtatildi (No duplicate instance).");
             return;
         }
@@ -940,6 +960,8 @@ pub fn run() {
     let state_for_panic = supervisor_state.clone();
     let old_panic_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
+        let err_msg = format!("Panic: {:?}", info);
+        crash_log("RUST_PANIC_SUPERVISOR", &err_msg);
         eprintln!("[ERROR] Kutilmagan qulash (Panic): {:?}", info);
         stop_backend(&state_for_panic);
         old_panic_hook(info);
@@ -948,9 +970,12 @@ pub fn run() {
     // 4. Windows Native Misa Preflight: WebView2 tekshiruvi va avtomatik o'rnatish
     #[cfg(target_os = "windows")]
     {
+        startup_log("PREFLIGHT", "Entering run_native_preflight()...");
         println!("[PREFLIGHT] Misa Native Preflight tekshiruvi boshlanmoqda...");
         let preflight_ok = preflight::run_native_preflight();
+        startup_log("PREFLIGHT", &format!("run_native_preflight returned: {}", preflight_ok));
         if !preflight_ok {
+            startup_log("PREFLIGHT", "Preflight FAILED or aborted by user! Stopping backend and exiting.");
             eprintln!("[ERROR] Microsoft WebView2 Runtime o'rnatilmadi.");
             eprintln!("[INFO] UI startup aborted.");
             eprintln!("[INFO] Backend process was NOT started.");
@@ -958,6 +983,7 @@ pub fn run() {
             stop_backend(&supervisor_state);
             return;
         }
+        startup_log("PREFLIGHT", "Preflight SUCCEEDED ✓");
         println!("[PREFLIGHT] WebView2 Runtime muvaffaqiyatli tasdiqlandi ✓");
     }
 
@@ -967,22 +993,36 @@ pub fn run() {
     let state_for_exit = supervisor_state.clone();
     let state_for_build_err = supervisor_state.clone();
 
+    startup_log("TAURI", "Tauri Builder initsializatsiya qilinmoqda...");
     println!("[UI] Tauri oynasi va muhiti initsializatsiya qilinmoqda...");
     let builder = tauri::Builder::default()
         .manage(supervisor_state)
         .setup(move |app| {
             use tauri::Manager;
+            startup_log("TAURI", "setup hook entered");
             println!("[UI] Tauri asosiy oynasi sozlanmoqda...");
             if let Some(win) = app.get_webview_window("main") {
+                startup_log("TAURI", "Main webview window found in setup hook");
+                let is_vis = win.is_visible().unwrap_or(false);
+                startup_log("TAURI", &format!("Main webview window initial is_visible={}", is_vis));
                 let _ = win.set_background_color(Some(tauri::window::Color(6, 3, 12, 255)));
+                let _ = win.show();
+                let _ = win.set_focus();
+                let is_vis_after = win.is_visible().unwrap_or(false);
+                startup_log("TAURI", &format!("Main webview window after win.show() is_visible={}", is_vis_after));
+            } else {
+                startup_log("TAURI", "WARNING: Webview window 'main' NOT found via get_webview_window('main')!");
             }
             std::thread::spawn(move || {
+                startup_log("BACKEND", "Starting managed backend supervisor thread...");
                 ensure_backend_running(&state_for_setup);
             });
             Ok(())
         })
         .on_window_event(move |_window, event| {
+            startup_log("TAURI_WINDOW", &format!("Window event received: {:?}", event));
             if let tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed = event {
+                startup_log("TAURI_WINDOW", "Window CloseRequested or Destroyed. Stopping backend...");
                 println!("[UI] Oyna yopilish so'rovi qabul qilindi. Backend to'xtatilmoqda...");
                 stop_backend(&state_for_window);
             }
@@ -999,9 +1039,14 @@ pub fn run() {
             backend_restart
         ]);
 
+    startup_log("TAURI", "Calling builder.build(tauri::generate_context!())...");
     let app = match builder.build(tauri::generate_context!()) {
-        Ok(a) => a,
+        Ok(a) => {
+            startup_log("TAURI", "builder.build() SUCCEEDED ✓");
+            a
+        }
         Err(e) => {
+            startup_log("TAURI", &format!("ERROR builder.build() failed: {}", e));
             eprintln!("[ERROR] Tauri oynasini yaratishda xatolik: {}", e);
             stop_backend(&state_for_build_err);
             #[cfg(target_os = "windows")]
@@ -1014,10 +1059,18 @@ pub fn run() {
         }
     };
 
+    startup_log("TAURI", "Calling app.run()...");
     println!("[UI] Misa AI Desktop dasturi muvaffaqiyatli ochildi ✓");
     app.run(move |_app_handle, event| {
         match event {
+            tauri::RunEvent::Ready => {
+                startup_log("TAURI", "RunEvent::Ready received ✓");
+            }
+            tauri::RunEvent::Resumed => {
+                startup_log("TAURI", "RunEvent::Resumed received");
+            }
             tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+                startup_log("TAURI", &format!("RunEvent Exit: {:?}", event));
                 println!("[SHUTDOWN] Ilovadan chiqish hodisasi. Backend to'xtatilmoqda...");
                 stop_backend(&state_for_exit);
             }
