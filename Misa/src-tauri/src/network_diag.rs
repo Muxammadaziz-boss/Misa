@@ -489,3 +489,51 @@ fn run_wininet_https_probe(url_str: &str, report: &mut NetworkDiagnosticReport) 
         InternetCloseHandle(h_internet);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::diag::mask_sensitive_url;
+
+    #[test]
+    fn test_mask_sensitive_url_redaction() {
+        let raw = "https://misa.up.railway.app/api/auth?token=my_secret_token_12345&user=john";
+        let masked = mask_sensitive_url(raw);
+        assert!(!masked.contains("my_secret_token_12345"));
+        assert!(masked.contains("[REDACTED]"));
+        assert!(masked.contains("user=john"));
+
+        let raw_pwd = "http://127.0.0.1:18420/api/login?password=super_secret_pwd&role=admin";
+        let masked_pwd = mask_sensitive_url(raw_pwd);
+        assert!(!masked_pwd.contains("super_secret_pwd"));
+        assert!(masked_pwd.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn test_invalid_url_diagnostics() {
+        let report = run_full_diagnostics("http://this-domain-does-not-exist-at-all-xyz123.com");
+        assert!(!report.overall_success);
+        assert_eq!(report.failed_stage.as_deref(), Some("dns"));
+    }
+
+    #[test]
+    fn test_closed_port_tcp_failure() {
+        // Port 18420 is currently closed
+        let report = run_full_diagnostics("http://127.0.0.1:18420");
+        assert!(!report.overall_success);
+        assert!(!report.tcp.ok);
+        assert_eq!(report.failed_stage.as_deref(), Some("tcp"));
+    }
+
+    #[test]
+    fn test_cloud_live_diagnostics_full_chain() {
+        let report = run_full_diagnostics("https://misa.up.railway.app");
+        println!("Cloud report: {:?}", report);
+        assert!(report.dns.ok, "DNS lookup for misa.up.railway.app must succeed");
+        assert!(report.tcp.ok, "TCP connect to misa.up.railway.app:443 must succeed");
+        assert!(report.tls.ok, "TLS handshake to misa.up.railway.app must succeed");
+        assert!(report.http.ok, "HTTP probe must succeed");
+        assert!(report.api.ok, "API health check must succeed");
+        assert!(report.overall_success, "Overall diagnostic check must pass");
+    }
+}
