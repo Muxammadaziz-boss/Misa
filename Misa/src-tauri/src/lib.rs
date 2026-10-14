@@ -128,35 +128,94 @@ impl SingleInstanceGuard {
     }
 }
 
-/// HTTP GET /api/health tekshiruvi (Pure Rust stdlib, uchinchi tomon kutubxonalarisiz)
-pub fn check_http_health(addr_str: &str, path: &str) -> bool {
+#[derive(Debug, Clone)]
+pub struct BackendHandshake {
+    pub is_healthy: bool,
+    pub is_compatible_version: bool,
+    pub version: String,
+    pub app: String,
+}
+
+/// HTTP GET /api/health orqali versiya, build provenance va sog'lomlikni tekshirish
+pub fn check_backend_handshake(addr_str: &str, expected_version: &str) -> BackendHandshake {
+    let mut result = BackendHandshake {
+        is_healthy: false,
+        is_compatible_version: false,
+        version: String::new(),
+        app: String::new(),
+    };
+
     let addr: std::net::SocketAddr = match addr_str.parse() {
         Ok(a) => a,
-        Err(_) => return false,
+        Err(_) => return result,
     };
     let mut stream = match TcpStream::connect_timeout(&addr, Duration::from_millis(1000)) {
         Ok(s) => s,
-        Err(_) => return false,
+        Err(_) => return result,
     };
     let _ = stream.set_read_timeout(Some(Duration::from_millis(2000)));
     let _ = stream.set_write_timeout(Some(Duration::from_millis(2000)));
 
     let request = format!(
-        "GET {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: MisaDesktopSupervisor/9.0.1\r\nConnection: close\r\n\r\n",
-        path, addr_str
+        "GET /api/health HTTP/1.1\r\nHost: {}\r\nUser-Agent: MisaDesktopSupervisor/9.0.1\r\nConnection: close\r\n\r\n",
+        addr_str
     );
     if stream.write_all(request.as_bytes()).is_err() {
-        return false;
+        return result;
     }
 
-    let mut buf = [0u8; 2048];
-    match stream.read(&mut buf) {
-        Ok(n) if n > 0 => {
+    let mut buf = [0u8; 4096];
+    if let Ok(n) = stream.read(&mut buf) {
+        if n > 0 {
             let response = String::from_utf8_lossy(&buf[..n]);
-            response.contains("200 OK") && (response.contains("\"status\"") || response.contains("Misa AI"))
+            if response.contains("200 OK") && (response.contains("\"status\"") || response.contains("Misa AI")) {
+                result.is_healthy = true;
+
+                // "version": "..." ni ajratib olish
+                if let Some(v_idx) = response.find("\"version\"") {
+                    let rest = &response[v_idx..];
+                    if let Some(colon_idx) = rest.find(':') {
+                        let after_colon = rest[colon_idx + 1..].trim_start();
+                        if after_colon.starts_with('"') {
+                            if let Some(end_quote) = after_colon[1..].find('"') {
+                                result.version = after_colon[1..1 + end_quote].to_string();
+                            }
+                        }
+                    }
+                }
+
+                // "app": "..." ni ajratib olish
+                if let Some(a_idx) = response.find("\"app\"") {
+                    let rest = &response[a_idx..];
+                    if let Some(colon_idx) = rest.find(':') {
+                        let after_colon = rest[colon_idx + 1..].trim_start();
+                        if after_colon.starts_with('"') {
+                            if let Some(end_quote) = after_colon[1..].find('"') {
+                                result.app = after_colon[1..1 + end_quote].to_string();
+                            }
+                        }
+                    }
+                }
+
+                // Moslik tekshiruvi: 9.0.x seriyasi yoki aniq moslik
+                if !expected_version.is_empty() && !result.version.is_empty() {
+                    let exp_prefix = if expected_version.len() >= 3 { &expected_version[..3] } else { expected_version };
+                    if result.version == expected_version || result.version.starts_with(exp_prefix) {
+                        result.is_compatible_version = true;
+                    }
+                } else if result.is_healthy {
+                    result.is_compatible_version = true;
+                }
+            }
         }
-        _ => false,
     }
+
+    result
+}
+
+/// HTTP GET /api/health tekshiruvi (Pure Rust stdlib)
+pub fn check_http_health(addr_str: &str, _path: &str) -> bool {
+    check_backend_handshake(addr_str, "9.0.1").is_healthy
 }
 
 pub fn stop_backend(state: &SupervisorState) {
@@ -354,10 +413,11 @@ pub fn ensure_backend_running(state: &SupervisorState) {
     backend_lifecycle_log("HEALTH_CHECK", "Backend holati tekshirilmoqda (127.0.0.1:18420)...");
     println!("[BACKEND] Backend holati tekshirilmoqda (127.0.0.1:18420)...");
 
-    // 1. Agar 127.0.0.1:18420 da backend allaqachon ishlab turgan bo'lsa va sog'lom bo'lsa
-    if check_http_health("127.0.0.1:18420", "/api/health") {
-        backend_lifecycle_log("HEALTH_OK", "Mavjud backend aniqlandi va faol (127.0.0.1:18420) — yangi jarayon ochilmaydi ✓");
-        println!("[BACKEND] Mavjud backend aniqlandi va faol (127.0.0.1:18420) — yangi jarayon ochilmaydi ✓");
+    // 1. Agar 127.0.0.1:18420 da backend allaqachon ishlab turgan bo'lsa va versiyasi mos bo'lsa
+    let initial_hs = check_backend_handshake("127.0.0.1:18420", "9.0.1");
+    if initial_hs.is_healthy && initial_hs.is_compatible_version {
+        backend_lifecycle_log("HEALTH_OK", &format!("Mavjud backend aniqlandi va mos (127.0.0.1:18420, v{}) — yangi jarayon ochilmaydi ✓", initial_hs.version));
+        println!("[BACKEND] Mavjud backend aniqlandi va mos (127.0.0.1:18420, v{}) — yangi jarayon ochilmaydi ✓", initial_hs.version);
         if let Ok(mut m) = state.is_managed.lock() {
             *m = false;
         }
@@ -368,6 +428,11 @@ pub fn ensure_backend_running(state: &SupervisorState) {
             *f = false;
         }
         return;
+    } else if initial_hs.is_healthy && !initial_hs.is_compatible_version {
+        backend_lifecycle_log("VERSION_MISMATCH", &format!("18420-portdagi mavjud backend versiyasi mos emas: '{}' (kutilgan: 9.0.1). Jarayon xavfsiz to'xtatilib, yangilanadi...", initial_hs.version));
+        println!("[BACKEND] 18420-portdagi mavjud backend versiyasi mos emas: '{}' (kutilgan: 9.0.1). Jarayon to'xtatilib yangilanadi...", initial_hs.version);
+        cleanup_port_process(18420);
+        std::thread::sleep(Duration::from_millis(500));
     }
 
     // 2. Barqaror xatolik va cheksiz qayta urinishdan himoya
@@ -395,25 +460,28 @@ pub fn ensure_backend_running(state: &SupervisorState) {
         *spawning = true;
     }
 
-    // 4. Stale port jarayonini xavfsiz tekshirish (bir martalik timeout bilan darhol taskkill qilmaslik)
+    // 4. Stale yoki versiyasi mos kelmagan port jarayonini xavfsiz tekshirish
     if is_port_listening(18420) {
         let mut port_healthy = false;
+        let mut port_compatible = false;
         for _ in 0..3 {
             std::thread::sleep(Duration::from_millis(400));
-            if check_http_health("127.0.0.1:18420", "/api/health") {
+            let hs = check_backend_handshake("127.0.0.1:18420", "9.0.1");
+            if hs.is_healthy {
                 port_healthy = true;
+                port_compatible = hs.is_compatible_version;
                 break;
             }
         }
-        if port_healthy {
-            backend_lifecycle_log("PORT_HEALTH_CONFIRMED", "18420-portdagi mavjud jarayon qayta tekshiruvda sog'lom deb tasdiqlandi ✓");
+        if port_healthy && port_compatible {
+            backend_lifecycle_log("PORT_HEALTH_CONFIRMED", "18420-portdagi mavjud jarayon qayta tekshiruvda sog'lom va versiyasi mos deb tasdiqlandi ✓");
             if let Ok(mut a) = state.spawn_attempts.lock() { *a = 0; }
             if let Ok(mut f) = state.is_permanently_failed.lock() { *f = false; }
             if let Ok(mut spawning) = state.is_spawning.lock() { *spawning = false; }
             return;
         }
-        backend_lifecycle_log("PORT_CLEANUP", "18420-port band, ammo /api/health javob bermayapti (Stale process). Tozalanmoqda...");
-        println!("[BACKEND] 18420-port band, ammo /api/health javob bermayapti (Stale process). Tozalanmoqda...");
+        backend_lifecycle_log("PORT_CLEANUP", "18420-port band, ammo /api/health javob bermayapti yoki versiyasi mos emas (Stale process). Tozalanmoqda...");
+        println!("[BACKEND] 18420-port band, ammo /api/health javob bermayapti yoki versiyasi mos emas (Stale process). Tozalanmoqda...");
         cleanup_port_process(18420);
         std::thread::sleep(Duration::from_millis(400));
     }

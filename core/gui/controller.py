@@ -32,6 +32,7 @@ class WindowTarget:
     rect: Tuple[int, int, int, int]  # (left, top, right, bottom)
     is_elevated: bool = False
     is_focused: bool = False
+    process_name: str = ""
 
     @property
     def width(self) -> int:
