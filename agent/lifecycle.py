@@ -16,6 +16,7 @@ from agent.enrollment import AgentEnrollment
 from agent.auth import AgentAuth
 from agent.heartbeat import AgentHeartbeat, AgentState
 from agent.recovery import CrashRecoveryManager
+from agent.executor import RemoteCommandExecutor, CommandPoller
 
 logger = logging.getLogger("misa.agent.lifecycle")
 
@@ -60,6 +61,14 @@ class AgentLifecycleManager:
             interval_seconds=config.heartbeat_interval_seconds,
             agent_version=config.agent_version
         )
+        self.executor = RemoteCommandExecutor(audit_logger=self._audit)
+        self.poller = CommandPoller(
+            transport=self.transport,
+            device_id=self.device_id,
+            executor=self.executor,
+            poll_interval=self.config.poll_interval_seconds,
+            audit_logger=self._audit
+        )
 
         self._shutdown_event = asyncio.Event()
         self._is_running: bool = False
@@ -103,28 +112,39 @@ class AgentLifecycleManager:
         return True
 
     async def _authenticate_and_connect(self) -> bool:
-        """Autentifikatsiya o'tish va heartbeatni boshlash"""
+        """Autentifikatsiya o'tish, heartbeat va command pollerni boshlash"""
         self.heartbeat.state = AgentState.CONNECTING
         ok, msg, _ = await self.auth.authenticate()
         if ok:
             self._reconnect_attempts = 0
             self.heartbeat.state = AgentState.ONLINE
             self.heartbeat.start()
-            logger.info("[Lifecycle] Agent ONLINE holatga o'tdi")
+            await self.poller.start()
+            logger.info("[Lifecycle] Agent ONLINE holatga o'tdi va command poller faollashtirildi")
             return True
         else:
+            await self.poller.stop()
             logger.warning(f"[Lifecycle] Autentifikatsiya xatosi: {msg}")
             return False
+
+    async def restart(self) -> bool:
+        """Agentni xavfsiz to'xtatib, qayta ulanish (Restart)."""
+        logger.info("[Lifecycle] Agent restart boshlandi...")
+        await self.poller.stop()
+        await self.heartbeat.stop()
+        return await self._authenticate_and_connect()
 
     async def run_forever(self):
         """Asosiy sikl: to'xtatish signali kelgunga qadar yoki qayta ulanishni boshqarish"""
         while self._is_running and not self._shutdown_event.is_set():
             if self.heartbeat.state == AgentState.REVOKED:
                 logger.critical("[Lifecycle] Qurilma bekor qilingan (REVOKED). Agent to'xtatilmoqda.")
+                await self.poller.stop()
                 break
 
             # Agar aloqa uzilgan yoki degradatsiyalangan bo'lsa, qayta ulanish
             if self.heartbeat.state in (AgentState.CONNECTING, AgentState.DEGRADED, AgentState.INITIALIZING):
+                await self.poller.stop()
                 delay = calculate_backoff(self._reconnect_attempts)
                 self._audit.log_event(
                     event_type=RemoteEventType.RECONNECT_STARTED,
@@ -180,17 +200,35 @@ class AgentLifecycleManager:
         self._shutdown_event.set()
         self._is_running = False
 
-        # 1. Heartbeat to'xtatish
-        await self.heartbeat.stop()
+        # 1. Command poller to'xtatish (yangi buyruqlar qabul qilinmaydi)
+        try:
+            await self.poller.stop()
+        except Exception as e:
+            logger.warning(f"[Lifecycle] Poller to'xtatishda xatolik: {e}")
 
-        # 2. Transport sessiyasini yopish
-        await self.transport.close()
+        # 2. Heartbeat to'xtatish
+        try:
+            await self.heartbeat.stop()
+        except Exception as e:
+            logger.warning(f"[Lifecycle] Heartbeat to'xtatishda xatolik: {e}")
 
-        # 3. Xotiradagi maxfiy kalitlarni tozalash (Memory wiping)
-        self.crypto.clean_memory()
+        # 3. Transport sessiyasini yopish
+        try:
+            await self.transport.close()
+        except Exception as e:
+            logger.warning(f"[Lifecycle] Transport yopishda xatolik: {e}")
 
-        # 4. Crash recovery bayrog'ini toza yopish (clean_exit=True)
-        self.recovery.on_clean_shutdown(self.device_id)
+        # 4. Xotiradagi maxfiy kalitlarni tozalash (Memory wiping)
+        try:
+            self.crypto.clean_memory()
+        except Exception as e:
+            logger.warning(f"[Lifecycle] Crypto xotirasini tozalashda xatolik: {e}")
+
+        # 5. Crash recovery bayrog'ini toza yopish (clean_exit=True)
+        try:
+            self.recovery.on_clean_shutdown(self.device_id)
+        except Exception as e:
+            logger.warning(f"[Lifecycle] Recovery clean shutdown belgilashda xatolik: {e}")
 
         self._audit.log_event(
             event_type=RemoteEventType.AGENT_STOPPED,
