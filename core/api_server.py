@@ -2711,14 +2711,37 @@ async def handle_plugins_update(request):
 
 
 async def handle_plugins_execute(request):
-    """POST /api/plugins/execute - Toolni bevosita chaqirib sinash"""
+    """POST /api/plugins/execute - Toolni bevosita chaqirib sinash (Vakolatli xavfsizlik va session token himoyasi bilan)"""
     try:
         body = await request.json()
     except Exception:
         return web.json_response({"ok": False, "error": "Noto'g'ri JSON formati"}, status=400)
 
+    from core.tools.security_policy import verify_internal_api_request, get_security_policy
+    from core.tools.runner import get_tool_runner
+    from core.tools.contract import ToolContract2
+    from core.intelligence.types import RiskLevel
+
+    headers = dict(request.headers)
+    origin = headers.get("Origin") or headers.get("origin") or ""
+    referer = headers.get("Referer") or headers.get("referer") or ""
+    user_agent = headers.get("User-Agent") or headers.get("user-agent") or ""
+
+    # 1. 127.0.0.1 lokal chaqiruvchini suiiste'mol qilishdan himoyalash
+    is_authorized = verify_internal_api_request(headers, body)
+    is_local_frontend = any(o in origin.lower() for o in ("tauri://", "localhost:5173", "localhost:1420", "127.0.0.1:5173", "127.0.0.1:1420")) or any(r in referer.lower() for r in ("tauri://", "localhost:5173", "localhost:1420", "127.0.0.1:5173", "127.0.0.1:1420"))
+
+    if not is_authorized and not is_local_frontend:
+        logger.warning(f"[API Server] Ruxsatsiz lokal processdan /api/plugins/execute chaqiruvi rad etildi (Origin: '{origin}', User-Agent: '{user_agent}')")
+        return web.json_response({
+            "ok": False,
+            "error": "UNAUTHORIZED_LOCAL_CALLER",
+            "message": "Ushbu endpointga faqat vakolatli Misa Desktop sessiyasi murojaat qilishi mumkin"
+        }, status=403)
+
     tool_name = body.get("name", "").strip()
-    params = body.get("params", {})
+    params = body.get("params", {}) or {}
+    confirmation_token = body.get("confirmation_token")
 
     if not tool_name:
         return web.json_response({"ok": False, "error": "Tool nomi ko'rsatilmadi"}, status=400)
@@ -2727,18 +2750,60 @@ async def handle_plugins_execute(request):
     if not tools:
         return web.json_response({"ok": False, "error": "Tools registry mavjud emas"}, status=500)
 
-    loop = asyncio.get_running_loop()
-    
-    def _call():
-        return tools.call(tool_name, **params)
+    # 2. Asbobni qidirish
+    tool_contract = None
+    if hasattr(tools, "get_tool"):
+        tool_contract = tools.get_tool(tool_name)
+    elif hasattr(tools, "get"):
+        tool_contract = tools.get(tool_name)
 
-    res = await loop.run_in_executor(None, _call)
+    if not tool_contract:
+        return web.json_response({"ok": False, "error": f"Tool '{tool_name}' topilmadi"}, status=404)
+
+    # Agar eski Tool obyekt bo'lsa va ToolContract2 bo'lmasa, uni moslashtirish
+    if not isinstance(tool_contract, ToolContract2):
+        tool_contract = ToolContract2(
+            name=tool_name,
+            description=getattr(tool_contract, "description", ""),
+            function=getattr(tool_contract, "function", None) or getattr(tool_contract, "func", None),
+            risk_level=getattr(tool_contract, "risk_level", RiskLevel.LOW),
+            destructive=getattr(tool_contract, "destructive", False),
+            requires_confirmation=getattr(tool_contract, "requires_confirmation", False),
+            timeout=getattr(tool_contract, "timeout", 15.0)
+        )
+
+    # 3. Asbobni SafeToolRunner va Vakolatli Xavfsizlik Siyosati orqali bajarish
+    runner = get_tool_runner()
+    loop = asyncio.get_running_loop()
+
+    def _execute():
+        return runner.execute_tool(
+            tool=tool_contract,
+            params=params,
+            confirmation_token=confirmation_token
+        )
+
+    res = await loop.run_in_executor(None, _execute)
+
+    # 4. Agar tasdiqlash talab etilsa
+    if not res.success and res.error == "CONFIRMATION_REQUIRED":
+        return web.json_response({
+            "ok": False,
+            "requires_confirmation": True,
+            "error": "CONFIRMATION_REQUIRED",
+            "prompt": res.message,
+            "challenge_token": res.metadata.get("challenge_token"),
+            "risk_level": res.metadata.get("risk_level", "high"),
+            "action_class": res.metadata.get("action_class")
+        }, status=403)
+
     res_dict = res.to_dict() if hasattr(res, "to_dict") else res
     return web.json_response({
-        "ok": True,
+        "ok": res.success,
         "tool": tool_name,
-        "result": res_dict
-    })
+        "result": res_dict,
+        "error": res.error if not res.success else None
+    }, status=200 if res.success else 400)
 
 
 async def handle_tools_catalog(request):

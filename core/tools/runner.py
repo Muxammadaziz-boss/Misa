@@ -13,6 +13,8 @@ from core.intelligence.types import RiskLevel
 from core.tools.contract import ToolContract2, ToolErrorCode, ToolHealth, ToolResult
 from core.tools.validator import ParameterValidator
 
+from core.tools.security_policy import AuthoritativeSecurityPolicy, get_security_policy
+
 logger = logging.getLogger(__name__)
 
 
@@ -22,8 +24,13 @@ class SafeToolRunner:
     Noma'lum yoki nosoz asboblar tizimni to'xtatib qo'yishining oldini oladi.
     """
 
-    def __init__(self, permission_engine: Optional[PermissionEngine] = None):
+    def __init__(
+        self,
+        permission_engine: Optional[PermissionEngine] = None,
+        security_policy: Optional[AuthoritativeSecurityPolicy] = None
+    ):
         self.permission_engine = permission_engine or PermissionEngine()
+        self.security_policy = security_policy or get_security_policy()
         self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=8, thread_name_prefix="tool_worker")
 
     def execute_tool(
@@ -31,7 +38,8 @@ class SafeToolRunner:
         tool: ToolContract2,
         params: Dict[str, Any],
         trace: Optional[Any] = None,
-        bypass_permission: bool = False
+        bypass_permission: bool = False,
+        confirmation_token: Optional[str] = None
     ) -> ToolResult:
         """
         To'liq zanjir bo'yicha asbobni ishga tushirish:
@@ -88,27 +96,40 @@ class SafeToolRunner:
                 version=tool.version
             )
 
-        # 3. Ruxsatlarni tekshirish (PERMISSION)
+        # 3. Vakolatli xavfsizlik va tasdiqlash siyosati (AUTHORITATIVE SECURITY POLICY)
         if not bypass_permission:
-            risk, req_confirm, prompt = self.permission_engine.evaluate(tool_name, clean_params)
-            if req_confirm:
+            decision = self.security_policy.evaluate(
+                tool_name=tool_name,
+                tool_obj=tool,
+                params=clean_params,
+                confirmation_token=confirmation_token
+            )
+            if decision.requires_confirmation and not decision.allowed:
                 dur = (time.time() - start_time) * 1000.0
-                logger.info(f"[SafeToolRunner] '{tool_name}' uchun tasdiqlash talab etiladi (HIGH risk)")
+                risk_str = decision.risk_level.value if hasattr(decision.risk_level, "value") else str(decision.risk_level)
+                logger.info(f"[SafeToolRunner] '{tool_name}' uchun tasdiqlash talab etiladi ({risk_str} risk): {decision.reason}")
                 if trace:
                     trace.add_stage("TOOL_PERMISSION_CHECKED", status="requires_confirmation", details={
                         "tool": tool_name,
-                        "risk": risk.value,
-                        "prompt": prompt
+                        "risk": risk_str,
+                        "prompt": decision.prompt,
+                        "challenge_token": decision.challenge_token
                     })
                 return ToolResult(
                     success=False,
                     code=ToolErrorCode.PERMISSION_DENIED,
-                    message=prompt or f"'{tool_name}' amalini bajarish uchun tasdiqlash talab etiladi",
+                    message=decision.prompt or f"'{tool_name}' amalini bajarish uchun tasdiqlash talab etiladi",
                     error="CONFIRMATION_REQUIRED",
                     duration_ms=dur,
                     tool=tool_name,
                     version=tool.version,
-                    metadata={"requires_confirmation": True, "prompt": prompt, "risk_level": risk.value}
+                    metadata={
+                        "requires_confirmation": True,
+                        "prompt": decision.prompt,
+                        "risk_level": risk_str,
+                        "challenge_token": decision.challenge_token,
+                        "action_class": decision.action_class.value if hasattr(decision.action_class, "value") else str(decision.action_class)
+                    }
                 )
 
         if trace:

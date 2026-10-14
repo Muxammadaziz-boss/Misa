@@ -147,6 +147,7 @@ class ToolContract2:
     timeout: float = 10.0
     idempotent: bool = True
     destructive: bool = False
+    requires_confirmation: bool = False
     aliases: List[str] = field(default_factory=list)
     health: ToolHealth = ToolHealth.AVAILABLE
     
@@ -204,6 +205,7 @@ class ToolContract2:
             "timeout": self.timeout,
             "idempotent": self.idempotent,
             "destructive": self.destructive,
+            "requires_confirmation": self.requires_confirmation,
             "aliases": list(self.aliases),
             "health": self.health.value if isinstance(self.health, ToolHealth) else str(self.health),
             "metrics": {
