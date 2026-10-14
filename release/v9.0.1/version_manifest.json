@@ -2,13 +2,13 @@
   "app": "Misa AI",
   "version": "9.0.1",
   "version_name": "v9.0.1",
-  "release_date": "2026-10-13T17:17:43.192Z",
+  "release_date": "2026-10-14T18:13:43.971Z",
   "files": [
     {
       "name": "Misa-AI-v9.0.1.exe",
-      "size_bytes": 5300224,
-      "size_mb": 5.05,
-      "sha256": "2f0aee20057891691a053c984b1b79390e092b53209da9656e0f65e2795a39a2"
+      "size_bytes": 5439488,
+      "size_mb": 5.19,
+      "sha256": "5f44360eb7515f2eec51696b3bd39ed1d048a9aee5bbf781a8115a29df706a9f"
     },
     {
       "name": "WebView2Loader.dll",
@@ -18,15 +18,15 @@
     },
     {
       "name": "Misa-AI-v9.0.1.msi",
-      "size_bytes": 21012480,
-      "size_mb": 20.04,
-      "sha256": "47a43a9ee136c3cf27f04eed0e0b85baf4de70e13a6695dc0b620bc55133296f"
+      "size_bytes": 21082112,
+      "size_mb": 20.11,
+      "sha256": "cdd6af5675c7d23f1db65ee80e628ff59f4fca65d514484bc2d506eb26ee7c43"
     },
     {
       "name": "Misa-AI-Setup-v9.0.1.exe",
-      "size_bytes": 20215488,
-      "size_mb": 19.28,
-      "sha256": "83f4b02d7394b7eb6452d9661136bd7f05c929fb15c8b13a388849a318248aa0"
+      "size_bytes": 20258049,
+      "size_mb": 19.32,
+      "sha256": "ec5972e79b31225bb69c193795d0106f884d9d53cc7896302f8dc53a14fbc17c"
     },
     {
       "name": "MicrosoftEdgeWebview2Setup.exe",
@@ -36,9 +36,9 @@
     },
     {
       "name": "Misa-AI-v9.0.1-Portable.zip",
-      "size_bytes": 262116097,
-      "size_mb": 249.97,
-      "sha256": "7d6e5add37000bf8dce08f9eb4f67c5aaab4d4ad22fdee30624b6d3834178305"
+      "size_bytes": 262180334,
+      "size_mb": 250.03,
+      "sha256": "5100d2b444b2e030e19eced797395a2b514376ce0dc2f88f406c2a604d23596b"
     }
   ],
   "backend": {

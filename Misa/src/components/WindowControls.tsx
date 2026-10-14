@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { MinimizeIcon, MaximizeIcon, RestoreIcon, CloseIcon } from "./icons/Icons";
 
 interface WindowControlsProps {
@@ -75,17 +75,26 @@ export const WindowControls: React.FC<WindowControlsProps> = ({ className = "" }
     }
   };
 
+  const isClosingRef = useRef(false);
+
   const handleClose = async () => {
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
     try {
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("app_close");
     } catch {
       try {
         const { getCurrentWindow } = await import("@tauri-apps/api/window");
-        await getCurrentWindow().close();
+        await getCurrentWindow().hide();
       } catch (err) {
-        console.error("[WindowControls] Close error:", err);
+        console.error("[WindowControls] Hide to tray error:", err);
       }
+    } finally {
+      // 500ms dan so'ng yana bosish imkonini beramiz
+      setTimeout(() => {
+        isClosingRef.current = false;
+      }, 500);
     }
   };
 

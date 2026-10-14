@@ -450,7 +450,7 @@ class MicrophoneManager:
     def start_realtime_monitor(
         self,
         device_id: Optional[str] = None,
-        enable_loopback: bool = True,
+        enable_loopback: bool = False,
         broadcast_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> Dict[str, Any]:
         """Mikrofonni real-time audio capture va loopback monitoring rejimida ishga tushirish"""
@@ -512,7 +512,7 @@ class RealtimeAudioMonitor:
     def start(
         self,
         device_id: Optional[str] = None,
-        enable_loopback: bool = True,
+        enable_loopback: bool = False,
         broadcast_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> Dict[str, Any]:
         with self._stream_lock:

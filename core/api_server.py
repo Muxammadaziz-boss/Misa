@@ -596,7 +596,7 @@ async def handle_chat(request):
     except Exception:
         return web.json_response({"ok": False, "error": "Noto'g'ri JSON formati"}, status=400)
 
-    text = (body.get("text") or body.get("query") or "").strip()
+    text = (body.get("text") or body.get("query") or body.get("message") or "").strip()
     image_data = body.get("image") or body.get("image_base64") or body.get("image_url")
     mode = body.get("mode", "ask")
     speak_param = body.get("speak")
@@ -1294,7 +1294,7 @@ async def handle_voice_device_monitor_start(request):
             except Exception:
                 data = {}
         device_id = data.get("device_id") or request.query.get("device_id")
-        enable_loopback = data.get("loopback", True)
+        enable_loopback = data.get("loopback", False)
         if isinstance(enable_loopback, str):
             enable_loopback = enable_loopback.lower() in ("true", "1", "yes")
 
@@ -6611,12 +6611,15 @@ _AUTH_EXEMPT_PATHS = frozenset({
     "/api/auth/forgot-password", "/api/auth/verify-email",
     "/api/auth/reset-password",
     "/api/devices/pairing/complete",
+    "/api/ai/providers",
+    "/api/ai/config",
     "/api/ws",
 })
 
 _AUTH_EXEMPT_PREFIXES = (
     "/telegram/webhook",
     "/webhook/telegram/",
+    "/api/voice/",
 )
 
 def _is_production_mode() -> bool:

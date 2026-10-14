@@ -99,8 +99,8 @@ const renderCommandIcon = (iconName: string, size = 16, color = "currentColor") 
   }
 };
 
-const getCategoryColor = (category: string) => {
-  switch (category.toLowerCase()) {
+const getCategoryColor = (category?: string) => {
+  switch (String(category || "").toLowerCase()) {
     case "tizim":
       return { bg: "rgba(59, 130, 246, 0.12)", text: "#60a5fa", border: "rgba(59, 130, 246, 0.25)" };
     case "ilovalar":
@@ -552,9 +552,9 @@ export const CommandsPage: React.FC<CommandsPageProps> = ({ onNavigateHome }) =>
 
   // Pre-index commands for instant multi-term search
   const indexedCommands = useMemo(() => {
-    return commands.map((c) => ({
+    return commands.filter(Boolean).map((c) => ({
       ...c,
-      _searchIndex: `${c.name} ${c.query} ${c.desc} ${c.category} ${c.tool_name || ""}`.toLowerCase(),
+      _searchIndex: `${c.name || ""} ${c.query || ""} ${c.desc || ""} ${c.category || ""} ${c.tool_name || ""}`.toLowerCase(),
     }));
   }, [commands]);
 
@@ -562,7 +562,9 @@ export const CommandsPage: React.FC<CommandsPageProps> = ({ onNavigateHome }) =>
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = { Barchasi: commands.length };
     for (const cmd of commands) {
-      counts[cmd.category] = (counts[cmd.category] || 0) + 1;
+      if (!cmd) continue;
+      const cat = cmd.category || "Barchasi";
+      counts[cat] = (counts[cat] || 0) + 1;
     }
     return counts;
   }, [commands]);

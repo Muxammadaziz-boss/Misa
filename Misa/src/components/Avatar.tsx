@@ -38,13 +38,14 @@ export const Avatar: React.FC<AvatarProps> = ({
   const resolvedInitials =
     initials ||
     (name
-      ? name
+      ? String(name)
           .trim()
           .split(/\s+/)
-          .map((p) => p[0])
+          .filter(Boolean)
+          .map((p) => p[0] || "")
           .join("")
           .slice(0, 2)
-          .toUpperCase()
+          .toUpperCase() || "U"
       : "U");
   const resolvedSize = typeof size === "number" ? size : size === "sm" ? 28 : size === "lg" ? 64 : 36;
 

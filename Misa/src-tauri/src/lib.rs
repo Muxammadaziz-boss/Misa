@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tauri::Manager;
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -21,6 +22,23 @@ pub use preflight::{run_native_preflight, check_webview2_installed_version, find
 pub mod network_diag;
 pub use network_diag::{run_full_diagnostics, NetworkDiagnosticReport};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum AppLifecycleState {
+    Starting,
+    Ready,
+    Visible,
+    HiddenToTray,
+    Restoring,
+    ShuttingDown,
+    Exited,
+}
+
+impl Default for AppLifecycleState {
+    fn default() -> Self {
+        AppLifecycleState::Starting
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct SupervisorState {
     pub backend_child: Arc<Mutex<Option<Child>>>,
@@ -29,6 +47,7 @@ pub struct SupervisorState {
     pub is_spawning: Arc<Mutex<bool>>,
     pub spawn_attempts: Arc<Mutex<u32>>,
     pub is_permanently_failed: Arc<Mutex<bool>>,
+    pub lifecycle_state: Arc<Mutex<AppLifecycleState>>,
 }
 
 #[cfg(target_os = "windows")]
@@ -52,6 +71,7 @@ impl SingleInstanceGuard {
         }
 
         const ERROR_ALREADY_EXISTS: u32 = 183;
+        const SW_SHOW: i32 = 5;
         const SW_RESTORE: i32 = 9;
 
         startup_log("SINGLE_INSTANCE", &format!("Acquiring mutex: {}", name));
@@ -73,6 +93,7 @@ impl SingleInstanceGuard {
             startup_log("SINGLE_INSTANCE", &format!("FindWindowW('MISA AI v9.0.1') returned HWND=0x{:X}", hwnd));
             if hwnd != 0 {
                 unsafe {
+                    ShowWindow(hwnd, SW_SHOW);
                     ShowWindow(hwnd, SW_RESTORE);
                     SetForegroundWindow(hwnd);
                 }
@@ -531,8 +552,45 @@ fn app_toggle_maximize(window: tauri::Window) -> Result<bool, String> {
 
 #[tauri::command]
 fn app_close(window: tauri::Window, state: tauri::State<SupervisorState>) -> Result<(), String> {
+    startup_log("UI", "app_close invoked -> Hiding window to system tray (Idempotent)");
+    let mut lc = state.lifecycle_state.lock().map_err(|e| e.to_string())?;
+    if *lc == AppLifecycleState::HiddenToTray {
+        startup_log("UI", "Window is already in HiddenToTray state, ignoring duplicate call.");
+        return Ok(());
+    }
+    *lc = AppLifecycleState::HiddenToTray;
+    drop(lc);
+    window.hide().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn app_exit(app_handle: tauri::AppHandle, state: tauri::State<SupervisorState>) -> Result<(), String> {
+    startup_log("UI", "app_exit invoked -> Stopping backend and exiting application...");
+    let mut lc = state.lifecycle_state.lock().map_err(|e| e.to_string())?;
+    if *lc == AppLifecycleState::ShuttingDown || *lc == AppLifecycleState::Exited {
+        return Ok(());
+    }
+    *lc = AppLifecycleState::ShuttingDown;
+    drop(lc);
     stop_backend(&state);
-    window.close().map_err(|e| e.to_string())
+    app_handle.exit(0);
+    Ok(())
+}
+
+#[tauri::command]
+fn app_show_from_tray(window: tauri::Window, state: tauri::State<SupervisorState>) -> Result<(), String> {
+    let mut lc = state.lifecycle_state.lock().map_err(|e| e.to_string())?;
+    *lc = AppLifecycleState::Visible;
+    drop(lc);
+    window.show().map_err(|e| e.to_string())?;
+    window.unminimize().map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn app_get_lifecycle_state(state: tauri::State<SupervisorState>) -> String {
+    let lc = state.lifecycle_state.lock().map(|s| *s).unwrap_or(AppLifecycleState::Starting);
+    format!("{:?}", lc)
 }
 
 #[tauri::command]
@@ -1010,7 +1068,6 @@ pub fn run() {
 
     // 5. Tauri App Builder
     let state_for_setup = supervisor_state.clone();
-    let state_for_window = supervisor_state.clone();
     let state_for_exit = supervisor_state.clone();
     let state_for_build_err = supervisor_state.clone();
 
@@ -1020,8 +1077,14 @@ pub fn run() {
         .manage(supervisor_state)
         .setup(move |app| {
             use tauri::Manager;
+            use tauri::Emitter;
+            use tauri::menu::{Menu, MenuItem};
+            use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState};
+
             startup_log("TAURI", "setup hook entered");
-            println!("[UI] Tauri asosiy oynasi sozlanmoqda...");
+            println!("[UI] Tauri asosiy oynasi va System Tray sozlanmoqda...");
+
+            // 1. Asosiy oyna holatini yangilash
             if let Some(win) = app.get_webview_window("main") {
                 startup_log("TAURI", "Main webview window found in setup hook");
                 let is_vis = win.is_visible().unwrap_or(false);
@@ -1034,18 +1097,142 @@ pub fn run() {
             } else {
                 startup_log("TAURI", "WARNING: Webview window 'main' NOT found via get_webview_window('main')!");
             }
+
+            // 2. Lifecycle holatini Visible ga o'tkazish
+            if let Some(state) = app.try_state::<SupervisorState>() {
+                if let Ok(mut lc) = state.lifecycle_state.lock() {
+                    *lc = AppLifecycleState::Visible;
+                }
+            }
+
+            // 3. System Tray Menyu yaratish
+            let show_item = MenuItem::with_id(app, "tray_show", "Ochish", true, None::<&str>)?;
+            let pause_item = MenuItem::with_id(app, "tray_pause", "Tinglashni pauza qilish", true, None::<&str>)?;
+            let resume_item = MenuItem::with_id(app, "tray_resume", "Tinglashni davom ettirish", true, None::<&str>)?;
+            let settings_item = MenuItem::with_id(app, "tray_settings", "Sozlamalar", true, None::<&str>)?;
+            let exit_item = MenuItem::with_id(app, "tray_exit", "Chiqish", true, None::<&str>)?;
+
+            let tray_menu = Menu::with_items(app, &[
+                &show_item,
+                &pause_item,
+                &resume_item,
+                &settings_item,
+                &exit_item,
+            ])?;
+
+            let mut tray_builder = TrayIconBuilder::with_id("misa_main_tray")
+                .menu(&tray_menu)
+                .tooltip("Misa AI v9.0.1")
+                .show_menu_on_left_click(false);
+
+            if let Some(icon) = app.default_window_icon() {
+                tray_builder = tray_builder.icon(icon.clone());
+            }
+
+            let _tray = tray_builder
+                .on_menu_event(move |app_handle, event| {
+                    let id_str = event.id().as_ref();
+                    startup_log("TRAY", &format!("Tray menu event: {}", id_str));
+                    match id_str {
+                        "tray_show" => {
+                            if let Some(win) = app_handle.get_webview_window("main") {
+                                let _ = win.show();
+                                let _ = win.unminimize();
+                                let _ = win.set_focus();
+                                if let Some(state) = app_handle.try_state::<SupervisorState>() {
+                                    if let Ok(mut lc) = state.lifecycle_state.lock() {
+                                        *lc = AppLifecycleState::Visible;
+                                    }
+                                }
+                            }
+                        }
+                        "tray_pause" => {
+                            let _ = app_handle.emit("misa_tray_command", "pause_listening");
+                        }
+                        "tray_resume" => {
+                            let _ = app_handle.emit("misa_tray_command", "resume_listening");
+                        }
+                        "tray_settings" => {
+                            if let Some(win) = app_handle.get_webview_window("main") {
+                                let _ = win.show();
+                                let _ = win.unminimize();
+                                let _ = win.set_focus();
+                                let _ = app_handle.emit("misa_navigate", "/account");
+                                if let Some(state) = app_handle.try_state::<SupervisorState>() {
+                                    if let Ok(mut lc) = state.lifecycle_state.lock() {
+                                        *lc = AppLifecycleState::Visible;
+                                    }
+                                }
+                            }
+                        }
+                        "tray_exit" => {
+                            startup_log("TRAY", "Tray Exit bosildi -> Backend to'xtatilib dastur yopilmoqda...");
+                            if let Some(state) = app_handle.try_state::<SupervisorState>() {
+                                let mut do_exit = false;
+                                if let Ok(mut lc) = state.lifecycle_state.lock() {
+                                    if *lc != AppLifecycleState::ShuttingDown && *lc != AppLifecycleState::Exited {
+                                        *lc = AppLifecycleState::ShuttingDown;
+                                        do_exit = true;
+                                    }
+                                }
+                                if do_exit {
+                                    stop_backend(&state);
+                                    app_handle.exit(0);
+                                }
+                            } else {
+                                app_handle.exit(0);
+                            }
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                        let app = tray.app_handle();
+                        if let Some(win) = app.get_webview_window("main") {
+                            let is_vis = win.is_visible().unwrap_or(false);
+                            if is_vis {
+                                let _ = win.set_focus();
+                            } else {
+                                let _ = win.show();
+                                let _ = win.unminimize();
+                                let _ = win.set_focus();
+                                if let Some(state) = app.try_state::<SupervisorState>() {
+                                    if let Ok(mut lc) = state.lifecycle_state.lock() {
+                                        *lc = AppLifecycleState::Visible;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                })
+                .build(app)?;
+
+            startup_log("TRAY", "System Tray muvaffaqiyatli yaratildi va ro'yxatdan o'tdi ✓");
+
+            // 4. Backend nazoratchi oqimini boshlash
             std::thread::spawn(move || {
                 startup_log("BACKEND", "Starting managed backend supervisor thread...");
                 ensure_backend_running(&state_for_setup);
             });
             Ok(())
         })
-        .on_window_event(move |_window, event| {
-            startup_log("TAURI_WINDOW", &format!("Window event received: {:?}", event));
-            if let tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed = event {
-                startup_log("TAURI_WINDOW", "Window CloseRequested or Destroyed. Stopping backend...");
-                println!("[UI] Oyna yopilish so'rovi qabul qilindi. Backend to'xtatilmoqda...");
-                stop_backend(&state_for_window);
+        .on_window_event(move |window, event| {
+            match event {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    startup_log("TAURI_WINDOW", "CloseRequested qabul qilindi -> Chiqish bekor qilindi, oyna trayga yashirilmoqda.");
+                    api.prevent_close();
+                    if let Some(state) = window.try_state::<SupervisorState>() {
+                        if let Ok(mut lc) = state.lifecycle_state.lock() {
+                            if *lc == AppLifecycleState::HiddenToTray {
+                                return;
+                            }
+                            *lc = AppLifecycleState::HiddenToTray;
+                        }
+                    }
+                    let _ = window.hide();
+                }
+                _ => {}
             }
         })
         .plugin(tauri_plugin_opener::init())
@@ -1054,6 +1241,9 @@ pub fn run() {
             app_minimize,
             app_toggle_maximize,
             app_close,
+            app_exit,
+            app_show_from_tray,
+            app_get_lifecycle_state,
             app_is_maximized,
             app_start_resize,
             backend_get_status,
@@ -1093,9 +1283,21 @@ pub fn run() {
             tauri::RunEvent::Resumed => {
                 startup_log("TAURI", "RunEvent::Resumed received");
             }
-            tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
-                startup_log("TAURI", &format!("RunEvent Exit: {:?}", event));
-                println!("[SHUTDOWN] Ilovadan chiqish hodisasi. Backend to'xtatilmoqda...");
+            tauri::RunEvent::ExitRequested { api, .. } => {
+                // Agar foydalanuvchi menyudan 'Chiqish' ni tanlamagan bo'lsa (masalan oyna yashiringanda), jarayonni to'xtatmaymiz!
+                if let Some(state) = _app_handle.try_state::<SupervisorState>() {
+                    let is_shutting_down = state.lifecycle_state.lock().map(|lc| *lc == AppLifecycleState::ShuttingDown).unwrap_or(false);
+                    if !is_shutting_down {
+                        startup_log("TAURI", "ExitRequested received while in Tray mode. Preventing exit.");
+                        api.prevent_exit();
+                        return;
+                    }
+                }
+                startup_log("TAURI", "ExitRequested confirmed in ShuttingDown state. Stopping backend...");
+                stop_backend(&state_for_exit);
+            }
+            tauri::RunEvent::Exit => {
+                startup_log("TAURI", "RunEvent::Exit received. Ensuring backend stopped...");
                 stop_backend(&state_for_exit);
             }
             _ => {}

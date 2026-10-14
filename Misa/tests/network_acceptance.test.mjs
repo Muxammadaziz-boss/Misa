@@ -39,8 +39,18 @@ function isLocalhost(url) {
   }
 }
 
+function isTauriRuntime(win) {
+  if (!win) return false;
+  return Boolean(
+    win.__TAURI_INTERNALS__ ||
+    win.__TAURI__ ||
+    (win.navigator && win.navigator.userAgent && win.navigator.userAgent.includes('Tauri'))
+  );
+}
+
 function resolveApiBaseTest(win, env = {}) {
   const envUrl = (env.VITE_API_URL || '').trim();
+  const isTauri = isTauriRuntime(win);
 
   if (win && win.localStorage) {
     let storedCustom = '';
@@ -62,42 +72,46 @@ function resolveApiBaseTest(win, env = {}) {
     }
   }
 
-  if (envUrl && !isLocalhost(envUrl)) {
+  // Desktop Tauri application connects directly to local backend for Windows audio/hardware
+  if (isTauri) {
+    return LOCAL_BACKEND_URL;
+  }
+
+  if (envUrl) {
     return envUrl.replace(/\/$/, '');
   }
 
   return PRODUCTION_API_URL;
 }
 
-test('Clean PC: First launch with zero localStorage defaults to Cloud Production URL', () => {
+test('Tauri Desktop: Defaults to Local Backend URL for Windows hardware and audio stack', () => {
   const win = createMockWindow();
+  const resolved = resolveApiBaseTest(win);
+  assert.equal(resolved, 'http://127.0.0.1:18420');
+});
+
+test('Web Browser: Clean PC without Tauri defaults to Cloud Production URL', () => {
+  const win = { location: { protocol: 'https:', hostname: 'misa.ai' }, localStorage: { getItem: () => null } };
   const resolved = resolveApiBaseTest(win, { VITE_API_URL: 'https://misa.up.railway.app' });
   assert.equal(resolved, 'https://misa.up.railway.app');
-  assert.notEqual(resolved, 'http://127.0.0.1:18420');
 });
 
-test('Clean PC: Even if legacy env had localhost, clean PC still defaults to Cloud URL', () => {
-  const win = createMockWindow();
-  const resolved = resolveApiBaseTest(win, { VITE_API_URL: 'http://127.0.0.1:18420' });
-  assert.equal(resolved, 'https://misa.up.railway.app');
-});
-
-test('Mode Switching: Cloud -> Local -> Cloud', () => {
+test('Mode Switching: Local (Default) -> Cloud -> Local', () => {
   const win = createMockWindow();
 
-  // 1. Initial
+  // 1. Initial Desktop default
   let resolved = resolveApiBaseTest(win);
-  assert.equal(resolved, 'https://misa.up.railway.app');
-
-  // 2. User switches to Local mode
-  win.localStorage.setItem('misa_server_mode', 'local');
-  resolved = resolveApiBaseTest(win);
   assert.equal(resolved, 'http://127.0.0.1:18420');
 
-  // 3. User switches back to Cloud mode
+  // 2. User switches to Cloud mode
   win.localStorage.setItem('misa_server_mode', 'cloud');
   resolved = resolveApiBaseTest(win);
   assert.equal(resolved, 'https://misa.up.railway.app');
+
+  // 3. User switches back to Local mode
+  win.localStorage.setItem('misa_server_mode', 'local');
+  resolved = resolveApiBaseTest(win);
+  assert.equal(resolved, 'http://127.0.0.1:18420');
 });
 
 test('Custom URL Mode: Setting and clearing custom endpoint', () => {

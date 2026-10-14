@@ -221,19 +221,21 @@ export const RemoteControlPage: React.FC<RemoteControlPageProps> = () => {
   const allPermItems: PermissionDefinitionItem[] = Object.values(catalog).flat();
 
   const filteredPermItems = allPermItems.filter((item) => {
+    if (!item) return false;
     const matchesCat = selectedCategory === "all" || item.category === selectedCategory;
+    const q = (searchQuery || "").trim().toLowerCase();
     const matchesSearch =
-      searchQuery.trim() === "" ||
-      item.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.description.toLowerCase().includes(searchQuery.toLowerCase());
+      q === "" ||
+      String(item.id || "").toLowerCase().includes(q) ||
+      String(item.name || "").toLowerCase().includes(q) ||
+      String(item.description || "").toLowerCase().includes(q);
     return matchesCat && matchesSearch;
   });
 
-  const selectedDevice = devices.find((d) => d.device_id === selectedDeviceId) || devices[0];
+  const selectedDevice = devices.find((d) => d && (d.device_id === selectedDeviceId || d.id === selectedDeviceId)) || devices[0];
 
   const getDangerBadge = (level: string) => {
-    switch (level) {
+    switch (String(level || "safe").toLowerCase()) {
       case "critical":
         return { label: "Kritik", bg: "rgba(239, 68, 68, 0.15)", text: "#EF4444", border: "rgba(239, 68, 68, 0.3)" };
       case "high":
@@ -372,7 +374,9 @@ export const RemoteControlPage: React.FC<RemoteControlPageProps> = () => {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <CpuIcon size={18} color="#10B981" />
-              <h2 style={{ fontSize: "15px", fontWeight: 600, margin: 0 }}>Faol Windows PC Agent</h2>
+              <h2 style={{ fontSize: "15px", fontWeight: 600, margin: 0 }}>
+                {selectedDevice ? (selectedDevice.hostname || selectedDevice.name || "Faol Windows PC Agent") : "Qurilmalar Boshqaruvi"}
+              </h2>
             </div>
             {selectedDevice && (
               <span
@@ -384,9 +388,9 @@ export const RemoteControlPage: React.FC<RemoteControlPageProps> = () => {
                   fontWeight: 600,
                   padding: "3px 10px",
                   borderRadius: "20px",
-                  background: selectedDevice.state === "online" ? "rgba(16, 185, 129, 0.15)" : "rgba(148, 163, 184, 0.15)",
-                  color: selectedDevice.state === "online" ? "#10B981" : "#94A3B8",
-                  border: `1px solid ${selectedDevice.state === "online" ? "rgba(16, 185, 129, 0.3)" : "rgba(148, 163, 184, 0.3)"}`,
+                  background: (selectedDevice.state || selectedDevice.status) === "online" ? "rgba(16, 185, 129, 0.15)" : "rgba(148, 163, 184, 0.15)",
+                  color: (selectedDevice.state || selectedDevice.status) === "online" ? "#10B981" : "#94A3B8",
+                  border: `1px solid ${(selectedDevice.state || selectedDevice.status) === "online" ? "rgba(16, 185, 129, 0.3)" : "rgba(148, 163, 184, 0.3)"}`,
                 }}
               >
                 <span
@@ -394,10 +398,10 @@ export const RemoteControlPage: React.FC<RemoteControlPageProps> = () => {
                     width: "6px",
                     height: "6px",
                     borderRadius: "50%",
-                    background: selectedDevice.state === "online" ? "#10B981" : "#94A3B8",
+                    background: (selectedDevice.state || selectedDevice.status) === "online" ? "#10B981" : "#94A3B8",
                   }}
                 />
-                {selectedDevice.state.toUpperCase()}
+                {String(selectedDevice.state || selectedDevice.status || "online").toUpperCase()}
               </span>
             )}
           </div>
@@ -406,11 +410,11 @@ export const RemoteControlPage: React.FC<RemoteControlPageProps> = () => {
             <div style={{ display: "flex", flexDirection: "column", gap: "10px", fontSize: "13px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid rgba(255, 255, 255, 0.05)" }}>
                 <span style={{ color: "var(--text-muted, #94A3B8)" }}>Hostname:</span>
-                <span style={{ fontWeight: 600, fontFamily: "monospace" }}>{selectedDevice.hostname}</span>
+                <span style={{ fontWeight: 600, fontFamily: "monospace" }}>{selectedDevice.hostname || selectedDevice.name || "Noma'lum"}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid rgba(255, 255, 255, 0.05)" }}>
                 <span style={{ color: "var(--text-muted, #94A3B8)" }}>Operatsion Tizim:</span>
-                <span>{selectedDevice.os}</span>
+                <span>{selectedDevice.os || "Windows"}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid rgba(255, 255, 255, 0.05)" }}>
                 <span style={{ color: "var(--text-muted, #94A3B8)" }}>IP & MAC:</span>
@@ -423,7 +427,7 @@ export const RemoteControlPage: React.FC<RemoteControlPageProps> = () => {
             </div>
           ) : (
             <div style={{ padding: "20px", textAlign: "center", color: "var(--text-muted, #94A3B8)" }}>
-              Hech qanday qurilma ulanmagan
+              Hozircha masofaviy qurilma ulanmagan
             </div>
           )}
         </div>
@@ -875,24 +879,37 @@ export const RemoteControlPage: React.FC<RemoteControlPageProps> = () => {
               </thead>
               <tbody>
                 {auditEvents.slice(0, 15).map((evt, idx) => {
-                  const isOk = evt.status === "success" || evt.status === "authorized";
-                  const isDenied = evt.status === "denied" || evt.status === "failed";
+                  const statusStr = String(
+                    evt?.status ||
+                    (evt?.details as any)?.status ||
+                    (String(evt?.event_type || "").toUpperCase().includes("DENIED") ? "denied" : String(evt?.event_type || "").toUpperCase().includes("SUCCESS") ? "success" : "info")
+                  ).toLowerCase();
+                  const isOk = statusStr === "success" || statusStr === "authorized" || statusStr === "online";
+                  const isDenied = statusStr === "denied" || statusStr === "failed" || statusStr === "error";
+
+                  let timeStr = "--:--:--";
+                  try {
+                    if (evt?.timestamp) {
+                      const t = typeof evt.timestamp === "number" ? evt.timestamp * 1000 : evt.timestamp;
+                      timeStr = new Date(t).toLocaleTimeString();
+                    }
+                  } catch {}
 
                   return (
                     <tr
-                      key={evt.event_id || idx}
+                      key={evt?.event_id || evt?.id || idx}
                       style={{
                         borderBottom: "1px solid rgba(255, 255, 255, 0.04)",
                       }}
                     >
                       <td style={{ padding: "10px 12px", fontFamily: "monospace", color: "#94A3B8" }}>
-                        {new Date(evt.timestamp).toLocaleTimeString()}
+                        {timeStr}
                       </td>
                       <td style={{ padding: "10px 12px", fontWeight: 600, color: "#F8FAFC" }}>
-                        {evt.event_type}
+                        {evt?.event_type || "EVENT"}
                       </td>
                       <td style={{ padding: "10px 12px", fontFamily: "monospace" }}>
-                        {evt.telegram_user_id || "N/A"}
+                        {evt?.telegram_user_id || "N/A"}
                       </td>
                       <td style={{ padding: "10px 12px" }}>
                         <span
@@ -905,11 +922,11 @@ export const RemoteControlPage: React.FC<RemoteControlPageProps> = () => {
                             fontWeight: 600,
                           }}
                         >
-                          {evt.status.toUpperCase()}
+                          {statusStr.toUpperCase()}
                         </span>
                       </td>
                       <td style={{ padding: "10px 12px", color: "var(--text-muted, #94A3B8)", fontFamily: "monospace" }}>
-                        {JSON.stringify(evt.details || {})}
+                        {JSON.stringify(evt?.details || {})}
                       </td>
                     </tr>
                   );

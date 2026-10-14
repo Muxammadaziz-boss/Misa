@@ -18,10 +18,19 @@ from core.api_server import create_app
 
 class TestAIKeyManager(unittest.TestCase if hasattr(__import__('unittest'), 'TestCase') else object):
     def setUp(self):
+        self.env_patcher = patch.dict(os.environ, {
+            "GEMINI_API_KEY": "",
+            "GOOGLE_API_KEY": "",
+            "MISA_GEMINI_API_KEY": ""
+        }, clear=False)
+        self.env_patcher.start()
         self.mgr = AIKeyManager()
         self.mgr._system_keys = {"gemini": [], "openrouter": []}
         self.mgr._user_keys = {}
         self.mgr._key_cooldowns = {}
+
+    def tearDown(self):
+        self.env_patcher.stop()
 
     def test_register_and_get_system_key(self):
         self.mgr.register_system_key("gemini", "AIzaSyTestSystemKey1")

@@ -493,17 +493,22 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       }
       const res = await backendService.getAudioInputDevices(refresh);
       if (res.ok) {
-        setAudioDevices(res.devices || []);
+        const devs = res.devices || [];
+        setAudioDevices(devs);
         setSelectedMicId(res.selected_device_id || "default");
         setSelectedMicName(res.selected_device_name || "Tizim standarti");
-        setMicStatusText(res.message || "Ulangan / Ishlamoqda");
+        if (devs.length === 0) {
+          setMicStatusText("Mikrofonlarni aniqlab bo'lmadi");
+        } else {
+          setMicStatusText(res.message || "Ulangan / Ishlamoqda");
+        }
         setMicFallbackUsed(!!res.fallback_used);
       } else {
-        const errorMsg = normalizeApiError(res.error, "Mikrofon qurilmalarini yuklab bo'lmadi");
+        const errorMsg = normalizeApiError(res.error, "Mikrofonlarni aniqlab bo'lmadi");
         setMicStatusText(errorMsg);
       }
     } catch (err) {
-      const errorMsg = normalizeApiError(err, "Mikrofon qurilmalarini yuklashda xatolik");
+      const errorMsg = normalizeApiError(err, "Mikrofonlarni aniqlab bo'lmadi");
       setMicStatusText(errorMsg);
       console.warn("Mikrofon qurilmalarini yuklashda xatolik:", err);
     }
@@ -519,19 +524,24 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       }
       const res = await backendService.refreshAudioInputDevices();
       if (res.ok) {
-        setAudioDevices(res.devices || []);
+        const devs = res.devices || [];
+        setAudioDevices(devs);
         setSelectedMicId(res.selected_device_id || "default");
         setSelectedMicName(res.selected_device_name || "Tizim standarti");
-        setMicStatusText(res.message || "Ulangan / Ishlamoqda");
+        if (devs.length === 0) {
+          setMicStatusText("Mikrofonlarni aniqlab bo'lmadi");
+        } else {
+          setMicStatusText(res.message || "Ulangan / Ishlamoqda");
+        }
         setMicFallbackUsed(!!res.fallback_used);
         showToast("Audio qurilmalar ro'yxati yangilandi ✓");
       } else {
-        const errText = normalizeApiError(res.error, "Qurilmalarni yangilab bo'lmadi");
+        const errText = normalizeApiError(res.error, "Mikrofonlarni aniqlab bo'lmadi");
         setMicStatusText(errText);
         showToast(errText);
       }
     } catch (err: any) {
-      const errText = normalizeApiError(err, "Qurilmalarni yangilashda xatolik");
+      const errText = normalizeApiError(err, "Mikrofonlarni aniqlab bo'lmadi");
       setMicStatusText(errText);
       showToast(errText);
     } finally {

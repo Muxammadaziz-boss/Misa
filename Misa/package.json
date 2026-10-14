@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "node --test tests/frontend.test.mjs tests/stress.test.mjs",
+    "test": "node --test tests/frontend.test.mjs tests/stress.test.mjs tests/desktop_ux_lifecycle.test.mjs",
     "desktop": "node scripts/tauri.js dev",
     "build:desktop": "node scripts/tauri.js build",
     "tauri": "node scripts/tauri.js",
