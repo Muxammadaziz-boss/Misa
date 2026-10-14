@@ -6824,6 +6824,13 @@ def create_app():
     app.router.add_post("/api/voice/devices/monitor/start", handle_voice_device_monitor_start)
     app.router.add_post("/api/voice/devices/monitor/stop", handle_voice_device_monitor_stop)
     app.router.add_get("/api/voice/devices/monitor/status", handle_voice_device_monitor_status)
+    # Direct aliases without /devices/
+    app.router.add_post("/api/voice/monitor/start", handle_voice_device_monitor_start)
+    app.router.add_post("/api/voice/monitor/stop", handle_voice_device_monitor_stop)
+    app.router.add_get("/api/voice/monitor/status", handle_voice_device_monitor_status)
+    app.router.add_post("/api/voice/test", handle_voice_device_test)
+    app.router.add_get("/api/voice/test", handle_voice_device_test)
+    app.router.add_post("/api/voice/refresh", handle_voice_devices_refresh)
     app.router.add_post("/api/voice/preview", handle_voice_preview)
     app.router.add_get("/api/voice/preview", handle_voice_preview)
     app.router.add_get("/api/voice/runtime/status", handle_voice_runtime_status)

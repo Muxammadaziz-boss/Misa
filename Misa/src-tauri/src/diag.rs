@@ -205,3 +205,43 @@ pub fn network_log(msg: &str) {
         let _ = file.flush();
     }
 }
+
+/// %LOCALAPPDATA%\MisaAI\logs\backend-lifecycle.log ga backend jarayon hayoti qaydlarini yozish
+pub fn backend_lifecycle_log(event: &str, msg: &str) {
+    let _lock = LOG_MUTEX.lock();
+    let ts = get_timestamp();
+    let pid = current_pid();
+    let sanitized = mask_sensitive_url(msg);
+    let line = format!("{} [BACKEND_LIFECYCLE] PID={} [{}] {}\n", ts, pid, event, sanitized);
+
+    print!("{}", line);
+
+    let log_dir = get_log_dir();
+    let _ = create_dir_all(&log_dir);
+    let log_file = log_dir.join("backend-lifecycle.log");
+
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(log_file) {
+        let _ = file.write_all(line.as_bytes());
+        let _ = file.flush();
+    }
+}
+
+/// %LOCALAPPDATA%\MisaAI\logs\voice-runtime.log ga audio quyi tizimi qaydlarini yozish
+pub fn voice_runtime_log(event: &str, msg: &str) {
+    let _lock = LOG_MUTEX.lock();
+    let ts = get_timestamp();
+    let pid = current_pid();
+    let sanitized = mask_sensitive_url(msg);
+    let line = format!("{} [VOICE_RUNTIME] PID={} [{}] {}\n", ts, pid, event, sanitized);
+
+    print!("{}", line);
+
+    let log_dir = get_log_dir();
+    let _ = create_dir_all(&log_dir);
+    let log_file = log_dir.join("voice-runtime.log");
+
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(log_file) {
+        let _ = file.write_all(line.as_bytes());
+        let _ = file.flush();
+    }
+}

@@ -14,7 +14,7 @@ use tauri::Manager;
 use std::os::windows::process::CommandExt;
 
 pub mod diag;
-pub use diag::{startup_log, crash_log, network_log, install_crash_handlers, current_pid, current_tid};
+pub use diag::{startup_log, crash_log, network_log, backend_lifecycle_log, voice_runtime_log, install_crash_handlers, current_pid, current_tid};
 
 pub mod preflight;
 pub use preflight::{run_native_preflight, check_webview2_installed_version, find_or_fetch_bootstrapper};
@@ -134,12 +134,12 @@ pub fn check_http_health(addr_str: &str, path: &str) -> bool {
         Ok(a) => a,
         Err(_) => return false,
     };
-    let mut stream = match TcpStream::connect_timeout(&addr, Duration::from_millis(500)) {
+    let mut stream = match TcpStream::connect_timeout(&addr, Duration::from_millis(1000)) {
         Ok(s) => s,
         Err(_) => return false,
     };
-    let _ = stream.set_read_timeout(Some(Duration::from_millis(1500)));
-    let _ = stream.set_write_timeout(Some(Duration::from_millis(1500)));
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(2000)));
+    let _ = stream.set_write_timeout(Some(Duration::from_millis(2000)));
 
     let request = format!(
         "GET {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: MisaDesktopSupervisor/9.0.1\r\nConnection: close\r\n\r\n",
@@ -351,10 +351,12 @@ fn cleanup_port_process(port: u16) {
 fn cleanup_port_process(_port: u16) {}
 
 pub fn ensure_backend_running(state: &SupervisorState) {
+    backend_lifecycle_log("HEALTH_CHECK", "Backend holati tekshirilmoqda (127.0.0.1:18420)...");
     println!("[BACKEND] Backend holati tekshirilmoqda (127.0.0.1:18420)...");
 
     // 1. Agar 127.0.0.1:18420 da backend allaqachon ishlab turgan bo'lsa va sog'lom bo'lsa
     if check_http_health("127.0.0.1:18420", "/api/health") {
+        backend_lifecycle_log("HEALTH_OK", "Mavjud backend aniqlandi va faol (127.0.0.1:18420) — yangi jarayon ochilmaydi ✓");
         println!("[BACKEND] Mavjud backend aniqlandi va faol (127.0.0.1:18420) — yangi jarayon ochilmaydi ✓");
         if let Ok(mut m) = state.is_managed.lock() {
             *m = false;
@@ -369,36 +371,48 @@ pub fn ensure_backend_running(state: &SupervisorState) {
     }
 
     // 2. Barqaror xatolik va cheksiz qayta urinishdan himoya
-    if let Ok(f) = state.is_permanently_failed.lock() {
-        if *f {
-            println!("[BACKEND] Avvalgi urinishlar muvaffaqiyatsiz bo'lgan (Permanent failure guard). Cheksiz qayta urinish bloklandi.");
-            return;
-        }
-    }
-
     if let Ok(mut attempts) = state.spawn_attempts.lock() {
-        if *attempts >= 3 {
-            println!("[ERROR] Backend ishga tushirish uchun maksimal 3 ta urinish tugadi. Avtomatik qayta urinish to'xtatildi.");
+        if *attempts >= 5 {
+            backend_lifecycle_log("MAX_ATTEMPTS_REACHED", "Backend ishga tushirish uchun maksimal 5 ta urinish tugadi.");
+            println!("[ERROR] Backend ishga tushirish uchun maksimal 5 ta urinish tugadi. Avtomatik qayta urinish to'xtatildi.");
             if let Ok(mut f) = state.is_permanently_failed.lock() {
                 *f = true;
             }
             return;
         }
         *attempts += 1;
-        println!("[BACKEND] Backend ishga tushirish urinishi: {}/3", *attempts);
+        backend_lifecycle_log("SPAWN_ATTEMPT", &format!("Backend ishga tushirish urinishi: {}/5", *attempts));
+        println!("[BACKEND] Backend ishga tushirish urinishi: {}/5", *attempts);
     }
 
     // 3. Concurrency guard (bir vaqtda bir nechta spawn chaqirilmasligi uchun)
     if let Ok(mut spawning) = state.is_spawning.lock() {
         if *spawning {
+            backend_lifecycle_log("CONCURRENCY_GUARD", "Backend allaqachon initsializatsiya jarayonida, kutilmoqda...");
             println!("[BACKEND] Backend allaqachon initsializatsiya jarayonida, kutilmoqda...");
             return;
         }
         *spawning = true;
     }
 
-    // 4. Stale port jarayonini tozalash (agar port band, lekin /api/health javob bermasa)
+    // 4. Stale port jarayonini xavfsiz tekshirish (bir martalik timeout bilan darhol taskkill qilmaslik)
     if is_port_listening(18420) {
+        let mut port_healthy = false;
+        for _ in 0..3 {
+            std::thread::sleep(Duration::from_millis(400));
+            if check_http_health("127.0.0.1:18420", "/api/health") {
+                port_healthy = true;
+                break;
+            }
+        }
+        if port_healthy {
+            backend_lifecycle_log("PORT_HEALTH_CONFIRMED", "18420-portdagi mavjud jarayon qayta tekshiruvda sog'lom deb tasdiqlandi ✓");
+            if let Ok(mut a) = state.spawn_attempts.lock() { *a = 0; }
+            if let Ok(mut f) = state.is_permanently_failed.lock() { *f = false; }
+            if let Ok(mut spawning) = state.is_spawning.lock() { *spawning = false; }
+            return;
+        }
+        backend_lifecycle_log("PORT_CLEANUP", "18420-port band, ammo /api/health javob bermayapti (Stale process). Tozalanmoqda...");
         println!("[BACKEND] 18420-port band, ammo /api/health javob bermayapti (Stale process). Tozalanmoqda...");
         cleanup_port_process(18420);
         std::thread::sleep(Duration::from_millis(400));
@@ -510,6 +524,7 @@ pub fn ensure_backend_running(state: &SupervisorState) {
     }
 
     if is_ready {
+        backend_lifecycle_log("BACKEND_READY", "Backend 127.0.0.1:18420 da muvaffaqiyatli tayyor bo'ldi (READY) ✓");
         println!("[BACKEND] Backend 127.0.0.1:18420 da muvaffaqiyatli tayyor bo'ldi (READY) ✓");
         if let Ok(mut a) = state.spawn_attempts.lock() {
             *a = 0;
@@ -518,6 +533,7 @@ pub fn ensure_backend_running(state: &SupervisorState) {
             *f = false;
         }
     } else {
+        backend_lifecycle_log("BACKEND_TIMEOUT", "Backend health check vaqt chegarasiga yetdi (Timeout)");
         println!("[ERROR] Backend health check vaqt chegarasiga yetdi (Timeout)");
     }
 
@@ -579,12 +595,26 @@ fn app_exit(app_handle: tauri::AppHandle, state: tauri::State<SupervisorState>) 
 
 #[tauri::command]
 fn app_show_from_tray(window: tauri::Window, state: tauri::State<SupervisorState>) -> Result<(), String> {
+    backend_lifecycle_log("APP_SHOW_FROM_TRAY", "Window restored from tray, verifying state...");
     let mut lc = state.lifecycle_state.lock().map_err(|e| e.to_string())?;
     *lc = AppLifecycleState::Visible;
     drop(lc);
     window.show().map_err(|e| e.to_string())?;
     window.unminimize().map_err(|e| e.to_string())?;
-    window.set_focus().map_err(|e| e.to_string())
+    let _ = window.set_focus();
+
+    // Reopen paytida backend holatini tekshirish va kutilmaganda to'xtagan bo'lsa darhol jonlantirish
+    if !check_http_health("127.0.0.1:18420", "/api/health") {
+        backend_lifecycle_log("TRAY_REOPEN_REVIVE", "Backend faol emas, traydan ochilganda qayta ishga tushirilmoqda...");
+        if let Ok(mut a) = state.spawn_attempts.lock() { *a = 0; }
+        if let Ok(mut f) = state.is_permanently_failed.lock() { *f = false; }
+        let state_clone = state.inner().clone();
+        std::thread::spawn(move || {
+            ensure_backend_running(&state_clone);
+        });
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -621,6 +651,7 @@ fn backend_get_status(state: tauri::State<SupervisorState>) -> serde_json::Value
     if let Ok(mut lock) = state.backend_child.lock() {
         if let Some(ref mut child) = *lock {
             if let Ok(Some(_exit_status)) = child.try_wait() {
+                backend_lifecycle_log("CHILD_EXITED", &format!("Backend child jarayoni yakunlandi: {:?}", _exit_status));
                 *lock = None;
                 if let Ok(mut pid_lock) = state.backend_pid.lock() {
                     *pid_lock = None;
@@ -638,7 +669,8 @@ fn backend_get_status(state: tauri::State<SupervisorState>) -> serde_json::Value
     let attempts = state.spawn_attempts.lock().map(|a| *a).unwrap_or(0);
 
     // Qayta urinish faqat limit doirasida va barqaror xato holatida bo'lmasa
-    if !is_healthy && !is_spawning && !permanently_failed && attempts < 3 {
+    if !is_healthy && !is_spawning && attempts < 5 {
+        backend_lifecycle_log("AUTO_RECOVERY", &format!("Backend sog'lom emas, auto-recovery chaqirilmoqda (urinish: {}/5)", attempts));
         let state_clone = state.inner().clone();
         std::thread::spawn(move || {
             ensure_backend_running(&state_clone);
@@ -662,6 +694,7 @@ fn backend_get_status(state: tauri::State<SupervisorState>) -> serde_json::Value
 
 #[tauri::command]
 fn backend_restart(state: tauri::State<SupervisorState>) -> Result<bool, String> {
+    backend_lifecycle_log("MANUAL_RESTART", "Foydalanuvchi/Frontend orqali backend_restart chaqirildi");
     let currently_spawning = state.is_spawning.lock().map(|s| *s).unwrap_or(false);
     if currently_spawning || check_http_health("127.0.0.1:18420", "/api/health") {
         return Ok(true);
@@ -682,6 +715,18 @@ fn backend_restart(state: tauri::State<SupervisorState>) -> Result<bool, String>
         ensure_backend_running(&state_clone);
     });
     Ok(true)
+}
+
+#[tauri::command]
+fn get_backend_lifecycle_log_path() -> Result<String, String> {
+    let log_file = crate::diag::get_log_dir().join("backend-lifecycle.log");
+    Ok(log_file.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn get_voice_runtime_log_path() -> Result<String, String> {
+    let log_file = crate::diag::get_log_dir().join("voice-runtime.log");
+    Ok(log_file.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -1129,22 +1174,36 @@ pub fn run() {
                 tray_builder = tray_builder.icon(icon.clone());
             }
 
+            let restore_window_and_verify_backend = |app_handle: &tauri::AppHandle| {
+                if let Some(win) = app_handle.get_webview_window("main") {
+                    let _ = win.show();
+                    let _ = win.unminimize();
+                    let _ = win.set_focus();
+                }
+                if let Some(state) = app_handle.try_state::<SupervisorState>() {
+                    if let Ok(mut lc) = state.lifecycle_state.lock() {
+                        *lc = AppLifecycleState::Visible;
+                    }
+                    backend_lifecycle_log("TRAY_RESTORE", "Oyna tray orqali tiklandi, backend tekshirilmoqda...");
+                    if !check_http_health("127.0.0.1:18420", "/api/health") {
+                        backend_lifecycle_log("TRAY_REOPEN_REVIVE", "Backend traydan ochilganda faol emas, auto-revive boshlanmoqda...");
+                        if let Ok(mut a) = state.spawn_attempts.lock() { *a = 0; }
+                        if let Ok(mut f) = state.is_permanently_failed.lock() { *f = false; }
+                        let state_clone = state.inner().clone();
+                        std::thread::spawn(move || {
+                            ensure_backend_running(&state_clone);
+                        });
+                    }
+                }
+            };
+
             let _tray = tray_builder
                 .on_menu_event(move |app_handle, event| {
                     let id_str = event.id().as_ref();
                     startup_log("TRAY", &format!("Tray menu event: {}", id_str));
                     match id_str {
                         "tray_show" => {
-                            if let Some(win) = app_handle.get_webview_window("main") {
-                                let _ = win.show();
-                                let _ = win.unminimize();
-                                let _ = win.set_focus();
-                                if let Some(state) = app_handle.try_state::<SupervisorState>() {
-                                    if let Ok(mut lc) = state.lifecycle_state.lock() {
-                                        *lc = AppLifecycleState::Visible;
-                                    }
-                                }
-                            }
+                            restore_window_and_verify_backend(app_handle);
                         }
                         "tray_pause" => {
                             let _ = app_handle.emit("misa_tray_command", "pause_listening");
@@ -1153,17 +1212,8 @@ pub fn run() {
                             let _ = app_handle.emit("misa_tray_command", "resume_listening");
                         }
                         "tray_settings" => {
-                            if let Some(win) = app_handle.get_webview_window("main") {
-                                let _ = win.show();
-                                let _ = win.unminimize();
-                                let _ = win.set_focus();
-                                let _ = app_handle.emit("misa_navigate", "/account");
-                                if let Some(state) = app_handle.try_state::<SupervisorState>() {
-                                    if let Ok(mut lc) = state.lifecycle_state.lock() {
-                                        *lc = AppLifecycleState::Visible;
-                                    }
-                                }
-                            }
+                            restore_window_and_verify_backend(app_handle);
+                            let _ = app_handle.emit("misa_navigate", "/account");
                         }
                         "tray_exit" => {
                             startup_log("TRAY", "Tray Exit bosildi -> Backend to'xtatilib dastur yopilmoqda...");
@@ -1200,6 +1250,16 @@ pub fn run() {
                                 if let Some(state) = app.try_state::<SupervisorState>() {
                                     if let Ok(mut lc) = state.lifecycle_state.lock() {
                                         *lc = AppLifecycleState::Visible;
+                                    }
+                                    backend_lifecycle_log("TRAY_RESTORE", "Oyna tray icon click orqali tiklandi, backend tekshirilmoqda...");
+                                    if !check_http_health("127.0.0.1:18420", "/api/health") {
+                                        backend_lifecycle_log("TRAY_REOPEN_REVIVE", "Backend faol emas, auto-revive boshlanmoqda...");
+                                        if let Ok(mut a) = state.spawn_attempts.lock() { *a = 0; }
+                                        if let Ok(mut f) = state.is_permanently_failed.lock() { *f = false; }
+                                        let state_clone = state.inner().clone();
+                                        std::thread::spawn(move || {
+                                            ensure_backend_running(&state_clone);
+                                        });
                                     }
                                 }
                             }
@@ -1250,7 +1310,9 @@ pub fn run() {
             backend_restart,
             network_diagnostic_check,
             get_network_log_path,
-            append_network_log
+            append_network_log,
+            get_backend_lifecycle_log_path,
+            get_voice_runtime_log_path
         ]);
 
     startup_log("TAURI", "Calling builder.build(tauri::generate_context!())...");

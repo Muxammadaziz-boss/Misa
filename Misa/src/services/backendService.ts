@@ -642,8 +642,13 @@ export interface RemoteAuditItem {
 export type AuditItem = RemoteAuditItem;
 
 export const LOCAL_BACKEND_URL = "http://127.0.0.1:18420";
+export const LOCAL_HARDWARE_URL = LOCAL_BACKEND_URL;
 export const PRODUCTION_API_URL = "https://misa.up.railway.app";
 export const DEFAULT_API_URL = LOCAL_BACKEND_URL;
+
+export function resolveHardwareBase(): string {
+  return LOCAL_HARDWARE_URL;
+}
 
 const FORBIDDEN_FRONTEND_PORTS = new Set(["140", "1420", "1421", "5173"]);
 const OAUTH_STATE_REGEX = /^[A-Za-z0-9_\-.:]{1,256}$/;
@@ -1469,7 +1474,7 @@ class BackendService {
     // Brauzer SpeechRecognition va AudioContext mikrofonni bo'shatishi shart
     this.stopClientVoiceOnly();
     try {
-      const res = await fetch(`${API_BASE}/api/voice/start`, { method: "POST" });
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/start`, { method: "POST" });
       if (res.ok) {
         this.notifyVoiceState("listening");
         return true;
@@ -1482,7 +1487,7 @@ class BackendService {
 
   public async stopVoice(): Promise<boolean> {
     try {
-      const res = await fetch(`${API_BASE}/api/voice/stop`, { method: "POST" });
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/stop`, { method: "POST" });
       if (res.ok) {
         this.notifyVoiceState("idle");
         return true;
@@ -1499,7 +1504,7 @@ class BackendService {
     error?: string;
   }> {
     try {
-      const res = await fetch(`${API_BASE}/api/voice/wakeword/status`);
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/wakeword/status`);
       return await res.json();
     } catch (e: any) {
       return { ok: false, error: e?.message || "Failed to fetch wake word status" };
@@ -1512,7 +1517,7 @@ class BackendService {
     cooldown?: number;
   }): Promise<{ ok: boolean; data?: any; error?: string }> {
     try {
-      const res = await fetch(`${API_BASE}/api/voice/wakeword/configure`, {
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/wakeword/configure`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(params),
@@ -1527,7 +1532,7 @@ class BackendService {
   public async getAudioInputDevices(refresh: boolean = false): Promise<AudioDevicesResponse> {
     try {
       const authHeaders = await this.getFreshAuthHeaders();
-      const url = refresh ? `${API_BASE}/api/voice/devices?refresh=true` : `${API_BASE}/api/voice/devices`;
+      const url = refresh ? `${LOCAL_HARDWARE_URL}/api/voice/devices?refresh=true` : `${LOCAL_HARDWARE_URL}/api/voice/devices`;
       const res = await fetch(url, {
         headers: { ...authHeaders },
       });
@@ -1555,7 +1560,7 @@ class BackendService {
   public async refreshAudioInputDevices(): Promise<AudioDevicesResponse> {
     try {
       const authHeaders = await this.getFreshAuthHeaders();
-      const res = await fetch(`${API_BASE}/api/voice/devices/refresh`, {
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/devices/refresh`, {
         method: "POST",
         headers: { ...authHeaders },
       });
@@ -1574,7 +1579,7 @@ class BackendService {
   ): Promise<{ ok: boolean; selected_device_id?: string; fallback_used?: boolean; status?: string; message?: string; error?: string }> {
     try {
       const authHeaders = await this.getFreshAuthHeaders();
-      const res = await fetch(`${API_BASE}/api/voice/devices/select`, {
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/devices/select`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ device_id: deviceId, device_name: deviceName }),
@@ -1592,7 +1597,7 @@ class BackendService {
   public async testMicrophone(deviceId?: string, duration: number = 1.5): Promise<MicrophoneTestResult> {
     try {
       const authHeaders = await this.getFreshAuthHeaders();
-      const res = await fetch(`${API_BASE}/api/voice/devices/test`, {
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/devices/test`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ device_id: deviceId, duration }),
@@ -1623,7 +1628,7 @@ class BackendService {
   ): Promise<{ ok: boolean; status?: string; message?: string; device_name?: string; loopback?: boolean; error?: string }> {
     try {
       const authHeaders = await this.getFreshAuthHeaders();
-      const res = await fetch(`${API_BASE}/api/voice/devices/monitor/start`, {
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/devices/monitor/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ device_id: deviceId, loopback }),
@@ -1643,7 +1648,7 @@ class BackendService {
   public async stopMicrophoneMonitor(): Promise<{ ok: boolean; status?: string; message?: string }> {
     try {
       const authHeaders = await this.getFreshAuthHeaders();
-      const res = await fetch(`${API_BASE}/api/voice/devices/monitor/stop`, {
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/devices/monitor/stop`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({}),
@@ -1667,7 +1672,7 @@ class BackendService {
   }> {
     try {
       const authHeaders = await this.getFreshAuthHeaders();
-      const res = await fetch(`${API_BASE}/api/voice/devices/monitor/status`, {
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/devices/monitor/status`, {
         method: "GET",
         headers: { "Content-Type": "application/json", ...authHeaders },
       });
@@ -1710,7 +1715,7 @@ class BackendService {
   }> {
     try {
       const authHeaders = await this.getFreshAuthHeaders();
-      const res = await fetch(`${API_BASE}/api/voice/preview`, {
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/preview`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({
@@ -1759,7 +1764,7 @@ class BackendService {
   }> {
     try {
       const authHeaders = await this.getFreshAuthHeaders();
-      const res = await fetch(`${API_BASE}/api/voice/runtime/status`, {
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/runtime/status`, {
         headers: { ...authHeaders },
       });
       if (!res.ok) {
@@ -1793,7 +1798,7 @@ class BackendService {
   }> {
     try {
       const authHeaders = await this.getFreshAuthHeaders();
-      const res = await fetch(`${API_BASE}/api/voice/runtime/install`, {
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/runtime/install`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
       });
@@ -1821,7 +1826,7 @@ class BackendService {
   }> {
     try {
       const authHeaders = await this.getFreshAuthHeaders();
-      const res = await fetch(`${API_BASE}/api/voice/runtime/cancel`, {
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/runtime/cancel`, {
         method: "POST",
         headers: { ...authHeaders },
       });
@@ -1834,7 +1839,7 @@ class BackendService {
   // ========== Real System Metrics ==========
   public async getSystemMetrics(): Promise<SystemMetrics | null> {
     try {
-      const res = await fetch(`${API_BASE}/api/system/metrics`, {
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/system/metrics`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
       });
@@ -2167,7 +2172,7 @@ class BackendService {
 
   public async getMemoryMetrics(): Promise<MemoryMetrics | null> {
     try {
-      const res = await fetch(`${API_BASE}/api/memory/metrics`, { method: "GET" });
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/memory/metrics`, { method: "GET" });
       if (!res.ok) throw new Error("HTTP " + res.status);
       const data = await res.json();
       return data.metrics || null;
@@ -2496,7 +2501,7 @@ class BackendService {
 
   public async speakText(text: string, voiceType?: string): Promise<boolean> {
     try {
-      const res = await fetch(`${API_BASE}/api/voice/speak`, {
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/speak`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, voice_type: voiceType }),
@@ -2509,7 +2514,7 @@ class BackendService {
 
   public async getVoices(): Promise<{ ok: boolean; active_voice: string; voices: any[] }> {
     try {
-      const res = await fetch(`${API_BASE}/api/voice/voices`);
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/voices`);
       if (res.ok) {
         return await res.json();
       }
