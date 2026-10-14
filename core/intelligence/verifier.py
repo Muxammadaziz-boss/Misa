@@ -37,6 +37,13 @@ class AgentVerifier:
         "open_brave",
         "close_window",
         "close_chrome",
+        "keyboard_type",
+        "screen_click",
+        "screen_analyze",
+        "focus_window",
+        "get_active_window",
+        "window_list",
+        "notepad",
     }
 
     def __init__(self, tool_registry=None, app_detector=None):
@@ -84,6 +91,14 @@ class AgentVerifier:
             return self._verify_youtube_open(step, raw)
         elif tool_name in ("close_chrome", "close_window"):
             return self._verify_window_close(step, raw)
+        elif tool_name == "keyboard_type":
+            return self._verify_keyboard_type(step, raw)
+        elif tool_name == "screen_click":
+            return self._verify_screen_click(step, raw)
+        elif tool_name == "screen_analyze":
+            return self._verify_screen_analyze(step, raw)
+        elif tool_name in ("focus_window", "get_active_window", "window_list", "notepad"):
+            return self._verify_window_management(step, raw, tool_name)
 
         # 3. Kutilgan natija (expected_result) bilan leksik/semantik solishtirish
         if step.expected_result:
@@ -105,14 +120,18 @@ class AgentVerifier:
     ) -> Tuple[bool, str]:
         """
         Qadam verifikatsiyasi asosida rejaning keyingi qadamiga o'tish mumkinligini hal qilish.
+        UNKNOWN holatida davom etish o'rniga retry, re-observe yoki clarification so'raladi.
         Returns: (can_continue: bool, reason: str)
         """
         if verification.status == VerificationStatus.SUCCESS:
             return True, "STEP_VERIFIED_SUCCESS"
 
         if verification.status == VerificationStatus.UNKNOWN:
-            # UNKNOWN holatida xavfsiz davom etish (asbob xato bermagan bo'lsa)
-            return True, "STEP_VERIFIED_UNKNOWN_PROCEED"
+            # Agar qayta urinish imkoniyati qolgan bo'lsa -> Re-observe / Retry
+            if step.retry_count < step.max_retries:
+                return False, "UNKNOWN_STATUS_RETRY_OBSERVATION"
+            # Qayta urinishlar tugagan bo'lsa -> Foydalanuvchidan aniqlik/tasdiq so'rash
+            return False, "UNKNOWN_STATUS_REQUIRES_CLARIFICATION"
 
         if verification.status == VerificationStatus.FAILURE:
             return False, f"STEP_VERIFICATION_FAILED: {verification.reason}"
@@ -346,4 +365,129 @@ class AgentVerifier:
             status=VerificationStatus.UNKNOWN,
             reason="Natija kutilgan natija bilan to'liq mos kelmadi, ammo xato aniqlanmadi (UNKNOWN)",
             details={"expected": step.expected_result, "actual_preview": str(raw)[:120]}
+        )
+
+    def _verify_keyboard_type(self, step: PlanStep, raw: Any) -> VerificationResult:
+        """Klaviatura orqali matn yozishni tekshirish"""
+        if isinstance(raw, dict):
+            if raw.get("error"):
+                return VerificationResult(
+                    verified=False,
+                    status=VerificationStatus.FAILURE,
+                    reason=f"Klaviatura amali xatosi: {raw.get('error')}",
+                    details=raw
+                )
+            if raw.get("postcondition_verified") or raw.get("typed") or raw.get("success", False):
+                txt = raw.get("text", "")
+                return VerificationResult(
+                    verified=True,
+                    status=VerificationStatus.SUCCESS,
+                    reason=f"Matn muvaffaqiyatli yozildi: {txt[:30]}",
+                    details=raw
+                )
+        elif raw and not ("xato" in str(raw).lower() or "error" in str(raw).lower()):
+            return VerificationResult(
+                verified=True,
+                status=VerificationStatus.SUCCESS,
+                reason="Matn kiritish muvaffaqiyatli yakunlandi",
+                details={"raw": str(raw)[:100]}
+            )
+        return VerificationResult(
+            verified=False,
+            status=VerificationStatus.FAILURE,
+            reason="Klaviatura amali tasdiqlanmadi",
+            details={"raw": raw}
+        )
+
+    def _verify_screen_click(self, step: PlanStep, raw: Any) -> VerificationResult:
+        """Ekran bosish amalini tekshirish"""
+        if isinstance(raw, dict):
+            if raw.get("error"):
+                return VerificationResult(
+                    verified=False,
+                    status=VerificationStatus.FAILURE,
+                    reason=f"Ekran bosish xatosi: {raw.get('error')}",
+                    details=raw
+                )
+            if raw.get("clicked") or raw.get("postcondition_verified") or raw.get("success", False):
+                return VerificationResult(
+                    verified=True,
+                    status=VerificationStatus.SUCCESS,
+                    reason=f"Ekran nuqtasi bosildi: ({raw.get('x')}, {raw.get('y')})",
+                    details=raw
+                )
+        elif raw and not ("xato" in str(raw).lower() or "error" in str(raw).lower()):
+            return VerificationResult(
+                verified=True,
+                status=VerificationStatus.SUCCESS,
+                reason="Ekran bosish muvaffaqiyatli yakunlandi",
+                details={"raw": str(raw)[:100]}
+            )
+        return VerificationResult(
+            verified=False,
+            status=VerificationStatus.FAILURE,
+            reason="Ekran bosish tasdiqlanmadi",
+            details={"raw": raw}
+        )
+
+    def _verify_screen_analyze(self, step: PlanStep, raw: Any) -> VerificationResult:
+        """Ekran tahlili (Vision/OCR/Local) natijasini tekshirish"""
+        if isinstance(raw, dict):
+            if raw.get("error"):
+                return VerificationResult(
+                    verified=False,
+                    status=VerificationStatus.FAILURE,
+                    reason=f"Ekran tahlili xatosi: {raw.get('error')}",
+                    details=raw
+                )
+            if raw.get("message") or raw.get("active_window") or raw.get("local_analysis") is not None:
+                msg = str(raw.get("message") or raw.get("active_window") or "Tahlil yakunlandi")
+                return VerificationResult(
+                    verified=True,
+                    status=VerificationStatus.SUCCESS,
+                    reason="Ekran tahlili muvaffaqiyatli olindi",
+                    details={"summary": msg[:100]}
+                )
+        if raw and not ("xato" in str(raw).lower() or "error" in str(raw).lower()):
+            return VerificationResult(
+                verified=True,
+                status=VerificationStatus.SUCCESS,
+                reason="Ekran tahlili olindi",
+                details={"raw": str(raw)[:100]}
+            )
+        return VerificationResult(
+            verified=False,
+            status=VerificationStatus.FAILURE,
+            reason="Ekran tahlili olinmadi",
+            details={"raw": raw}
+        )
+
+    def _verify_window_management(self, step: PlanStep, raw: Any, tool_name: str) -> VerificationResult:
+        """Oyna boshqaruvi (focus_window, window_list, notepad) natijasini tekshirish"""
+        if isinstance(raw, dict):
+            if raw.get("error"):
+                return VerificationResult(
+                    verified=False,
+                    status=VerificationStatus.FAILURE,
+                    reason=f"{tool_name} xatosi: {raw.get('error')}",
+                    details=raw
+                )
+            return VerificationResult(
+                verified=True,
+                status=VerificationStatus.SUCCESS,
+                reason=f"{tool_name} muvaffaqiyatli bajarildi",
+                details=raw
+            )
+        if raw and not ("xato" in str(raw).lower() or "error" in str(raw).lower()):
+            return VerificationResult(
+                verified=True,
+                status=VerificationStatus.SUCCESS,
+                reason=f"{tool_name} muvaffaqiyatli bajarildi",
+                details={"raw": str(raw)[:100]}
+            )
+        return VerificationResult(
+            verified=False,
+            status=VerificationStatus.FAILURE,
+            reason=f"{tool_name} natijasi tasdiqlanmadi",
+            details={"raw": raw}
         )

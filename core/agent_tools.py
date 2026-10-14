@@ -1386,14 +1386,19 @@ TOOL_TRANSLATOR = Tool(
 
 
 # --- 14. SCREEN ANALYZE (Ekran tahlil) ---
-def _screen_analyze(question: str = "Ekranda nima bor?") -> dict:
-    """Ekranni screenshot olib, AI bilan tahlil qilish"""
+def _screen_analyze(question: str = "Ekranda nima bor?", allow_cloud: bool = False) -> dict:
+    """Ekranni screenshot olib, tahlil qilish (lokal maxfiy rejim default, cloud faqat tasdiq bilan)"""
     try:
         from core.ai_engine import ekran_tahlil
 
-        result = ekran_tahlil(question)
+        result = ekran_tahlil(question, allow_cloud=allow_cloud)
         if result and not result.startswith("Ekran tasvirini olib bo'lmadi"):
-            return {"message": result, "question": question}
+            return {
+                "message": result,
+                "question": question,
+                "local_analysis": not allow_cloud,
+                "cloud_allowed": allow_cloud
+            }
         else:
             return {"error": result or "Ekran tahlil qilinmadi"}
     except ImportError:
@@ -1404,11 +1409,16 @@ def _screen_analyze(question: str = "Ekranda nima bor?") -> dict:
 
 TOOL_SCREEN = Tool(
     name="screen_analyze",
-    description="Ekranni screenshot olib, AI bilan tahlil qilish. Ekranda nima borligini ko'rish",
+    description="Ekranni screenshot olib, AI bilan tahlil qilish. Ekranda nima borligini ko'rish (lokal maxfiy default)",
     parameters={
         "question": {
             "type": "string",
             "description": "Ekran haqida savol, masalan: 'Ekranda qaysi ilova ochiq?'. Default: 'Ekranda nima bor?'",
+            "required": False,
+        },
+        "allow_cloud": {
+            "type": "boolean",
+            "description": "Tashqi bulutli AI (Gemini/OpenRouter) ga screenshot yuborishga ruxsat. Default: false",
             "required": False,
         },
     },

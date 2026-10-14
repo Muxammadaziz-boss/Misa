@@ -92,6 +92,12 @@ class WindowsGUIController:
             return None
         return self._build_window_target(hwnd)
 
+    @classmethod
+    def get_active_window(cls) -> Optional[WindowTarget]:
+        """Ayni paytda faol (fokuslangan) oynani aniqlash (Class/Static yordamchi)"""
+        instance = cls()
+        return instance.get_foreground_window()
+
     def find_window(self, query: str, require_visible: bool = True) -> Optional[WindowTarget]:
         """Oyna sarlavhasi yoki sinf nomi bo'yicha oynani qidirish"""
         if sys.platform != "win32":

@@ -301,6 +301,9 @@ class PlanStep:
     verification_policy: str = "oracle_or_heuristic"
     failure_reason: Optional[str] = None
     retry_policy: Dict[str, Any] = field(default_factory=dict)
+    precondition: str = ""
+    postcondition: str = ""
+    expected_observation: str = ""
 
     def __post_init__(self):
         if not self.description:
@@ -331,6 +334,9 @@ class PlanStep:
             "required_capability": self.required_capability,
             "parameters": self.parameters,
             "expected_result": self.expected_result,
+            "precondition": self.precondition,
+            "postcondition": self.postcondition,
+            "expected_observation": self.expected_observation,
             "risk_level": self.risk_level.value if isinstance(self.risk_level, RiskLevel) else str(self.risk_level),
             "status": self.status.value if isinstance(self.status, StepStatus) else str(self.status),
             "retry_count": self.retry_count,
@@ -382,6 +388,9 @@ class PlanStep:
             verification_policy=str(data.get("verification_policy", "oracle_or_heuristic")),
             failure_reason=data.get("failure_reason"),
             retry_policy=dict(data.get("retry_policy", {}) or {}),
+            precondition=str(data.get("precondition", "")),
+            postcondition=str(data.get("postcondition", "")),
+            expected_observation=str(data.get("expected_observation", "")),
         )
 
 

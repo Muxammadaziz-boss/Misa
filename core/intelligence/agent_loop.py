@@ -584,6 +584,8 @@ QOIDALAR:
         if resume_from_step and resume_from_step in plan.execution_order:
             start_order_idx = plan.execution_order.index(resume_from_step)
 
+        recent_action_signatures: List[str] = []
+
         for exec_idx in range(start_order_idx, len(plan.execution_order)):
             step_id = plan.execution_order[exec_idx]
             step = steps_by_id.get(step_id)
@@ -611,7 +613,24 @@ QOIDALAR:
                     elapsed=elapsed
                 )
 
-            # B. Bekor qilish (Abort) tekshiruvi
+            # B. Sikl (Loop) aniqlash tekshiruvi
+            step_sig = f"{step.tool}:{json.dumps(step.parameters, sort_keys=True)}"
+            recent_action_signatures.append(step_sig)
+            if len(recent_action_signatures) >= 3 and all(s == step_sig for s in recent_action_signatures[-3:]):
+                logger.warning(f"[AgentLoop] Sikl aniqlandi (Loop detected): '{step.tool}' 3 marta ketma-ket takrorlandi")
+                self._transition_to(AgentState.FAILED)
+                plan.status = PlanStatus.FAILED
+                active_trace.add_stage("STEP_FAILED", status="loop_detected", details={"step_id": step.step_id, "tool": step.tool})
+                return self._finalize_agent_response(
+                    success=False,
+                    message=f"Agent bir xil '{step.tool}' amalini ketma-ket takrorlab siklga tushgani aniqlandi va xavfsiz to'xtatildi.",
+                    error_code="AGENT_LOOP_DETECTED",
+                    plan=plan,
+                    trace=active_trace,
+                    elapsed=elapsed
+                )
+
+            # C. Bekor qilish (Abort) tekshiruvi
             if self._abort_requested:
                 self._transition_to(AgentState.ABORTED)
                 plan.status = PlanStatus.ABORTED
@@ -813,6 +832,44 @@ QOIDALAR:
                                 result=str(retry_res.raw_result)[:100] if retry_res.raw_result else None
                             )
                         continue
+
+                # UNKNOWN holatida foydalanuvchidan tasdiq/aniqlik so'rash siyosati
+                if "UNKNOWN_STATUS_REQUIRES_CLARIFICATION" in cont_reason:
+                    with self._lock:
+                        self._transition_to(AgentState.WAITING_CONFIRMATION)
+                        plan.status = PlanStatus.PAUSED
+                        step.status = StepStatus.WAITING_CONFIRMATION
+                        self._paused_step_id = step.step_id
+
+                    active_trace.add_stage(
+                        "PLAN_PAUSED",
+                        status="warning",
+                        details={"step_id": step.step_id, "reason": cont_reason}
+                    )
+                    prompt_txt = f"Qadam #{step.order} ({step.tool}) bajarildi, ammo natija deterministik tasdiqlanmadi (UNKNOWN). Qadamni muvaffaqiyatli deb hisoblab davom etamizmi?"
+                    self._emit_event("agent_confirmation_required", {
+                        "plan_id": plan.plan_id,
+                        "step_id": step.step_id,
+                        "tool": step.tool,
+                        "risk": step.risk_level.value,
+                        "prompt": prompt_txt,
+                    })
+                    return IntelligenceResponse(
+                        type="confirmation",
+                        content=prompt_txt,
+                        intent=step.intent,
+                        params=step.parameters,
+                        verified=False,
+                        metadata={
+                            "confirmation_required": True,
+                            "clarification_required": True,
+                            "plan_id": plan.plan_id,
+                            "step_id": step.step_id,
+                            "reason": cont_reason,
+                            "current_step": step.order,
+                            "total_steps": len(plan.steps)
+                        }
+                    )
 
                 # Planning 2.0: Replanning Engine
                 if getattr(step, "failure_category", None) != FailureCategory.SECURITY_BLOCKED and hasattr(self, "replanning_engine") and self.replanning_engine:
@@ -1051,6 +1108,11 @@ QOIDALAR:
             self._abort_requested = True
             self._active_plan.status = PlanStatus.ABORTED
             self._transition_to(AgentState.ABORTED)
+            try:
+                from core.gui.controller import WindowsGUIController
+                WindowsGUIController.request_abort()
+            except Exception:
+                pass
             logger.info(f"[AgentLoop] Reja #{self._active_plan.plan_id} bekor qilindi")
             return True, "Reja to'xtatildi"
 
