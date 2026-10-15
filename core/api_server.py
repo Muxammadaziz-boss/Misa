@@ -2722,7 +2722,7 @@ async def handle_plugins_execute(request):
     from core.tools.contract import ToolContract2
     from core.intelligence.types import RiskLevel
 
-    headers = dict(request.headers)
+    headers = dict(getattr(request, "headers", {}) or {})
     origin = headers.get("Origin") or headers.get("origin") or ""
     referer = headers.get("Referer") or headers.get("referer") or ""
     user_agent = headers.get("User-Agent") or headers.get("user-agent") or ""

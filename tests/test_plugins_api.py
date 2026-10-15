@@ -24,9 +24,10 @@ from core.api_server import (
 
 
 class MockRequest:
-    def __init__(self, json_data=None, query_data=None):
+    def __init__(self, json_data=None, query_data=None, headers=None):
         self._json_data = json_data or {}
         self.query = query_data or {}
+        self.headers = headers or {}
 
     async def json(self):
         return self._json_data
@@ -120,16 +121,36 @@ class TestPluginsAPI(unittest.TestCase):
     def test_plugin_execute(self):
         """POST /api/plugins/execute vositani muvaffaqiyatli ishga tushiradi"""
         async def _run():
-            resp = await handle_plugins_execute(MockRequest({
-                "name": "calculator",
-                "params": {"expression": "12 * 12"}
-            }))
+            resp = await handle_plugins_execute(MockRequest(
+                json_data={
+                    "name": "calculator",
+                    "params": {"expression": "12 * 12"}
+                },
+                headers={"Origin": "tauri://localhost"}
+            ))
             data = json.loads(resp.text)
             self.assertTrue(data.get("ok"))
             self.assertEqual(data.get("tool"), "calculator")
             self.assertIn("result", data)
             calc_res = data["result"].get("result", {})
             self.assertEqual(calc_res.get("result"), 144)
+
+        asyncio.run(_run())
+
+    def test_plugin_execute_unauthorized_rejected(self):
+        """POST /api/plugins/execute ruxsatsiz origin yoki tokensiz so'rovni 403 bilan rad etadi"""
+        async def _run():
+            resp = await handle_plugins_execute(MockRequest(
+                json_data={
+                    "name": "calculator",
+                    "params": {"expression": "12 * 12"}
+                },
+                headers={"Origin": "http://evil-site.com"}
+            ))
+            data = json.loads(resp.text)
+            self.assertFalse(data.get("ok"))
+            self.assertEqual(resp.status, 403)
+            self.assertEqual(data.get("error"), "UNAUTHORIZED_LOCAL_CALLER")
 
         asyncio.run(_run())
 
