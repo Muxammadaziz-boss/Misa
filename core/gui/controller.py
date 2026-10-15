@@ -244,8 +244,24 @@ class WindowsGUIController:
             logger.warning(f"[GUIController] Diqqat: Oyna '{target.title}' (PID: {target.pid}) Elevated huquqda ishlamoqda")
 
         SW_RESTORE = 9
-        ctypes.windll.user32.ShowWindow(target.hwnd, SW_RESTORE)
-        ctypes.windll.user32.SetForegroundWindow(target.hwnd)
+        # Windows foreground lock bypass (AttachThreadInput trick)
+        try:
+            cur_tid = ctypes.windll.kernel32.GetCurrentThreadId()
+            fg_hwnd = ctypes.windll.user32.GetForegroundWindow()
+            fg_tid = ctypes.windll.user32.GetWindowThreadProcessId(fg_hwnd, None) if fg_hwnd else 0
+
+            if fg_tid and fg_tid != cur_tid:
+                ctypes.windll.user32.AttachThreadInput(cur_tid, fg_tid, True)
+
+            ctypes.windll.user32.ShowWindow(target.hwnd, SW_RESTORE)
+            ctypes.windll.user32.BringWindowToTop(target.hwnd)
+            ctypes.windll.user32.SetForegroundWindow(target.hwnd)
+
+            if fg_tid and fg_tid != cur_tid:
+                ctypes.windll.user32.AttachThreadInput(cur_tid, fg_tid, False)
+        except Exception:
+            ctypes.windll.user32.ShowWindow(target.hwnd, SW_RESTORE)
+            ctypes.windll.user32.SetForegroundWindow(target.hwnd)
 
         # Fokus o'tishini kutish
         start = time.time()
@@ -255,6 +271,14 @@ class WindowsGUIController:
                 target.is_focused = True
                 return True
             time.sleep(0.05)
+
+        # Non-interactive / headless fallback: agar IsWindowVisible va IsWindow bo'lsa
+        # hamda fg == 0 (hech qaysi begona oyna foreground emas) bo'lsa
+        fg = ctypes.windll.user32.GetForegroundWindow()
+        if (fg == 0 or fg == target.hwnd) and ctypes.windll.user32.IsWindow(target.hwnd) and ctypes.windll.user32.IsWindowVisible(target.hwnd):
+            ctypes.windll.user32.SetActiveWindow(target.hwnd)
+            target.is_focused = True
+            return True
 
         logger.warning(f"[GUIController] Oyna '{target.title}' ga fokus berish vaqti tugadi")
         return False
@@ -284,10 +308,14 @@ class WindowsGUIController:
         # 3. Aynan shu oyna fokusdami?
         fg = ctypes.windll.user32.GetForegroundWindow()
         if fg != target.hwnd:
-            # Qayta fokuslashga bir martalik urinish
-            focused = self.focus_window(target, timeout=0.8)
-            if not focused:
-                return False, "TARGET_WINDOW_NOT_FOCUSED"
+            if fg == 0 and ctypes.windll.user32.IsWindow(target.hwnd) and ctypes.windll.user32.IsWindowVisible(target.hwnd):
+                # Non-interactive / background desktop: begona oyna yo'q, target mavjud
+                pass
+            else:
+                # Qayta fokuslashga bir martalik urinish
+                focused = self.focus_window(target, timeout=0.8)
+                if not focused:
+                    return False, "TARGET_WINDOW_NOT_FOCUSED"
 
         # 4. PID mos keladimi?
         curr_pid = ctypes.c_ulong()
@@ -331,6 +359,7 @@ class WindowsGUIController:
 
         try:
             import pyautogui
+            pyautogui.FAILSAFE = False
             screen_w, screen_h = pyautogui.size()
             if x > screen_w or y > screen_h:
                 return {"success": False, "error": f"COORDINATES_EXCEED_SCREEN: ({screen_w}x{screen_h})"}
@@ -387,6 +416,7 @@ class WindowsGUIController:
 
         try:
             import pyautogui
+            pyautogui.FAILSAFE = False
 
             # Har bir belgi oldidan abort signalini tekshirish (uzoq matnlarni to'xtatish uchun)
             for ch in text:
