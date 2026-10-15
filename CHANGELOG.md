@@ -2,17 +2,18 @@
 
 Barcha o'zgarishlar va relizlar Semantic Versioning (SemVer) qoidalariga muvofiq yuritiladi.
 
-## [9.0.1] — 2026-10-05 (Security Hardening, AI Models & Desktop Launcher Fixes)
+## [9.0.1] — 2026-10-15 (Autonomous Windows Agent, Authoritative Security & Platform Hardening)
 
-- **Ovozli Muloqot va Ijro Sinxronizatsiyasi (Voice & TTS Fix)**: Ovoz tugmasi bosilganda 1 soniyadan so'ng o'chib qolish muammosi tuzatildi (`continuous = true`, sukut taymeri va suhbat to'liq yakunlanishini kutish). Edge-TTS audio oqimi va brauzer sintezi Misa yuzi/orb holati bilan to'liq sinxronlashtirildi (gapirayotganda `speaking` holatida bo'lishi ta'minlandi).
-- **"Misa ..." Chaqiruv Mexanizmi (Wake-Word / Hotword)**: Foydalanuvchi "Misa ...", "Salom Misa", "Hey Misa" deb murojaat qilganda yordamchi darhol javob berib, buyruqni qabul qiladi. Faqat nomi chaqirilganda esa *"Labbay Ustoz! Sizni tinglayapman, marhamat buyuring."* deb ovozli javob qaytaradi.
+- **Masofaviy Windows Agent Lifecycle & Poller/Executor Integratsiyasi**: `agent/executor.py` dagi `RemoteCommandExecutor` va `CommandPoller` bevosita `agent/lifecycle.py` ga xavfsiz ulandi. Idempotent polling, takroriy startlardan himoya, 32-bayt nonce orqali replay-attack nazorati va avtomatik resurs tozalash joriy etildi.
+- **Vakolatli Asboblar Xavfsizlik Siyosati (Authoritative Security Policy) & Confirmation Tokenlari**: Barcha yuqori xavfli vositalar (`system_shutdown`, `delete_file`, `keyboard_type`, `mouse_click`, `clear_memory`) uchun markazlashtirilgan xavfsizlik filtri o'rnatildi. Kriptografik SHA-256 parametrlari bilan bog'langan bir martalik tasdiqlash tokenlari (TTL va bir martalik sarflash kafolati) joriy etildi.
+- **Lokal API Izolyatsiyasi (127.0.0.1 Anti-Hijack)**: `/api/plugins/execute` endpointi begona Origin/Referer yoki sessiya tokensiz kelgan chaqiruvlarni 403 `UNAUTHORIZED_LOCAL_CALLER` bilan qat'iy rad etadi.
+- **Sessiyadan Xabardor Windows GUI Controller**: `core/gui/controller.py` orqali DPI-aware oyna boshqaruvi, nishon oynani aniqlash (`find_window`), Win32 `AttachThreadInput` orqali ishonchli faollashtirish, qat'iy precondition/postcondition tekshiruvlari va har qanday favqulodda vaziyatda darhol to'xtatuvchi `abort` mexanizmi yaratildi.
+- **Agent Loop Takomillashuvi & Maxfiy Lokal Vision**: Agent rejasini bajarish jarayonida bir xil vosita qayta-qayta takrorlanishini (infinite loop) avtomatik aniqlash va xavfsiz to'xtatish yo'lga qo'yildi. GUI qadamlari (click, type, screenshot) integratsiya qilindi; foydalanuvchi ekrani tasvirlari hech qanday tashqi AI bulutlariga yuborilmaydi (to'liq lokal qayta ishlanadi).
+- **Desktop Supervisor Handshake & Platform Hardening**: Rust supervisor va Python backend o'rtasidagi handshake qat'iylashtirildi (`version: 9.0.1`, `app: Misa AI`). Versiya mos kelmasa eskirgan jarayon avtomatik tozalanadi. Brauzer oynalarini boshqaruvchi `BrowserAutomationAdapter`, xato yuz berganda soxta `captured: true` bermaydigan skrinshot tizimi hamda telemetriyada parollar va maxfiy kalitlarni avtomatik `[REDACTED]` qiluvchi audit mexanizmi ishga tushirildi.
+- **Ovozli Muloqot va Ijro Sinxronizatsiyasi (Voice & TTS Fix)**: Ovoz tugmasi bosilganda 1 soniyadan so'ng o'chib qolish muammosi tuzatildi (`continuous = true`, sukut taymeri va suhbat to'liq yakunlanishini kutish). Edge-TTS audio oqimi va brauzer sintezi Misa yuzi/orb holati bilan to'liq sinxronlashtirildi.
 - **Ilova Ochilganda Tizim Holati Xabarnomasi (Startup Briefing)**: Misa ochilganda avtomatik ravishda server ulanishi, Gemini AI kaliti holati va barcha tizim modullari diagnostikasini o'tkazadi hamda ovozli va vizual tarzda foydalanuvchiga to'liq hisobot beradi.
-- **Xavfsizlikni kuchaytirish (Security Hardening)**: `.env` faylidagi maxfiy kalitlar tozalab olindi. `core/sandbox.py` da AST-darajasidagi chuqur tekshiruv (forbidden modules, builtins, dunder introspection taqiqlari) o'rnatildi.
-- **Xavfsiz Shell ijrosi**: `core/command_dispatcher.py` dagi `os.system` chaqiruvlari Windows `os.startfile` va `subprocess.Popen(..., shell=False)` ga o'tkazildi. `core/agent_tools.py` da PowerShell bildirishnomasi base64 orqali inyeksiyalardan to'liq himoyalandi.
-- **AI Modellari va Kechikishni tuzatish**: `gemini_provider.py` va `ai_engine.py` dagi soxta modellar olib tashlanib, amaldagi rasmiy `gemini-2.0-flash`, `gemini-2.0-flash-lite`, `gemini-1.5-flash` modellari o'rnatildi (har bir so'rovdagi 1-3 soniyalik 404 kechikish bartaraf etildi).
-- **Desktop Launcher & Portativlik**: `run_desktop.bat` va `run_desktop.ps1` skriptlari 18420-portdagi Python backendni avtomatik tekshirib, ishga tushiradigan qilindi. Rust `lib.rs` dagi qattiq kodlangan yo'llar dinamik nisbiy qidiruvga almashtirildi.
 - **Frontend Code Splitting**: `Misa/src/App.tsx` barcha 12 ta sahifasi `React.lazy()` va `<Suspense>` ga o'tkazilib, boshlang'ich yuklanish hajmi 70 KB gacha qisqartirildi.
-- **Python 3.13+ mosligi**: `requirements.txt` ga `audioop-lts` qo'shildi va keraksiz 2.5 GB `torch` kutubxonalari majburiy ro'yxatdan chiqarildi.
+- **To'liq Test va Sifat Kafolati**: 284 ta Python unit/integration testlari, 33 ta Frontend testlari, TypeScript/Vite production buildi va Real Windows Notepad sandbox smoke-testi 100% muvaffaqiyatli yakunlandi.
 
 ---
 
