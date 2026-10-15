@@ -116,7 +116,7 @@ from core.v8.update_service import (
     DEFAULT_TRUSTED_PUBLIC_KEY
 )
 
-__version__ = "9.0.0"
+__version__ = "9.0.2"
 PHASE = 48
 
 __all__ = [

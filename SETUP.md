@@ -1,6 +1,6 @@
-# 🛠️ Misa AI (sobiq Mikasa AI) — O'rnatish va Sozlash Qo'llanmasi
+# 🛠️ Misa AI — O'rnatish va Sozlash Qo'llanmasi
 
-Ushbu qo'llanma **Misa AI v9.0.0+ (sobiq Mikasa AI v8.0.0 — Autonomous Desktop Assistant & Intelligence Hub)** tizimini Windows tizimida to'g'ri o'rnatish, sozlash va ishga tushirish bo'yicha to'liq qo'llanmadir.
+Ushbu qo'llanma **Misa AI v9.0.2 (Autonomous Desktop Assistant & Intelligence Hub)** tizimini Windows tizimida to'g'ri o'rnatish, sozlash va ishga tushirish bo'yicha to'liq qo'llanmadir.
 
 ---
 
@@ -19,8 +19,8 @@ Ushbu qo'llanma **Misa AI v9.0.0+ (sobiq Mikasa AI v8.0.0 — Autonomous Desktop
 
 ### 🅰️ 1-usul: Tayyor Desktop Reliz (Tavsiya etiladi)
 Hech qanday dasturlash muhiti yoki kutubxonalarni o'rnatish shart emas:
-1. [GitHub Releases](https://github.com/Muxammadaziz-boss/Mikasa.ai/releases/tag/v8.0.0) bo'limidan `Mikasa-AI-v8.0.0.exe` yoki `Mikasa-AI-Setup-v8.0.0.exe` faylini yuklab oling.
-2. Ilovani ishga tushiring. Agar backend xizmati fonda bo'lmasa, `run_portable.bat` fayli orqali bir bosishda backend va frontendni birgalikda ishga tushirishingiz mumkin.
+1. [GitHub Releases](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.0.2) bo'limidan `Misa-AI-Setup-v9.0.2.exe` yoki `Misa-AI-v9.0.2-Portable.zip` faylini yuklab oling.
+2. Ilovani ishga tushiring. Portable rejimda `run_portable.bat` fayli orqali bir bosishda backend va frontendni birgalikda ishga tushirishingiz mumkin.
 
 ---
 
@@ -28,8 +28,8 @@ Hech qanday dasturlash muhiti yoki kutubxonalarni o'rnatish shart emas:
 
 #### 1-qadam: Repozitoriyani yuklab olish
 ```bash
-git clone https://github.com/Muxammadaziz-boss/Mikasa.ai.git
-cd Mikasa.ai
+git clone https://github.com/Muxammadaziz-boss/Misa.git
+cd Misa
 git checkout dev-v9.0.0
 ```
 
@@ -66,11 +66,11 @@ GEMINI_API_KEY=AIzaSy...sizning_gemini_kalitingiz
 OPENROUTER_API_KEY=sk-or-v1-...sizning_openrouter_kalitingiz
 OPENROUTER_MODEL=openai/gpt-4o-mini
 
-# Supabase Auth Sozlamalari (Phase 40-43)
+# Supabase Auth Sozlamalari
 SUPABASE_URL=https://sizning-loyiha.supabase.co
 SUPABASE_ANON_KEY=eyJhbGciOi...
 
-# Telegram Bot Masofaviy Boshqaruvi (Phase 38-39)
+# Telegram Bot Masofaviy Boshqaruvi
 TELEGRAM_BOT_TOKEN=123456789:ABCdef...
 TELEGRAM_WEBHOOK_URL=https://sizning-domen.up.railway.app/telegram/webhook
 TELEGRAM_WEBHOOK_SECRET=maxfiy_webhook_token_32_belgi
@@ -106,18 +106,18 @@ npm run dev
 
 ## 5. Sinovlar va Sifat Tekshiruvi
 
-Barcha modullar to'liq avtomatlashtirilgan testlar bilan ta'minlangan:
+Barcha modullar to'liq avtomatlashtirilgan testlar bilan ta'minlangan (100% PASS):
 
 ```bash
-# 1. Asosiy Backend Testlari (242 ta test)
+# 1. Asosiy Backend Testlari (345 ta test)
 python -m unittest discover tests/ "test_*.py"
 
-# 2. Xavfsiz Avto-Yangilanish Testlari (31 ta test)
-python -m unittest tests/test_v8_secure_updater.py
-
-# 3. Frontend Birlik va Stress Testlari (15 ta test)
+# 2. Frontend Birlik va Stress Testlari (33 ta test)
 cd Misa
 npm test
+
+# 3. Haqiqiy Windows Smoke Testlari (8 ta test)
+python tests/smoke_test_rc.py
 ```
 
 ---

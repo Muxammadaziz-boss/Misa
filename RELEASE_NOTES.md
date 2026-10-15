@@ -1,68 +1,67 @@
-# 🚀 Mikasa AI v8.0.0 — Rasmiy Reliz Qaydlari (Release Notes)
+# 🚀 Misa AI v9.0.2 — Rasmiy Reliz Qaydlari (Release Notes)
 
-🎉 **Mikasa AI 8.0.0 (Level 8 Autonomous Desktop Assistant & Intelligence Hub) rasmiy relizi e'lon qilindi!**
+🎉 **Misa AI v9.0.2 (Autonomous Windows Agent, Authoritative Security & Platform Hardening) rasmiy barqaror relizi e'lon qilindi!**
 
-Mikasa AI 8.0.0 — to'liq avtonom, xavfsiz va tarmoqlangan shaxsiy AI desktop yordamchisi. Ushbu yirik reliz Supabase Auth autentifikatsiyasi, Ed25519 kriptografik PC Agent Enrollment & Pairing tizimi, universal Telegram masofaviy boshqaruvi, qat'iy sandboxlangan Windows Agent vositalari va Ed25519 bilan imzolangan xavfsiz Auto-Update tizimini birlashtiradi.
-
----
-
-### 📦 Reliz Binar Fayllari (Cryptographically Verified):
-
-| Fayl nomi | Hajmi | Turi | SHA-256 Nazorat Yig'indisi |
-| :--- | :--- | :--- | :--- |
-| **`Mikasa-AI-v8.0.0.exe`** | **4.87 MB** | Standalone Portable | `f8264cce30a004f93d602c193c0bab8ee8cadb2007b915331591f09f158e73c9` |
-| **`Mikasa-AI-Setup-v8.0.0.exe`** | **2.01 MB** | NSIS Installer | `dbebb87f1869e47ef0014d45f791b4cee533918fb69a16c7117403603d06ca7e` |
-| **`Mikasa-AI-v8.0.0.msi`** | **2.70 MB** | Windows MSI Package | `4d34c9ba60a676c560fbaba1c58193f4d6e0d065d951aaec26313d5919b8fff1` |
-| **`WebView2Loader.dll`** | **0.15 MB** | Windows Native DLL | `8427b1fc58ec707813e5c0a51eb5d69397bb333250a7b891be4d3b123f1e0f1c` |
-| **`run_portable.bat`** | **1 KB** | Batch Launcher | Avtomatik port va fon xizmati boshqaruvi |
-| **`version_manifest.json`** | **2 KB** | Signed Manifest | Ed25519 raqamli imzolari bilan to'liq himoyalangan |
-
-*Barcha reliz fayllari rasmiy [GitHub Releases Sahifasida](https://github.com/Muxammadaziz-boss/Mikasa.ai/releases/tag/v8.0.0) joylashtirilgan.*
+Misa AI v9.0.2 rasmiy relizi shaxsiy sun'iy intellekt yordamchisini to'liq avtonom, xavfsiz va Windows muhitida barqaror ishlaydigan yangi bosqichga olib chiqdi. Ushbu versiyada masofaviy buyruq bajaruvchi (remote agent lifecycle), markazlashtirilgan asboblar xavfsizlik siyosati, sessiyadan xabardor Windows GUI controller, agent loop verifikatsiyasi va to'liq platforma mustahkamligi joriy etildi.
 
 ---
 
-### 🌟 Asosiy Yangiliklar (v8.0.0 / Phases 35–48):
+### 📦 Reliz Binar Fayllari va SHA-256 Nazorat Yig'indisi:
 
-1. **🔐 Supabase Auth & Multi-Tenant Xavfsizlik (Phase 40–41)**:
-   - `auth.users.id` asosiy identity provider sifatida tanlandi.
-   - Email va parol bilan ro'yxatdan o'tish, sessiya boshqaruvi, parolni xavfsiz tiklash.
-   - Qat'iy Row Level Security (RLS) orqali ko'p foydalanuvchili to'liq izolyatsiya.
+| Fayl nomi | Hajmi | Turi | SHA-256 Nazorat Yig'indisi | Yuklab olish |
+| :--- | :--- | :--- | :--- | :--- |
+| **`Misa-AI-Setup-v9.0.2.exe`** | **13.55 MB** | Windows NSIS O'rnatuvchisi | `30cca0a57f4140dd2e2effbea83751a6299ac9f03179e516ecb2d8facc031319` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.0.2/Misa-AI-Setup-v9.0.2.exe) |
+| **`Misa-AI-v9.0.2-Portable.zip`** | **236.55 MB** | To'liq Portativ Paket (Backend bilan) | `fb8eb81cf2ad3f039621d8d872a6bb7307f4bd2fb074d2e71466e7e4b4a9b218` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.0.2/Misa-AI-v9.0.2-Portable.zip) |
+| **`Misa-AI-v9.0.2.exe`** | **5.20 MB** | Standalone Desktop Executable | `fb8a74752175a9d401cced1d5af3783ef20d2397c74f7e9042de476e5a809a5c` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.0.2/Misa-AI-v9.0.2.exe) |
+| **`Misa-AI-v9.0.2.msi`** | **14.37 MB** | Windows MSI O'rnatuvchisi | `d07688b384327c978320335eba9eae539d5da5e99f3bb1aefd4ec77bdb0576d8` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.0.2/Misa-AI-v9.0.2.msi) |
+| **`SHA256SUMS.txt`** | **358 B** | Nazorat Summalari | Mustaqil tekshirilgan | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.0.2/SHA256SUMS.txt) |
+| **`version_manifest.json`** | **2.56 KB** | Kriptografik Manifest | Ed25519 & SHA-256 | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.0.2/version_manifest.json) |
 
-2. **💻 Kriptografik PC Agent Enrollment & Pairing (Phase 42–44)**:
-   - 6-xonali bir martalik qisqa muddatli pairing kodlari (5 min TTL).
-   - Ed25519 asimmetrik kalitlar juftligi va Windows DPAPI xavfsiz kalit saqlash mexanizmi.
-   - 32-bayt bir martalik nonce asosidagi challenge-response autentifikatsiyasi.
-
-3. **🌐 Remote Control & Telegram Gateway (Phase 38–39)**:
-   - Universal Telegram Bot orqali buyruqlar, status va bildirishnomalar.
-   - Wake-on-LAN (WoL) orqali masofadan kompyuterni uyg'otish.
-   - Xavfsizlik filtrlari va nozik amallarni tasdiqlash (Approval) tizimi.
-
-4. **🛡️ Windows Agent & Real Tizim Vositalari (Phase 45–47)**:
-   - `PathSecurityValidator` orqali tizim kataloglari va maxfiy ma'lumotlarni (`C:\Windows`, `.ssh`, `.env`) himoya qilish.
-   - Skrinshot olish, ilovalarni xavfsiz ishga tushirish/yopish, klaviatura va sichqoncha harakatlari.
-
-5. **🔄 Secure Auto-Update & Crash-Safe Rollback Engine (Phase 48)**:
-   - SemVer 2.0.0 qoidalari bo'yicha versiya nazorati.
-   - Har bir yangilanish fayli serverdan olinishi bilanoq Ed25519 raqamli imzosi va SHA-256 xeshi orqali tekshiriladi (Fail-closed).
-   - Atomik staging va nosozlik yuz berganda avtomatik rollback himoyasi.
-
-6. **🧠 Agent Loop 2.0 & Rejalashtirish Dvigateli**:
-   - Directed Acyclic Graph (DAG) va Kahn algoritmi asosida ko'p bosqichli vazifalarni bajarish.
-   - 29+ tizim vositalari (Tool System 2.0) va avtomatik replanning.
+*Barcha reliz fayllari rasmiy [GitHub Releases Sahifasida](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.0.2) joylashtirilgan.*
 
 ---
 
-### 🔐 Ishonchli Ochiq Kalit (Trusted Ed25519 Public Key):
-```
-b4be839fd62657c0e786e1a2ad590c05c45c511371d041137c5ca9ac57c29829
-```
-*Ilova har qanday yangilanish paketini o'rnatishdan avval ushbu kalit orqali imzoning haqiqiyligini tekshiradi.*
+### 🌟 Asosiy Yangiliklar (v9.0.2):
+
+1. **🔐 Vakolatli Asboblar Xavfsizlik Siyosati (Authoritative Security Policy)**:
+   - Barcha destruktiv va yuqori xavfli amallar (`system_shutdown`, `system_restart`, `delete_file`, `keyboard_type`, `mouse_click`) markaziy xavfsizlik filtri orqali o'tadi.
+   - Kriptografik bir martalik `_confirmation_token`: parametrlar SHA-256 xeshi bilan qat'iy bog'langan, cheklangan muddatli (TTL) va takroriy ishlatishdan himoyalangan (`TOKEN_ALREADY_USED`, `TOKEN_EXPIRED`, `PARAMS_MISMATCH`).
+   - Lokal API izolyatsiyasi: `127.0.0.1:18420/api/plugins/execute` endpointi begona Origin/Referer yoki tasdiqlanmagan sessiyalarni 403 `UNAUTHORIZED_LOCAL_CALLER` bilan bloklaydi.
+
+2. **🪟 Sessiyadan Xabardor Windows GUI Controller**:
+   - `core/gui/controller.py` orqali DPI-aware oyna boshqaruvi va nishon oyna sarlavhasi/sinfi bo'yicha aniqlash (`find_window`).
+   - Win32 `AttachThreadInput` va `BringWindowToTop` orqali Windowsning "focus stealing prevention" cheklovini yengib, oynani ishonchli faollashtirish.
+   - Qat'iy precondition (nishon oyna fokusdaligi) va postcondition (matn kiritilgach oyna mavjudligi va yaxlitligi) tekshiruvlari.
+   - Har qanday favqulodda vaziyatda harakatlarni bir zumda to'xtatuvchi `abort()` mexanizmi.
+
+3. **🤖 Remote Agent Lifecycle & Poller/Executor Integratsiyasi**:
+   - `agent/executor.py` dagi `RemoteCommandExecutor` va `CommandPoller` bevosita `agent/lifecycle.py` boshqaruviga to'liq ulandi.
+   - Idempotent polling, takroriy startlardan himoya va 32-bayt nonce yordamida replay-hujumlardan to'liq himoyalangan xizmat.
+   - To'xtatish (shutdown/restart) va uzilishlarda barcha fon jarayonlari va soketlarni xavfsiz tozalash mexanizmi.
+
+4. **🧠 Agent Loop Verifikatsiyasi & Lokal Vision Maxfiyligi**:
+   - Agent rejasini bajarish jarayonida bir xil asbob takrorlanishini (infinite loop) avtomatik aniqlash va cheklash.
+   - Rejalarga to'g'ridan-to'g'ri GUI boshqaruv amallari (click, type, screenshot) integratsiya qilindi.
+   - Maxfiylik kafolati: foydalanuvchi ekrani tasvirlari tashqi AI bulutlariga yuborilmaydi (to'liq lokal tahlil qilinadi).
+
+5. **⚙️ Desktop Supervisor Handshake & Platform Hardening**:
+   - Rust Tauri supervisor va Python backend o'rtasida `GET /api/health` orqali qat'iy versiya mosligi (`version: 9.0.2`, `app: Misa AI`).
+   - Audit va telemetriya loglarida foydalanuvchi parollari, API kalitlari va tokenlari avtomatik ravishda `[REDACTED]` holatiga keltiriladi.
+   - PortAudio barqarorligi: xotira buzilishlari (0xC0000005) oldini olish uchun xavfsiz audio loop va VAD boshqaruvi.
 
 ---
 
-### ⚡ Sifat va Sinov Ko'rsatkichlari:
-- **Backend Testlari**: `242 / 242 PASS` (100% muvaffaqiyatli)
-- **Secure Auto-Update Testlari**: `31 / 31 PASS` (100% muvaffaqiyatli)
-- **Frontend Testlari**: `15 / 15 PASS` (100% muvaffaqiyatli)
-- **Kriptografiya**: Ed25519, SHA-256, DPAPI, constant-time verification
+### 🧪 Sinov va Sifat Kafolati Natijalari (100% PASS):
+
+- **Python Backend Testlari:** 345 / 345 test muvaffaqiyatli o'tdi (**100% PASS**).
+- **Frontend Testlari:** 33 / 33 test muvaffaqiyatli o'tdi (**100% PASS**).
+- **Frontend Production Build:** TypeScript va Vite build 0 xatolik bilan yakunlandi (**✓ built in 2.07s**).
+- **Rust / Tauri Shell:** `cargo check --lib` muvaffaqiyatli o'tdi (**Finished in 19.67s**).
+- **Real Windows Smoke-Test:** `tests/smoke_test_rc.py` orqali **8 / 8 test muvaffaqiyatli o'tdi**.
+
+---
+
+### 🏛️ Tarixiy Relizlar:
+- [Misa AI v9.0.1](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.0.1) — Audio loop hardening & anti-leak
+- [Misa AI v9.0.0](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.0.0) — Rebranding to Misa AI, Tauri 2.0 + React 19
+- [Mikasa AI v8.0.0](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v8.0.0) — Supabase Auth, PC Agent Pairing, Ed25519 Auto-Update
