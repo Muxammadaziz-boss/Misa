@@ -9,8 +9,8 @@ const crypto = require("crypto");
 // 1. Get current version from package.json
 const packageJsonPath = path.resolve(__dirname, "../package.json");
 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
-const version = packageJson.version || "9.0.0";
-const versionName = `v${version}`;
+const version = packageJson.version || "9.2.0";
+const versionName = (version === "9.2.0" || version === "9.2") ? "v9.2" : `v${version}`;
 
 // 2. Define release target directory inside yordamchi_9.0.0/release/v<version>
 const projectRoot = path.resolve(__dirname, "../../");
@@ -328,6 +328,26 @@ const manifestPath = path.join(releaseVersionDir, "version_manifest.json");
 fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf-8");
 console.log(`✔ Versiya manifesti: version_manifest.json`);
 
+// 8.1 Write SHA256SUMS.txt
+const sumsLines = [];
+const primaryFiles = [
+  `Misa-AI-${versionName}.exe`,
+  `Misa-AI-Setup-${versionName}.exe`,
+  `Misa-AI-${versionName}.msi`,
+  `Misa-AI-${versionName}-Portable.zip`
+];
+for (const pf of primaryFiles) {
+  const pfp = path.join(releaseVersionDir, pf);
+  if (fs.existsSync(pfp)) {
+    const h = calculateSha256(pfp);
+    sumsLines.push(`${h}  ${pf}`);
+  }
+}
+if (sumsLines.length > 0) {
+  fs.writeFileSync(path.join(releaseVersionDir, "SHA256SUMS.txt"), sumsLines.join("\n") + "\n", "utf-8");
+  console.log(`✔ Kriptografik nazorat summalari: SHA256SUMS.txt`);
+}
+
 // 9. Update global RELEASES.md in release directory
 const releasesMdPath = path.join(releaseBaseDir, "RELEASES.md");
 let existingReleases = "";
@@ -347,6 +367,25 @@ const releaseEntry = `### [${versionName}] — ${new Date().toLocaleDateString("
 if (!existingReleases.includes(`### [${versionName}]`)) {
   const newReleasesMd = `# 🚀 Misa AI Versiyalar Arxiv (Releases Archive)\n\n` + releaseEntry + existingReleases.replace(/^# 🚀 (Mikasa|Misa) AI Versiyalar Arxiv \(Releases Archive\)\r?\n\r?\n/, "");
   fs.writeFileSync(releasesMdPath, newReleasesMd, "utf-8");
+}
+
+// 10. Mirror release directory to release/9.2 and release/v9.2.0
+const altDirs = [
+  path.join(releaseBaseDir, "9.2"),
+  path.join(releaseBaseDir, "v9.2.0"),
+];
+for (const altDir of altDirs) {
+  if (altDir !== releaseVersionDir) {
+    try {
+      if (!fs.existsSync(altDir)) {
+        fs.mkdirSync(altDir, { recursive: true });
+      }
+      fs.cpSync(releaseVersionDir, altDir, { recursive: true });
+      console.log(`✔ Qo'shimcha versiya katalogi sinxronlandi: ${path.basename(altDir)}`);
+    } catch (err) {
+      console.warn(`Ogohlantirish (${path.basename(altDir)}): ${err.message}`);
+    }
+  }
 }
 
 console.log(`========================================`);

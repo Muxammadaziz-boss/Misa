@@ -1,5 +1,5 @@
 # ========== tests/smoke_test_rc.py ==========
-# Misa AI 9.0.2 — Release Candidate Windows Smoke Test & Security Regression Suite
+# Misa AI 9.2 — Release Candidate Windows Smoke Test & Security Regression Suite
 # To'liq avtomatlashtirilgan real Windows tekshiruvlari
 
 import os
@@ -42,7 +42,7 @@ def test_1_backend_handshake(port: int = 18420) -> bool:
     logger.info("=== STEP 1: Backend Health & Version Handshake ===")
     url = f"http://127.0.0.1:{port}/api/health"
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Misa-SmokeTest/9.0.2"})
+        req = urllib.request.Request(url, headers={"User-Agent": "Misa-SmokeTest/9.2.0"})
         with urllib.request.urlopen(req, timeout=3.0) as resp:
             status_code = resp.getcode()
             body_bytes = resp.read()
@@ -53,8 +53,8 @@ def test_1_backend_handshake(port: int = 18420) -> bool:
         app = data.get("app")
         status = data.get("status") or (data.get("ok") and "ok")
 
-        if status_code == 200 and version == "9.0.2" and app == "Misa AI":
-            logger.info("✓ Backend handshake muvaffaqiyatli: Misa AI v9.0.2 (Healthy)")
+        if status_code == 200 and version in ("9.2.0", "9.2") and app == "Misa AI":
+            logger.info("✓ Backend handshake muvaffaqiyatli: Misa AI v9.2.0 (Healthy)")
             TEST_RESULTS["backend_handshake"] = True
             return True
         else:
@@ -253,7 +253,7 @@ def test_5_real_windows_notepad_sandbox() -> bool:
             raise RuntimeError("Notepad oynasiga fokus berib bo'lmadi!")
 
         # 4. Tasdiqlash tokenini olish (Avtorizatsiyalangan xavfsiz test oqimi)
-        test_text = "Misa AI RC Test 9.0.2"
+        test_text = "Misa AI RC Test 9.2"
         token = policy.token_manager.create_token(tool_name="keyboard_type", params={"text": test_text})
 
         # Tokenni tekshirish
@@ -323,7 +323,7 @@ def test_6_screenshot_hardening() -> bool:
 
 def run_all_smoke_tests():
     logger.info("=======================================================")
-    logger.info("MISA AI 9.0.2 RELEASE CANDIDATE SMOKE TESTS BOSHLANDI")
+    logger.info("MISA AI 9.2 RELEASE CANDIDATE SMOKE TESTS BOSHLANDI")
     logger.info("=======================================================")
 
     # Background backend jarayoni tekshiruvi yoki vaqtincha ishga tushirish

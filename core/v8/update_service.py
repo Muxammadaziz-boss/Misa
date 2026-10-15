@@ -30,7 +30,7 @@ DEFAULT_TRUSTED_PUBLIC_KEY = "b4be839fd62657c0e786e1a2ad590c05c45c511371d041137c
 # Default update repository / manifest endpoints
 DEFAULT_GITHUB_OWNER = "Muxammadaziz-boss"
 DEFAULT_GITHUB_REPO = "Misa"
-DEFAULT_MANIFEST_URL = f"https://raw.githubusercontent.com/{DEFAULT_GITHUB_OWNER}/{DEFAULT_GITHUB_REPO}/main/release/v9.0.2/version_manifest.json"
+DEFAULT_MANIFEST_URL = f"https://raw.githubusercontent.com/{DEFAULT_GITHUB_OWNER}/{DEFAULT_GITHUB_REPO}/main/release/v9.2/version_manifest.json"
 
 # Auto-check minimum interval: 6 hours (21600 seconds)
 MIN_AUTO_CHECK_INTERVAL_SEC = 6 * 3600
@@ -93,7 +93,7 @@ class SemVer:
         r"(?:-(?P<prerelease>[0-9A-Za-z.-]+))?$"
     )
 
-    def __init__(self, major: int, minor: int, patch: int, prerelease: Optional[str] = None):
+    def __init__(self, major: int, minor: int, patch: int = 0, prerelease: Optional[str] = None):
         self.major = int(major)
         self.minor = int(minor)
         self.patch = int(patch)
@@ -108,10 +108,11 @@ class SemVer:
         if not match:
             raise ValueError(f"Invalid SemVer string: '{version_str}'")
         groups = match.groupdict()
+        patch_val = int(groups["patch"]) if groups.get("patch") is not None else 0
         return cls(
             major=int(groups["major"]),
             minor=int(groups["minor"]),
-            patch=int(groups["patch"]),
+            patch=patch_val,
             prerelease=groups["prerelease"]
         )
 

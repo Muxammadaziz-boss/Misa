@@ -1,6 +1,27 @@
 # 🚀 Misa AI Versiyalar Arxivi (Releases Archive)
 
-### [v9.0.2] — 15/10/2026 (Production Release — Latest)
+### [v9.2] — 15/10/2026 (Production Release — Latest)
+- **Rasmiy GitHub Reliz**: [Misa AI v9.2 Release](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.2)
+- **Windows NSIS Setup**: `v9.2/Misa-AI-Setup-v9.2.exe` (13.55 MB) — [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.2/Misa-AI-Setup-v9.2.exe)  
+  *SHA-256:* `30cca0a57f4140dd2e2effbea83751a6299ac9f03179e516ecb2d8facc031319`
+- **To'liq Portativ Paket (Backend bilan)**: `v9.2/Misa-AI-v9.2-Portable.zip` (235.96 MB) — [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.2/Misa-AI-v9.2-Portable.zip)  
+  *SHA-256:* `a9fa727d117ca4d06233e0067e6f379375210fa884a7d2b0bd4beac99eba2539`
+- **Desktop Ilova (Self-Contained)**: `v9.2/Misa-AI-v9.2.exe` (4.61 MB) — [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.2/Misa-AI-v9.2.exe)  
+  *SHA-256:* `49dad7250c32524ec7cf8f6ac081782816653fbacab157ea97e42a7e7915213a`
+- **Windows MSI Paketi**: `v9.2/Misa-AI-v9.2.msi` (14.37 MB) — [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.2/Misa-AI-v9.2.msi)  
+  *SHA-256:* `d07688b384327c978320335eba9eae539d5da5e99f3bb1aefd4ec77bdb0576d8`
+- **Kriptografik SHA-256 Summalar**: `v9.2/SHA256SUMS.txt` — [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.2/SHA256SUMS.txt)
+- **Avto-Yangilanish Manifesti**: `v9.2/version_manifest.json` — [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.2/version_manifest.json)
+- **Asosiy Yangiliklar**:
+  - To'liq 9.2 versiyaga yangilanish (Backend 9.2.0, Desktop Frontend va Native Tauri Rust v9.2.0).
+  - Yangi `release/v9.2` (va muvofiqlik uchun `release/9.2` hamda `release/v9.2.0`) papkalariga to'liq yig'ilgan paketlar.
+  - Moslashuvchan SemVer tahlilchisi va `DEFAULT_MANIFEST_URL` yangilanishi.
+  - Native Desktop Preflight va Handshake tekshiruvlari v9.2 standartiga moslashtirildi.
+  - Barcha sinovlar (Python, Frontend va Windows Smoke Suite) 100% muvaffaqiyatli.
+
+---
+
+### [v9.0.2] — 15/10/2026 (Historical Release)
 - **Rasmiy GitHub Reliz**: [Misa AI v9.0.2 Release](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.0.2)
 - **Windows NSIS Setup**: `v9.0.2/Misa-AI-Setup-v9.0.2.exe` (13.55 MB) — [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.0.2/Misa-AI-Setup-v9.0.2.exe)  
   *SHA-256:* `30cca0a57f4140dd2e2effbea83751a6299ac9f03179e516ecb2d8facc031319`

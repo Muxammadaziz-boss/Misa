@@ -120,16 +120,16 @@ class TestDesktopPlatformHardening(unittest.TestCase):
                     is_compatible = True
             return is_healthy, is_compatible, version
 
-        resp_902 = 'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{"status":"ok","app":"Misa AI","version":"9.0.2"}'
-        h1, c1, v1 = parse_handshake(resp_902, "9.0.2")
+        resp_920 = 'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{"status":"ok","app":"Misa AI","version":"9.2.0"}'
+        h1, c1, v1 = parse_handshake(resp_920, "9.2.0")
         self.assertTrue(h1)
         self.assertTrue(c1)
-        self.assertEqual(v1, "9.0.2")
+        self.assertEqual(v1, "9.2.0")
 
         resp_old = 'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{"status":"ok","app":"Misa AI","version":"8.0.0"}'
-        h2, c2, v2 = parse_handshake(resp_old, "9.0.2")
+        h2, c2, v2 = parse_handshake(resp_old, "9.2.0")
         self.assertTrue(h2)
-        self.assertFalse(c2, "Eski 8.0.0 versiyasi 9.0.2 ga mos kelmasligi kerak")
+        self.assertFalse(c2, "Eski 8.0.0 versiyasi 9.2.0 ga mos kelmasligi kerak")
         self.assertEqual(v2, "8.0.0")
 
 

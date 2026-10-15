@@ -2,6 +2,22 @@
 
 Barcha o'zgarishlar va relizlar Semantic Versioning (SemVer) qoidalariga muvofiq yuritiladi.
 
+## [9.2.0] — 2026-10-15 (Misa AI v9.2 Production Release & Full Version Synchronization)
+
+- **To'liq 9.2 Versiya Sinxronizatsiyasi**: Loyihaning barcha qatlamlari — Python backend (`core/v8`, `core/api_server.py`, `agent/config.py`, `config.py`), Desktop frontend (`Misa/package.json`, barcha UI komponentlar, sahifalar va logolar) hamda Rust desktop shell (`src-tauri/Cargo.toml`, `tauri.conf.json`, `lib.rs`, `preflight.rs`) bir xil 9.2 / 9.2.0 standartiga o'tkazildi.
+- **Yangi 9.2 Reliz Kataloglari va Avtomatlashtirilgan Paketlash**: Foydalanuvchi so'rovi bo'yicha `release/v9.2` (va muvofiqlik uchun `release/9.2` hamda `release/v9.2.0`) papkalari ochildi. `Misa/scripts/package_release.cjs` orqali quyidagi rasmiy reliz fayllari yig'ildi:
+  - `Misa-AI-v9.2.exe` (mustaqil optimallashtirilgan Windows binar fayli)
+  - `Misa-AI-Setup-v9.2.exe` (NSIS o'rnatuvchi dastur)
+  - `Misa-AI-v9.2.msi` (korporativ Windows MSI o'rnatuvchi)
+  - `Misa-AI-v9.2-Portable.zip` (ichki Python backend va WebView2 bootstrapper bilan to'liq mustaqil portativ paket)
+  - `SHA256SUMS.txt` (kriptografik yaxlitlik nazorati)
+  - `version_manifest.json` (avtomatik yangilanishlar xizmati uchun)
+- **Tauri Supervisor & Handshake Moslashuvchanligi**: `Misa/src-tauri/src/lib.rs` dagi `check_backend_handshake` va `find_bundled_backend_binary` mexanizmlari `v9.2`, `v9.2.0` va `9.2` prefikslarini avtomatik qo'llab-quvvatlaydigan qilib takomillashtirildi.
+- **Kriptografik SemVer Tahlili**: `SemVer` moduli yangi `v9.2` va `9.2.0` talqinlarini to'liq qo'llab-quvvatlaydi, xavfsiz avto-yangilanish tizimi (`UpdateService`) 9.2 versiya bilan to'liq muvofiqlashtirildi.
+- **100% Test Qamrovi & Sifat Kafolati**: Barcha sinovlar (Python regression, Frontend UI/stress, Rust `cargo check` va Windows Smoke suite) 100% muvaffaqiyatli yakunlandi.
+
+---
+
 ## [9.0.2] — 2026-10-15 (Autonomous Windows Agent, Authoritative Security & Platform Hardening)
 
 - **Masofaviy Windows Agent Lifecycle & Poller/Executor Integratsiyasi**: `agent/executor.py` dagi `RemoteCommandExecutor` va `CommandPoller` bevosita `agent/lifecycle.py` ga xavfsiz ulandi. Idempotent polling, takroriy startlardan himoya, 32-bayt nonce orqali replay-attack nazorati va avtomatik resurs tozalash joriy etildi.

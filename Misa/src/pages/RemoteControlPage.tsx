@@ -422,7 +422,7 @@ export const RemoteControlPage: React.FC<RemoteControlPageProps> = () => {
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0" }}>
                 <span style={{ color: "var(--text-muted, #94A3B8)" }}>Agent Versiyasi:</span>
-                <span style={{ color: "#10B981", fontWeight: 600 }}>v{selectedDevice.agent_version || "9.0.2"}</span>
+                <span style={{ color: "#10B981", fontWeight: 600 }}>v{selectedDevice.agent_version || "9.2"}</span>
               </div>
             </div>
           ) : (

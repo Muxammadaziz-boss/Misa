@@ -1,6 +1,6 @@
 # 🛠️ Misa AI — O'rnatish va Sozlash Qo'llanmasi
 
-Ushbu qo'llanma **Misa AI v9.0.2 (Autonomous Desktop Assistant & Intelligence Hub)** tizimini Windows tizimida to'g'ri o'rnatish, sozlash va ishga tushirish bo'yicha to'liq qo'llanmadir.
+Ushbu qo'llanma **Misa AI v9.2 (Autonomous Desktop Assistant & Intelligence Hub)** tizimini Windows tizimida to'g'ri o'rnatish, sozlash va ishga tushirish bo'yicha to'liq qo'llanmadir.
 
 ---
 
@@ -19,7 +19,7 @@ Ushbu qo'llanma **Misa AI v9.0.2 (Autonomous Desktop Assistant & Intelligence Hu
 
 ### 🅰️ 1-usul: Tayyor Desktop Reliz (Tavsiya etiladi)
 Hech qanday dasturlash muhiti yoki kutubxonalarni o'rnatish shart emas:
-1. [GitHub Releases](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.0.2) bo'limidan `Misa-AI-Setup-v9.0.2.exe` yoki `Misa-AI-v9.0.2-Portable.zip` faylini yuklab oling.
+1. [GitHub Releases](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.2) bo'limidan `Misa-AI-Setup-v9.2.exe` yoki `Misa-AI-v9.2-Portable.zip` faylini yuklab oling.
 2. Ilovani ishga tushiring. Portable rejimda `run_portable.bat` fayli orqali bir bosishda backend va frontendni birgalikda ishga tushirishingiz mumkin.
 
 ---

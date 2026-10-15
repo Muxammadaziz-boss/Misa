@@ -1,5 +1,5 @@
 // ========== ServerDiagnosticModal.tsx ==========
-// Misa AI v9.0.2 — Ultra Glass Server Diagnostic & Connectivity Controller
+// Misa AI v9.2 — Ultra Glass Server Diagnostic & Connectivity Controller
 // Real-time multi-layer status: URL -> DNS -> TCP -> TLS -> HTTP -> API Health
 // Safe execution with exponential backoff & zero token leakage
 

@@ -1,5 +1,5 @@
 // ========== networkDiagnosticService.ts ==========
-// Misa AI v9.0.2 — Production Network Diagnostic & Health Suite
+// Misa AI v9.2 — Production Network Diagnostic & Health Suite
 // Multi-layer inspection: URL Parsing -> DNS -> TCP -> TLS -> HTTP -> API Health
 // Safe execution with exponential backoff & zero token leakage
 

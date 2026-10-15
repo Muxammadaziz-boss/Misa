@@ -9,7 +9,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![UI](https://img.shields.io/badge/UI-Tauri%202.0%20%7C%20React%2019-61DAFB?style=flat&logo=react&logoColor=black)](Misa/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D6?logo=windows)](https://microsoft.com/windows)
-[![Stable Release](https://img.shields.io/badge/Stable%20Release-v9.0.2-success)](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.0.2)
+[![Stable Release](https://img.shields.io/badge/Stable%20Release-v9.2-success)](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.2)
 [![Active Branch](https://img.shields.io/badge/Active%20Branch-dev--v9.0.0-blueviolet)](https://github.com/Muxammadaziz-boss/Misa/tree/dev-v9.0.0)
 [![Tests](https://img.shields.io/badge/Tests-345%2F345%20Backend%20%7C%2033%2F33%20Frontend%20%7C%208%2F8%20Smoke-brightgreen)](tests/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -21,8 +21,8 @@
 | Versiya davri | Rasmiy nom | Git Branch | Frontend Katalogi | Izoh |
 | :--- | :--- | :--- | :--- | :--- |
 | **v1.0.0 – v8.0.0** | **Mikasa AI** | `main`, `dev-v8.0.0` | `mikasa-7/` | 8-versiyagacha bo'lgan barcha relizlar va tarixiy arxitektura o'z holicha saqlanadi. |
-| **v9.0.0 – v9.0.1** | **Misa AI** | `dev-v9.0.0` | `Misa/` | Yangi Tauri 2.0 + React 19 interfeysi, ovozli boshqaruv ("Salom Misa") va PC Agent. |
-| **v9.0.2 (Hozirgi)** | **Misa AI** | `dev-v9.0.0` | `Misa/` | **Rasmiy Barqaror Reliz (Latest)**: Authoritative Security, Windows GUI Controller, 100% test qamrovi. |
+| **v9.0.0 – v9.0.2** | **Misa AI** | `dev-v9.0.0` | `Misa/` | Yangi Tauri 2.0 + React 19 interfeysi, ovozli boshqaruv ("Salom Misa") va PC Agent. |
+| **v9.2 (Hozirgi)** | **Misa AI** | `dev-v9.0.0` | `Misa/` | **Rasmiy Barqaror Reliz (Latest)**: 9.2 Versiya sinxronizatsiyasi, yangi relizlar paketi va to'liq platforma barqarorligi. |
 
 ---
 
@@ -152,7 +152,7 @@ python main.py
 
 ---
 
-## 📁 Loyiha Kataloglar Tuzilmasi (v9.0.2 — Misa AI)
+## 📁 Loyiha Kataloglar Tuzilmasi (v9.2 — Misa AI)
 
 ```
 Misa/ (yordamchi_9.0.0)
@@ -178,7 +178,7 @@ Misa/ (yordamchi_9.0.0)
 │   ├── src-tauri/              # Rust Tauri 2.0 desktop qobig'i va Backend Supervisor
 │   └── dist/                   # Ishlab chiqarish uchun yig'ilgan statik fayllar
 ├── packaging/                  # PyInstaller backend/agent bundler va Ed25519 reliz imzolash
-├── release/                    # Yig'ilgan desktop ilovalar arxivi (v9.0.2 Latest)
+├── release/                    # Yig'ilgan desktop ilovalar arxivi (v9.2 Latest)
 ├── supabase/                   # Supabase PostgreSQL migratsiyalari va RLS siyosatlari
 ├── tests/                      # 345+ dan ortiq avtomatlashtirilgan backend va xavfsizlik testlari
 ├── main.py                     # Asosiy Misa AI tizim boshqaruvchisi

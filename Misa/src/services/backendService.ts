@@ -2486,7 +2486,7 @@ class BackendService {
         theme: "dark",
         tts_speed: 1.0,
         ai_model: "gemini",
-        version: "9.0.2",
+        version: "9.2.0",
         voices_available: [
           { id: "ayol", name: "Madina (Ayol)", lang: "uz-UZ-MadinaNeural" },
           { id: "erkak", name: "Sardor (Erkak)", lang: "uz-UZ-SardorNeural" },
@@ -3046,7 +3046,7 @@ class BackendService {
           status: d.status || d.state || "online",
           state: d.state || d.status || "online",
           platform: d.platform || d.os || "windows",
-          client_version: d.client_version || d.version || "9.0.2",
+          client_version: d.client_version || d.version || "9.2.0",
         }));
         if (data.devices.length > 0 && isLocalhostUrl(API_BASE) && authHeaders.Authorization) {
           this.syncDevicesToCloud({

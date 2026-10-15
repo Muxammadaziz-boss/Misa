@@ -145,7 +145,7 @@ class TestWindowsGUIController(unittest.TestCase):
             self.assertTrue(focused)
 
             # 3. Xavfsiz matn kiritish
-            test_content = "Salom Misa AI v9.0.2"
+            test_content = "Salom Misa AI v9.2"
             type_res = self.ctrl.safe_type(test_content, target=found, interval=0.0)
             self.assertTrue(type_res["success"])
             self.assertEqual(type_res["typed_length"], len(test_content))

@@ -58,7 +58,10 @@ powershell -NoProfile -Command ^
 echo.
 echo [3/3] Misa AI 9.0 Desktop oynasi ochilmoqda...
 
-set NATIVE_EXE="..\release\v9.0.2\Misa-AI-v9.0.2.exe"
+set NATIVE_EXE="..\release\v9.2\Misa-AI-v9.2.exe"
+if not exist %NATIVE_EXE% (
+    set NATIVE_EXE="..\release\v9.0.2\Misa-AI-v9.0.2.exe"
+)
 if not exist %NATIVE_EXE% (
     set NATIVE_EXE="..\release\v9.0.1\Misa-AI-v9.0.1.exe"
 )

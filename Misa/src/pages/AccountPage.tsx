@@ -1,5 +1,5 @@
 // ========== AccountPage.tsx ==========
-// Misa AI v9.0.2 — Shaxsiy Profil va Tizim Sozlamalari
+// Misa AI v9.2 — Shaxsiy Profil va Tizim Sozlamalari
 // Refined Ultra Glass Edition: Toza 4-tabli arxitektura, jonli Ovoz/AI selektori,
 // Google Avatar integratsiyasi va to'liq ma'lumotlar sinxronizatsiyasi.
 
@@ -1108,7 +1108,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
               {email && <span>•</span>}
               <span>💼 {roleTitle || "Foydalanuvchi"}</span>
               <span>•</span>
-              <span style={{ color: "#4EDEA3" }}>● Misa AI v9.0.2</span>
+              <span style={{ color: "#4EDEA3" }}>● Misa AI v9.2</span>
             </div>
 
             {bio ? (
@@ -3549,7 +3549,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       Faol qurilmalar ({Math.max(1, devices.length)})
                     </div>
                     <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
-                      Windows PC • Agent v9.0.2
+                      Windows PC • Agent v9.2
                     </div>
                   </div>
                 </div>

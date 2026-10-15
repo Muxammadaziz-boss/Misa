@@ -78,7 +78,7 @@ export class UpdateService {
       if (!res.ok) {
         return {
           update_available: false,
-          current_version: "9.0.2",
+          current_version: "9.2.0",
           error: `Server javobi: HTTP ${res.status}`,
         };
       }

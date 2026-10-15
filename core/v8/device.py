@@ -37,7 +37,7 @@ def get_current_app_version() -> str:
                     return str(v).strip()
     except Exception:
         pass
-    return "9.0.2"
+    return "9.2.0"
 
 
 @dataclass

@@ -157,7 +157,7 @@ pub fn check_backend_handshake(addr_str: &str, expected_version: &str) -> Backen
     let _ = stream.set_write_timeout(Some(Duration::from_millis(2000)));
 
     let request = format!(
-        "GET /api/health HTTP/1.1\r\nHost: {}\r\nUser-Agent: MisaDesktopSupervisor/9.0.2\r\nConnection: close\r\n\r\n",
+        "GET /api/health HTTP/1.1\r\nHost: {}\r\nUser-Agent: MisaDesktopSupervisor/9.2.0\r\nConnection: close\r\n\r\n",
         addr_str
     );
     if stream.write_all(request.as_bytes()).is_err() {
@@ -275,6 +275,9 @@ fn find_bundled_backend_binary() -> Option<(PathBuf, PathBuf)> {
     // 2. Joriy ishchi katalog
     if let Ok(cwd) = std::env::current_dir() {
         candidates.push((cwd.join("backend").join("misa_backend.exe"), cwd.join("backend")));
+        candidates.push((cwd.join("release").join("v9.2").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.2").join("backend")));
+        candidates.push((cwd.join("release").join("v9.2.0").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.2.0").join("backend")));
+        candidates.push((cwd.join("release").join("9.2").join("backend").join("misa_backend.exe"), cwd.join("release").join("9.2").join("backend")));
         candidates.push((cwd.join("release").join("v9.0.2").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.0.2").join("backend")));
         candidates.push((cwd.join("release").join("v9.0.1").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.0.1").join("backend")));
         candidates.push((cwd.join("release").join("v9.0.0").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.0.0").join("backend")));
@@ -286,6 +289,8 @@ fn find_bundled_backend_binary() -> Option<(PathBuf, PathBuf)> {
     // 3. LocalAppData runtime katalogi (%LOCALAPPDATA%\MisaAI\...)
     if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
         let p = PathBuf::from(local_app_data);
+        candidates.push((p.join("MisaAI").join("runtime").join("v9.2").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("runtime").join("v9.2").join("backend")));
+        candidates.push((p.join("MisaAI").join("runtime").join("v9.2.0").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("runtime").join("v9.2.0").join("backend")));
         candidates.push((p.join("MisaAI").join("runtime").join("v9.0.2").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("runtime").join("v9.0.2").join("backend")));
         candidates.push((p.join("MisaAI").join("runtime").join("v9.0.1").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("runtime").join("v9.0.1").join("backend")));
         candidates.push((p.join("MisaAI").join("runtime").join("v9.0.0").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("runtime").join("v9.0.0").join("backend")));
@@ -420,7 +425,7 @@ pub fn ensure_backend_running(state: &SupervisorState) {
     println!("[BACKEND] Backend holati tekshirilmoqda (127.0.0.1:18420)...");
 
     // 1. Agar 127.0.0.1:18420 da backend allaqachon ishlab turgan bo'lsa va versiyasi mos bo'lsa
-    let initial_hs = check_backend_handshake("127.0.0.1:18420", "9.0.2");
+    let initial_hs = check_backend_handshake("127.0.0.1:18420", "9.2.0");
     if initial_hs.is_healthy && initial_hs.is_compatible_version {
         backend_lifecycle_log("HEALTH_OK", &format!("Mavjud backend aniqlandi va mos (127.0.0.1:18420, v{}) — yangi jarayon ochilmaydi ✓", initial_hs.version));
         println!("[BACKEND] Mavjud backend aniqlandi va mos (127.0.0.1:18420, v{}) — yangi jarayon ochilmaydi ✓", initial_hs.version);
@@ -435,8 +440,8 @@ pub fn ensure_backend_running(state: &SupervisorState) {
         }
         return;
     } else if initial_hs.is_healthy && !initial_hs.is_compatible_version {
-        backend_lifecycle_log("VERSION_MISMATCH", &format!("18420-portdagi mavjud backend versiyasi mos emas: '{}' (kutilgan: 9.0.2). Jarayon xavfsiz to'xtatilib, yangilanadi...", initial_hs.version));
-        println!("[BACKEND] 18420-portdagi mavjud backend versiyasi mos emas: '{}' (kutilgan: 9.0.2). Jarayon to'xtatilib yangilanadi...", initial_hs.version);
+        backend_lifecycle_log("VERSION_MISMATCH", &format!("18420-portdagi mavjud backend versiyasi mos emas: '{}' (kutilgan: 9.2.0). Jarayon xavfsiz to'xtatilib, yangilanadi...", initial_hs.version));
+        println!("[BACKEND] 18420-portdagi mavjud backend versiyasi mos emas: '{}' (kutilgan: 9.2.0). Jarayon to'xtatilib yangilanadi...", initial_hs.version);
         cleanup_port_process(18420);
         std::thread::sleep(Duration::from_millis(500));
     }
@@ -472,7 +477,7 @@ pub fn ensure_backend_running(state: &SupervisorState) {
         let mut port_compatible = false;
         for _ in 0..3 {
             std::thread::sleep(Duration::from_millis(400));
-            let hs = check_backend_handshake("127.0.0.1:18420", "9.0.2");
+            let hs = check_backend_handshake("127.0.0.1:18420", "9.2.0");
             if hs.is_healthy {
                 port_healthy = true;
                 port_compatible = hs.is_compatible_version;
@@ -1131,12 +1136,12 @@ pub fn run() {
     startup_log("STARTUP", "Misa AI process started");
     startup_log("STARTUP", &format!("Executable path: {}", exe_path));
     startup_log("STARTUP", &format!("PID: {} TID: {}", current_pid(), current_tid()));
-    println!("[BOOT] MISA AI v9.0.2 Desktop Application ishga tushmoqda...");
+    println!("[BOOT] MISA AI v9.2.0 Desktop Application ishga tushmoqda...");
 
     // 1. Single-Instance Guard tekshiruvi (faqat 1 ta Misa UI instansiyasi ishlaydi)
     startup_log("SINGLE_INSTANCE", "Checking single instance guard...");
     println!("[INSTANCE] Yagona nusxa (Single-Instance) tekshirilmoqda...");
-    let _instance_guard = match SingleInstanceGuard::acquire("Local\\Misa_AI_SingleInstance_Mutex_v9.0.2") {
+    let _instance_guard = match SingleInstanceGuard::acquire("Local\\Misa_AI_SingleInstance_Mutex_v9.2") {
         Some(g) => {
             startup_log("SINGLE_INSTANCE", "Acquired mutex successfully (Primary instance)");
             println!("[INSTANCE] Yagona nusxa qulfi o'rnatildi (Primary instance) ✓");
@@ -1243,7 +1248,7 @@ pub fn run() {
 
             let mut tray_builder = TrayIconBuilder::with_id("misa_main_tray")
                 .menu(&tray_menu)
-                .tooltip("Misa AI v9.0.2")
+                .tooltip("Misa AI v9.2")
                 .show_menu_on_left_click(false);
 
             if let Some(icon) = app.default_window_icon() {
