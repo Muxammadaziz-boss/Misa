@@ -68,7 +68,7 @@ def get_app_version() -> str:
         from core.v8.device import get_current_app_version
         return get_current_app_version()
     except Exception:
-        return "9.0.1"
+        return "9.0.2"
 
 
 def load_runtime_dotenv() -> None:
@@ -279,7 +279,7 @@ async def handle_status(request):
     return web.json_response({
         "status": "online",
         "app": "MISA AI",
-        "version": "9.0.1",
+        "version": "9.0.2",
         "user": user,
         "ai_available": ai_ok,
         "voice_state": _voice_state,
@@ -3433,7 +3433,7 @@ async def handle_remote_devices(request):
         agent_ver = (
             local_ident.agent_version
             if (is_local and local_ident and local_ident.agent_version)
-            else (d.agent_version or (local_ident.agent_version if local_ident else "9.0.1"))
+            else (d.agent_version or (local_ident.agent_version if local_ident else "9.0.2"))
         )
         if is_local and local_ident and d.agent_version != local_ident.agent_version:
             d.agent_version = local_ident.agent_version
@@ -7086,7 +7086,7 @@ def run_server(host=None, port=None):
         import urllib.request
         req = urllib.request.Request(
             f"http://{resolved_host}:{resolved_port}/api/health",
-            headers={"User-Agent": "MisaSingleInstanceCheck/9.0.1"}
+            headers={"User-Agent": "MisaSingleInstanceCheck/9.0.2"}
         )
         with urllib.request.urlopen(req, timeout=0.8) as resp:
             if resp.status == 200:

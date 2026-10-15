@@ -1,5 +1,5 @@
 // ========== network_diag.rs ==========
-// Misa AI v9.0.1 — Production Network Diagnostic Suite
+// Misa AI v9.0.2 — Production Network Diagnostic Suite
 // Tests complete path: URL Parsing -> DNS -> TCP -> TLS -> HTTP -> API Health
 // Logs all events to %LOCALAPPDATA%\MisaAI\logs\network.log (never logging secrets)
 
@@ -188,7 +188,7 @@ pub fn run_full_diagnostics(target_url: &str) -> NetworkDiagnosticReport {
                 use std::io::Write;
                 let health_path = if path == "/" || path.is_empty() { "/api/health" } else { &path };
                 let req_payload = format!(
-                    "GET {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: MisaNetworkDiag/9.0.1\r\nAccept: application/json\r\nConnection: close\r\n\r\n",
+                    "GET {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: MisaNetworkDiag/9.0.2\r\nAccept: application/json\r\nConnection: close\r\n\r\n",
                     health_path, host
                 );
 
@@ -341,7 +341,7 @@ fn run_wininet_https_probe(url_str: &str, report: &mut NetworkDiagnosticReport) 
         fn GetLastError() -> u32;
     }
 
-    let agent_wide: Vec<u16> = "MisaNetworkDiag/9.0.1\0".encode_utf16().collect();
+    let agent_wide: Vec<u16> = "MisaNetworkDiag/9.0.2\0".encode_utf16().collect();
     let probe_url = if report.parsed_path == "/" || report.parsed_path.is_empty() {
         format!("{}/health", url_str.trim_end_matches('/'))
     } else {

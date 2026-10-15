@@ -3,7 +3,7 @@
 # Versiya: 8.0.0
 # ========== Ogohlantirishlarni yashirish ==========
 
-VERSION = "9.0.1"
+VERSION = "9.0.2"
 APP_NAME = "Misa AI"
 import os
 import sys

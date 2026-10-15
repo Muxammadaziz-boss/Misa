@@ -1,5 +1,5 @@
 // ========== preflight.rs ==========
-// Misa AI v9.0.1 — Windows Native WebView2 Preflight & Runtime Bootstrapper
+// Misa AI v9.0.2 — Windows Native WebView2 Preflight & Runtime Bootstrapper
 // To'liq mahalliy (Pure Win32 GDI) Misa Ultra Glass UI — WebView2 mavjud bo'lmaganda ham
 // mustaqil ishlaydi, xatoliksiz fon jarayonlarini boshqaradi va 100% real lifecycle bilan bog'langan.
 
@@ -223,6 +223,8 @@ pub fn find_or_fetch_bootstrapper() -> Option<PathBuf> {
     if let Ok(cwd) = std::env::current_dir() {
         setup_cands.push(cwd.join("webview2").join("MicrosoftEdgeWebview2Setup.exe"));
         setup_cands.push(cwd.join("MicrosoftEdgeWebview2Setup.exe"));
+        setup_cands.push(cwd.join("release").join("v9.0.2").join("webview2").join("MicrosoftEdgeWebview2Setup.exe"));
+        setup_cands.push(cwd.join("release").join("v9.0.2").join("MicrosoftEdgeWebview2Setup.exe"));
         setup_cands.push(cwd.join("release").join("v9.0.1").join("webview2").join("MicrosoftEdgeWebview2Setup.exe"));
         setup_cands.push(cwd.join("release").join("v9.0.1").join("MicrosoftEdgeWebview2Setup.exe"));
         setup_cands.push(cwd.join("Misa").join("src-tauri").join("resources").join("MicrosoftEdgeWebview2Setup.exe"));
@@ -466,7 +468,7 @@ unsafe fn paint_preflight_ui(hdc: win32::HDC, client_w: i32, client_h: i32, mode
     // Kichik sarlavha: "Native Desktop Runtime Preflight"
     SelectObject(hdc, font_sub);
     SetTextColor(hdc, rgb(168, 85, 247)); // Accent purple
-    let sub_w = to_wide("Native Desktop Preflight v9.0.1");
+    let sub_w = to_wide("Native Desktop Preflight v9.0.2");
     let mut rect_sub = RECT { left: 130, top: 25, right: 400, bottom: 48 };
     DrawTextW(hdc, sub_w.as_ptr(), -1, &mut rect_sub, 0x0000);
 

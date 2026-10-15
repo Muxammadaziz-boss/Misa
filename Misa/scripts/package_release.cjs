@@ -123,6 +123,7 @@ const backendSrcCandidates = [
   path.join(projectRoot, "dist/backend_build/misa_backend"),
   path.resolve(__dirname, "../src-tauri/backend"),
   path.join(releaseVersionDir, "backend"),
+  path.join(projectRoot, "release", "v9.0.1", "backend"),
   path.join(projectRoot, "dist/backend_build/mikasa_backend"),
   path.join(projectRoot, "release", "v8.0.0", "backend"),
 ];
@@ -233,7 +234,7 @@ if (webview2Source) {
   copyFileWithLog(webview2Source, path.join(releaseVersionDir, "MicrosoftEdgeWebview2Setup.exe"), "WebView2 Bootstrapper (root)");
 }
 
-// 7.2 Create Dedicated Portable Directory: release/v9.0.1/portable/
+// 7.2 Create Dedicated Portable Directory: release/v<version>/portable/
 const portableDir = path.join(releaseVersionDir, "portable");
 if (!fs.existsSync(portableDir)) {
   fs.mkdirSync(portableDir, { recursive: true });

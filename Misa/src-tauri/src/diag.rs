@@ -1,5 +1,5 @@
 // ========== diag.rs ==========
-// Misa AI v9.0.1 — Structured Startup & Crash Diagnostic Logger
+// Misa AI v9.0.2 — Structured Startup & Crash Diagnostic Logger
 // Traces every startup lifecycle transition to %LOCALAPPDATA%\MisaAI\logs\startup.log
 
 use std::fs::{create_dir_all, OpenOptions};

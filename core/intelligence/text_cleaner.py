@@ -1,5 +1,5 @@
 # ========== text_cleaner.py ==========
-# Misa AI 9.0.1 — Robust AI Response & JSON Sanitizer
+# Misa AI 9.0.2 — Robust AI Response & JSON Sanitizer
 # Eliminates raw JSON leaks, handles truncated outputs, and unescapes text.
 
 import json
