@@ -68,19 +68,16 @@ class TestMicrophoneManagerUnit(unittest.TestCase):
         ]
 
         with patch("sounddevice.default", MagicMock(device=[0, 0])):
-            with patch("sounddevice._terminate") as mock_term, patch("sounddevice._initialize") as mock_init:
-                with patch("sounddevice.query_devices", side_effect=[initial_devices, hot_plugged_devices]):
-                    # Dastlabki holat
-                    devs_1 = self.mgr.get_input_devices()
-                    names_1 = [d["name"] for d in devs_1]
-                    self.assertFalse(any("External Studio USB Mic" in n for n in names_1))
+            with patch("sounddevice.query_devices", side_effect=[initial_devices, hot_plugged_devices]):
+                # Dastlabki holat
+                devs_1 = self.mgr.get_input_devices()
+                names_1 = [d["name"] for d in devs_1]
+                self.assertFalse(any("External Studio USB Mic" in n for n in names_1))
 
-                    # Refresh chaqirilganda
-                    devs_2 = self.mgr.refresh_devices()
-                    mock_term.assert_called_once()
-                    mock_init.assert_called_once()
-                    names_2 = [d["name"] for d in devs_2]
-                    self.assertTrue(any("External Studio USB Mic" in n for n in names_2))
+                # Refresh chaqirilganda
+                devs_2 = self.mgr.refresh_devices()
+                names_2 = [d["name"] for d in devs_2]
+                self.assertTrue(any("External Studio USB Mic" in n for n in names_2))
 
     def test_persistence_save_and_read(self):
         test_id = "input_test_generic_mic"

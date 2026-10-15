@@ -47,7 +47,15 @@ class SafeToolRunner:
         """
         start_time = time.time()
         tool_name = tool.name
-        safe_params = redact_sensitive_data(params)
+
+        clean_input_params = dict(params) if isinstance(params, dict) else (params or {})
+        if not confirmation_token and isinstance(clean_input_params, dict):
+            confirmation_token = clean_input_params.pop("_confirmation_token", None) or clean_input_params.pop("confirmation_token", None)
+        elif isinstance(clean_input_params, dict):
+            clean_input_params.pop("_confirmation_token", None)
+            clean_input_params.pop("confirmation_token", None)
+
+        safe_params = redact_sensitive_data(clean_input_params)
 
         # 1. Salomatlik holatini tekshirish
         if tool.health == ToolHealth.DISABLED:
@@ -77,7 +85,10 @@ class SafeToolRunner:
             )
 
         # 2. Parametrlarni qat'iy tekshirish (VALIDATE)
-        is_valid, err_msg, err_code, clean_params = ParameterValidator.validate(tool, params, strict=True)
+        is_valid, err_msg, err_code, clean_params = ParameterValidator.validate(tool, clean_input_params, strict=True)
+        if clean_params and isinstance(clean_params, dict):
+            clean_params.pop("_confirmation_token", None)
+            clean_params.pop("confirmation_token", None)
         if not is_valid:
             dur = (time.time() - start_time) * 1000.0
             logger.warning(f"[SafeToolRunner] Validatsiya xatoligi: '{tool_name}' - {err_msg}")

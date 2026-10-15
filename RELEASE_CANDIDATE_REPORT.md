@@ -1,24 +1,25 @@
-# Misa AI v9.0.1 — Release Candidate (RC) Tekshiruv va Sinov Hisoboti
+# Misa AI v9.0.2 — Rasmiy Reliz (Release Candidate) Tekshiruv va Sinov Hisoboti
 
 **Hujjat sanasi:** 2026-10-15  
 **Loyiha:** `D:\Ishchi stoli\Misa\yordamchi_9.0.0`  
 **Tarmoq/Branch:** `dev-v9.0.0`  
-**Versiya:** `9.0.1` (Backend: `9.0.1`, GUI/Frontend: `9.0.1`, Tauri/Rust: `9.0.1`)  
-**Holat:** **RELEASE CANDIDATE TAYYOR (APPROVED FOR PRODUCTION)**
+**Versiya:** `9.0.2` (Backend: `9.0.2`, GUI/Frontend: `9.0.2`, Tauri/Rust: `9.0.2`)  
+**Holat:** **RASMIY RELIZ TAYYOR (APPROVED FOR PRODUCTION RELEASE)**
 
 ---
 
 ## 1. Commitlar va O'zgarishlar Tarixi
 
-`dev-v9.0.0` tarmog'ida release candidate uchun amalga oshirilgan to'liq commitlar ketma-ketligi:
+`dev-v9.0.0` tarmog'ida release candidate va rasmiy v9.0.2 relizi uchun amalga oshirilgan commitlar ketma-ketligi:
 
 | Commit SHA | Muallif / Turi | Qisqacha tavsif |
 |---|---|---|
+| `d909b02` | `chore(release)` | Loyiha bo'ylab barcha release versiyalarini 9.0.2 ga ko'tarish (backend, tauri, frontend, tests) |
 | `521edbe` | `chore(release)` | v9.0.1 release candidate manifest va paketlash artefaktlarini yangilash |
 | `b1eb323` | `fix(gui)` | Oyna faollashtirish (AttachThreadInput/headless fallback) va avtomatlashtirilgan RC smoke to'plami |
 | `cdec5c0` | `test(voice)` | Ovoz sintezi preview unit testini tarmoqqa bog'liq bo'lmagan deterministik holatga keltirish |
 | `eaa411b` | `fix(api)` | `/api/plugins/execute` da xavfsiz header parsing va ruxsatsiz lokal chaqiruvchini 403 bilan rad etish testi |
-| `60a18c8` | `feat(desktop)` | Desktop supervisor handshake (9.0.1), brauzer adapteri, screenshot error handling va audit redaction |
+| `60a18c8` | `feat(desktop)` | Desktop supervisor handshake (9.0.2), brauzer adapteri, screenshot error handling va audit redaction |
 | `24d82d6` | `feat(intelligence)` | Agent loop'ga GUI integratsiyasi, takroriy qadamlar (loop) nazorati va lokal vision maxfiyligi |
 | `0ee92b4` | `feat(gui)` | Sessiyadan xabardor Windows GUI controller, fokus tekshiruvi, koordinata chegaralari va abort boshqaruvi |
 | `13db39f` | `feat(security)` | Vakolatli asboblar xavfsizlik siyosati, tasdiqlash tokenlari, replay himoyasi va lokal API izolyatsiyasi |
@@ -29,29 +30,31 @@
 ## 2. Test va Build Natijalari
 
 ### 2.1. Python Testlari
-* **Asosiy yangi arxitektura testlari (`tests/test_agent_lifecycle_executor.py`, `tests/test_security_policy.py`, `tests/test_windows_gui_controller.py`, `tests/test_agent_loop_gui.py`, `tests/test_desktop_platform_hardening.py`):**  
+* **Asosiy arxitektura testlari (`test_agent_lifecycle_executor.py`, `test_security_policy.py`, `test_windows_gui_controller.py`, `test_agent_loop_gui.py`, `test_desktop_platform_hardening.py`):**  
   **30 / 30 PASS (100% OK)**
 * **Xavfsizlik va vositalar shartnomasi testlari (`test_agent_security.py`, `test_security_api.py`, `test_plugins_api.py`, `test_tool_*.py`):**  
   **60 / 60 PASS (100% OK)**
 * **Rejalashtirish, xotira va v9 ishlab chiqarish testlari (`test_plan_*.py`, `test_memory_*.py`, `test_v9_*.py`):**  
   **98 / 98 PASS (100% OK)**
-* **Tizim metrikalari, algoritmlar, yangilanish va remote agent testlari (`test_smart_algorithms.py`, `test_app_detector.py`, `test_logging.py`, `test_v8_remote.py`, `test_v8_secure_updater.py` va boshqalar):**  
-  **96 / 96 PASS (100% OK)**
-* **Jami Python testlari:** **284 ta unit/integration testlari muvaffaqiyatli o'tdi (0 xatolik).**
+* **Tizim metrikalari, algoritmlar, yangilanish va remote agent testlari (`test_smart_algorithms.py`, `test_app_detector.py`, `test_logging.py`, `test_v8_remote.py`, `test_v8_secure_updater.py`, `test_v8_backend_bundle.py`):**  
+  **125 / 125 PASS (100% OK)**
+* **Agent Loop va Step Verifier to'liq testlari (`test_agent_loop.py`, `test_agent_verifier.py`):**  
+  **32 / 32 PASS (100% OK)**
+* **Jami Python testlari:** **345 ta unit/integration testlari muvaffaqiyatli o'tdi (0 xatolik, 100% PASS).**
 
 ### 2.2. Frontend (React 19 + TypeScript + Vite)
 * **Unit va Stress testlari (`npm test`):**
   - Fayllar: `tests/frontend.test.mjs`, `tests/stress.test.mjs`, `tests/desktop_ux_lifecycle.test.mjs`
-  - Natija: **33 / 33 PASS (0 fail, 0 skipped, 346ms)**
+  - Natija: **33 / 33 PASS (0 fail, 0 skipped, 566ms)**
 * **TypeScript Typecheck va Ishlab chiqarish Buildi (`npm run build`):**
   - Buyruq: `tsc && vite build`
-  - Natija: **Muvaffaqiyatli (0 error, ✓ built in 2.72s)**
+  - Natija: **Muvaffaqiyatli (0 error, ✓ built in 2.07s)**
   - Chunks: `dist/index.html`, `dist/assets/index-*.js`, `dist/assets/backendService-*.js`
 
 ### 2.3. Rust / Tauri (Desktop Shell)
 * **Cargo Check (`cargo check --lib`):**
-  - Natija: **Muvaffaqiyatli yakunlandi (`Finished dev profile in 3.94s`, 0 error)**
-  - Rust modullari (`diag.rs`, `preflight.rs`, `network_diag.rs`, `lib.rs`) to'liq mos keladi.
+  - Natija: **Muvaffaqiyatli yakunlandi (`Finished dev profile in 19.67s`, 0 error)**
+  - Rust modullari (`diag.rs`, `preflight.rs`, `network_diag.rs`, `lib.rs`) v9.0.2 ga to'liq mos keladi.
 
 ---
 
@@ -61,10 +64,10 @@ Real Windows muhitida maxsus yaratilgan `tests/smoke_test_rc.py` orqali to'liq a
 
 | Test bosqichi | Sinov parametri | Natija | Tafsilot |
 |---|---|---|---|
-| **1. Backend Handshake** | `GET http://127.0.0.1:18420/api/health` | **✓ PASS** | HTTP 200, `app: "Misa AI"`, `version: "9.0.1"`, `status: "ok"` |
+| **1. Backend Handshake** | `GET http://127.0.0.1:18420/api/health` | **✓ PASS** | HTTP 200, `app: "Misa AI"`, `version: "9.0.2"`, `status: "ok"` |
 | **2. Remote Agent Lifecycle** | Start, duplicate start, stop | **✓ PASS** | Poller ishga tushdi, duplicate start bloklandi, to'xtatilganda xavfsiz yopildi |
 | **3. Unconfirmed GUI Block** | Tasdiqsiz `keyboard_type` | **✓ PASS** | `allowed: False`, `requires_confirmation: True`, Challenge token yaratildi |
-| **4. Real Notepad Sandbox** | Notepad ochish, fokuslash, yozish, postcondition, yopish | **✓ PASS** | Notepad ochildi (HWND=0x310426), fokuslandi, xavfsiz matn yozildi, postcondition tasdiqlandi va jarayon xavfsiz yakunlandi |
+| **4. Real Notepad Sandbox** | Notepad ochish, fokuslash, yozish, postcondition, yopish | **✓ PASS** | Notepad ochildi, fokuslandi, xavfsiz matn yozildi, postcondition tasdiqlandi va jarayon xavfsiz yakunlandi |
 | **5. Screenshot Hardening** | Screenshot xatosi yuz berganda | **✓ PASS** | `captured: False`, `success: False` qaytishi tasdiqlandi (soxta true yo'q) |
 | **6. Local API Protection** | Ruxsatsiz `/api/plugins/execute` | **✓ PASS** | Begona Origin bilan chaqirilganda 403 `UNAUTHORIZED_LOCAL_CALLER` bilan rad etildi |
 | **7. Replay & Expiry** | Bir martalik tasdiqlash tokenlari | **✓ PASS** | Qayta ishlatishda `TOKEN_ALREADY_USED`, muddati o'tganda `TOKEN_EXPIRED` |
@@ -83,14 +86,15 @@ Real Windows muhitida maxsus yaratilgan `tests/smoke_test_rc.py` orqali to'liq a
 
 ## 5. Tayyorlangan Reliz Paketlari (Build Artifacts)
 
-Katalog: `release/v9.0.1/`
+Katalog: `release/v9.0.2/`
 
-- **Mustaqil ilova:** `Misa-AI-v9.0.1.exe` (5.20 MB) — SHA-256: `fb8a74752175a9d4...`
-- **O'rnatuvchi (Installer):** `Misa-AI-Setup-v9.0.1.exe` (13.55 MB) — SHA-256: `30cca0a57f4140dd...`
-- **MSI Paketi:** `Misa-AI-v9.0.1.msi` (14.37 MB) — SHA-256: `d07688b384327c97...`
-- **To'liq portativ paket:** `Misa-AI-v9.0.1-Portable.zip` (236.55 MB) — SHA-256: `f01e59ec6eaeee2d...`
-- **Runtime kutubxonalar:** `WebView2Loader.dll` (0.15 MB), `MicrosoftEdgeWebview2Setup.exe` (1.77 MB)
-- **Manifest:** `release/v9.0.1/version_manifest.json`
+| Artefakt Fayli | Hajmi | SHA-256 Checksum |
+|---|---|---|
+| `Misa-AI-v9.0.2.exe` | 5.20 MB | `fb8a74752175a9d401cced1d5af3783ef20d2397c74f7e9042de476e5a809a5c` |
+| `Misa-AI-Setup-v9.0.2.exe` | 13.55 MB | `30cca0a57f4140dd2e2effbea83751a6299ac9f03179e516ecb2d8facc031319` |
+| `Misa-AI-v9.0.2.msi` | 14.37 MB | `d07688b384327c978320335eba9eae539d5da5e99f3bb1aefd4ec77bdb0576d8` |
+| `Misa-AI-v9.0.2-Portable.zip` | 236.55 MB | `fb8eb81cf2ad3f039621d8d872a6bb7307f4bd2fb074d2e71466e7e4b4a9b218` |
+| `SHA256SUMS.txt` | 355 B | Checksum fayli (barcha 4 ta artefakt uchun mustaqil tasdiqlangan) |
 
 ---
 
@@ -104,13 +108,14 @@ Katalog: `release/v9.0.1/`
 
 ## 7. Yakuniy Tavsiya
 
-> ### **TAVSIYA: RELEASE QILISHGA TAYYOR (APPROVED FOR RELEASE)**
+> ### **TAVSIYA: RASMIY RELIZ PUBLISH QILISHGA TAYYOR (APPROVED FOR OFFICIAL RELEASE)**
 > 
-> Barcha 5 ta asosiy funksional commit va ularning regressiya sinovlari to'liq o'tkazildi:
-> - Git holati toza, barcha tuzatishlar alohida atomik commitlar bilan mustahkamlandi;
-> - Barcha 284 ta Python testlari, 33 ta Frontend testlari va Vite build 100% muvaffaqiyatli yakunlandi;
+> Barcha funksional qismlar, regressiya sinovlari va build artefaktlari to'liq tasdiqlandi:
+> - Git holati toza, barcha o'zgarishlar alohida atomik commitlar bilan mustahkamlandi;
+> - Barcha 345 ta Python testlari, 33 ta Frontend testlari, Vite build va `cargo check --lib` 100% muvaffaqiyatli yakunlandi;
 > - Real Windows Notepad va GUI amallari postcondition nazorati bilan tasdiqlandi;
 > - Xavfsizlik siyosati, replay himoyasi va lokal API filtrlari to'liq ishga tushirildi;
-> - Backend (`9.0.1`), Frontend (`9.0.1`) va Desktop Installer (`9.0.1`) versiyalari to'liq moslashtirildi.
+> - Backend (`9.0.2`), Frontend (`9.0.2`) va Desktop Installer (`9.0.2`) versiyalari to'liq moslashtirildi;
+> - Barcha 4 ta asosiy artefakt SHA-256 xeshlari mustaqil tekshirildi va `SHA256SUMS.txt` ga muhrlandi.
 > 
-> **Misa AI v9.0.1 versiyasi rasmiy reliz sifatida chiqarishga to'liq tayyor.**
+> **Misa AI v9.0.2 versiyasi rasmiy GitHub relizi sifatida publish qilishga to'liq tayyor.**

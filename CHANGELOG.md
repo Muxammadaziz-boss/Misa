@@ -10,7 +10,7 @@ Barcha o'zgarishlar va relizlar Semantic Versioning (SemVer) qoidalariga muvofiq
 - **Sessiyadan Xabardor Windows GUI Controller**: `core/gui/controller.py` orqali DPI-aware oyna boshqaruvi, nishon oynani aniqlash (`find_window`), Win32 `AttachThreadInput` orqali ishonchli faollashtirish, qat'iy precondition/postcondition tekshiruvlari va har qanday favqulodda vaziyatda darhol to'xtatuvchi `abort` mexanizmi yaratildi.
 - **Agent Loop Verifikatsiyasi & Maxfiy Lokal Vision**: Agent rejasini bajarish jarayonida bir xil vosita qayta-qayta takrorlanishini (infinite loop) avtomatik aniqlash va xavfsiz to'xtatish yo'lga qo'yildi. GUI qadamlari (click, type, screenshot) integratsiya qilindi; foydalanuvchi ekrani tasvirlari hech qanday tashqi AI bulutlariga yuborilmaydi (to'liq lokal qayta ishlanadi).
 - **Desktop Handshake, Brauzer Adapteri & Screenshot/Audit Hardening**: Rust supervisor va Python backend o'rtasidagi handshake qat'iylashtirildi (`version: 9.0.2`, `app: Misa AI`). Versiya mos kelmasa eskirgan jarayon avtomatik tozalanadi. Brauzer oynalarini boshqaruvchi `BrowserAutomationAdapter`, xato yuz berganda soxta `captured: true` bermaydigan skrinshot tizimi hamda telemetriyada parollar va maxfiy kalitlarni avtomatik `[REDACTED]` qiluvchi audit mexanizmi ishga tushirildi.
-- **To'liq Regression va Sifat Kafolati**: Barcha 284 ta Python testlari, 33 ta Frontend testlari, TypeScript/Vite production buildi, `cargo check --lib` va Windows Notepad sandbox smoke-testi muvaffaqiyatli yakunlandi.
+- **To'liq Regression va Sifat Kafolati**: Barcha 345 ta Python testlari, 33 ta Frontend testlari, TypeScript/Vite production buildi, `cargo check --lib` va Windows Notepad sandbox smoke-testi muvaffaqiyatli yakunlandi.
 
 ---
 

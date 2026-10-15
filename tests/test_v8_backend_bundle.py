@@ -180,7 +180,10 @@ class TestSupervisorArchitecture(unittest.TestCase):
 
         # Check existing backend detection (unmanaged preservation)
         self.assertIn("is_managed", content)
-        self.assertIn("Mavjud backend aniqlandi va faol", content)
+        self.assertTrue(
+            "Mavjud backend aniqlandi va mos" in content or "Mavjud backend aniqlandi va faol" in content,
+            "lib.rs must check and log existing backend detection"
+        )
 
         # Check concurrency guard (no duplicate parallel spawns)
         self.assertIn("is_spawning", content)

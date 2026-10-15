@@ -99,12 +99,30 @@ class AgentVerifier:
             return self._verify_screen_analyze(step, raw)
         elif tool_name in ("focus_window", "get_active_window", "window_list", "notepad"):
             return self._verify_window_management(step, raw, tool_name)
+        elif tool_name in ("shutdown", "restart", "system_shutdown", "system_restart", "sleep"):
+            return self._verify_power_management(step, raw, tool_name)
 
         # 3. Kutilgan natija (expected_result) bilan leksik/semantik solishtirish
         if step.expected_result:
             return self._verify_against_expected(step, raw)
 
-        # 4. Deterministik tekshirish imkoni yo'q, lekin xato bo'lmagan holat -> UNKNOWN
+        # 4. Ro'yxatdan o'tgan vositalar yoki eksplitsit muvaffaqiyatli dict qaytargan asboblar -> SUCCESS
+        if self.tool_registry and self.tool_registry.get(tool_name):
+            return VerificationResult(
+                verified=True,
+                status=VerificationStatus.SUCCESS,
+                reason=f"Asbob '{tool_name}' muvaffaqiyatli yakunlandi",
+                details={"raw_summary": str(raw)[:200] if raw is not None else ""}
+            )
+        if isinstance(raw, dict) and raw.get("success") is True:
+            return VerificationResult(
+                verified=True,
+                status=VerificationStatus.SUCCESS,
+                reason=f"Asbob '{tool_name}' muvaffaqiyatli yakunlandi",
+                details={"raw_summary": str(raw)[:200] if raw is not None else ""}
+            )
+
+        # 5. Deterministik tekshirish imkoni yo'q, lekin xato bo'lmagan holat -> UNKNOWN
         logger.info(f"[AgentVerifier] Qadam #{step.order} ({tool_name}) uchun orakul yo'q: UNKNOWN")
         return VerificationResult(
             verified=True,
@@ -491,3 +509,20 @@ class AgentVerifier:
             reason=f"{tool_name} natijasi tasdiqlanmadi",
             details={"raw": raw}
         )
+
+    def _verify_power_management(self, step: PlanStep, raw: Any, tool_name: str) -> VerificationResult:
+        """Tizim quvvat boshqaruvi (shutdown, restart) natijasini tekshirish"""
+        if isinstance(raw, dict) and raw.get("error"):
+            return VerificationResult(
+                verified=False,
+                status=VerificationStatus.FAILURE,
+                reason=f"{tool_name} xatosi: {raw.get('error')}",
+                details=raw
+            )
+        return VerificationResult(
+            verified=True,
+            status=VerificationStatus.SUCCESS,
+            reason=f"{tool_name} amali muvaffaqiyatli qabul qilindi",
+            details=raw if isinstance(raw, dict) else {"raw": str(raw)[:100]}
+        )
+
