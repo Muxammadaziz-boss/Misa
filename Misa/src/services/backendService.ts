@@ -3476,7 +3476,7 @@ class BackendService {
         try {
           const { invoke } = await import("@tauri-apps/api/core");
           const st = await invoke<{ running?: boolean; healthy?: boolean }>("backend_get_status");
-          if (st && (st.running || st.healthy)) {
+          if (st && st.healthy) {
             return true;
           }
         } catch {}

@@ -510,7 +510,7 @@ class UpdateService:
 
     def __init__(
         self,
-        current_version: str = "9.0.0",
+        current_version: str = "9.2.0",
         channel: str = "stable",
         manifest_url: Optional[str] = None,
         trusted_public_key: Optional[str] = None,
@@ -853,5 +853,11 @@ _update_service_instance: Optional[UpdateService] = None
 def get_update_service() -> UpdateService:
     global _update_service_instance
     if _update_service_instance is None:
-        _update_service_instance = UpdateService()
+        current_ver = "9.2.0"
+        try:
+            from config import config
+            current_ver = config.get("app.version", "9.2.0")
+        except Exception:
+            pass
+        _update_service_instance = UpdateService(current_version=current_ver)
     return _update_service_instance
