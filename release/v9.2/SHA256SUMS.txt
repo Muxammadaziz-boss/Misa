@@ -1,4 +1,4 @@
 11318b54bf7c440239666a9d08c8294e2d2f6b79db8d37af16b50226dcfd25d2  Misa-AI-v9.2.exe
 30cca0a57f4140dd2e2effbea83751a6299ac9f03179e516ecb2d8facc031319  Misa-AI-Setup-v9.2.exe
 d07688b384327c978320335eba9eae539d5da5e99f3bb1aefd4ec77bdb0576d8  Misa-AI-v9.2.msi
-9daa488d106fddbb6abe6da1946f04fc05027ad833fa2e29d33ff6308745a486  Misa-AI-v9.2-Portable.zip
+3f5cd0faa416b3cee1f62df8ff71de9ec9aa0b223e23272f0aaaa813f295c3ca  Misa-AI-v9.2-Portable.zip
