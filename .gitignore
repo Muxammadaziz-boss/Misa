@@ -59,8 +59,6 @@ mikasa-7/src-tauri/target/
 mikasa-7/src-tauri/backend/
 release/**/backend/
 release/**/portable/
-release/9.2/
-release/v9.2.0/
 nul
 
 # IDE

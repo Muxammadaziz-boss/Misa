@@ -5204,6 +5204,7 @@ async def handle_oauth_callback(request):
     <h1>Misa AI</h1>
     <p id="msg">Google orqali autentifikatsiya yakunlanmoqda...</p>
     <div id="badge" class="status">Kutilmoqda...</div>
+    <div id="actionArea" style="margin-top:20px;"></div>
   </div>
   <script>
     (function() {
@@ -5307,10 +5308,36 @@ async def handle_oauth_callback(request):
           badgeEl.textContent = "Xatolik";
           badgeEl.className = "status error";
         });
+      } else if (state) {
+        // Tekshirish: balki sessiya allaqachon serverda saqlangan bo'lishi mumkin (masalan, refresh qilinganda)
+        fetch('/api/auth/callback/session?state=' + encodeURIComponent(state), {
+          headers: { 'Accept': 'application/json' }
+        }).then(function(res) {
+          return res.json();
+        }).then(function(data) {
+          if (data && data.ok && data.session) {
+            msgEl.innerHTML = "Tizimga muvaffaqiyatli kirdingiz!<br>Ushbu oynani yopib, Misa ilovasiga qaytishingiz mumkin.";
+            badgeEl.textContent = "Tasdiqlandi ✓";
+            badgeEl.className = "status";
+            setTimeout(function() { try { window.close(); } catch(e) {} }, 1500);
+          } else {
+            showMissingTokenUi();
+          }
+        }).catch(function() {
+          showMissingTokenUi();
+        });
       } else {
-        msgEl.textContent = "Avtorizatsiya tokeni qabul qilinmadi.";
-        badgeEl.textContent = "Xatolik";
+        showMissingTokenUi();
+      }
+
+      function showMissingTokenUi() {
+        msgEl.innerHTML = "Avtorizatsiya tokeni qabul qilinmadi.<br><span style='font-size:13px;color:#94A3B8;margin-top:8px;display:block;'>Agar siz sahifani yangilagan (refresh) bo'lsangiz, xavfsizlik maqsadida tokenlar tozalangan. Iltimos, ushbu oynani yopib, Misa ilovasi orqali qaytadan kiring.</span>";
+        badgeEl.textContent = "Token topilmadi";
         badgeEl.className = "status error";
+        var actEl = document.getElementById('actionArea');
+        if (actEl) {
+          actEl.innerHTML = '<button onclick="try{window.close();}catch(e){}" style="padding:10px 24px;border-radius:12px;background:#38BDF8;color:#0F172A;font-weight:700;border:none;cursor:pointer;font-size:14px;transition:opacity 0.2s;" onmouseover="this.style.opacity=0.9" onmouseout="this.style.opacity=1">Misa ilovasiga qaytish</button>';
+        }
       }
     })();
   </script>
@@ -7141,6 +7168,16 @@ def run_server(host=None, port=None):
         await primary_site.start()
         logger.info(f"Asosiy API server ishga tushdi: http://{resolved_host}:{resolved_port}")
 
+        # Dual-stack IPv6 loopback (::1) qo'llab-quvvatlash: zamonaviy brauzerlar (Edge/Chrome) 'localhost' ni
+        # birinchi navbatda IPv6 ::1 orqali tekshiradi. ::1 tinglovchisi bo'lmasa ERR_CONNECTION_REFUSED yuz beradi.
+        if resolved_host in ("127.0.0.1", "localhost"):
+            try:
+                ipv6_primary_site = web.TCPSite(runner, "::1", resolved_port)
+                await ipv6_primary_site.start()
+                logger.info(f"IPv6 loopback tinglovchisi ishga tushdi: http://[::1]:{resolved_port}")
+            except Exception as e:
+                logger.debug(f"IPv6 loopback ::1 tinglovchisi yoqilmadi: {e}")
+
         # Desktop rejimida avtonom lokal ovoz xizmatini (Wake-word "Misa") avtomatik ishga tushirish
         if not _is_headless_server_mode():
             try:
@@ -7170,6 +7207,12 @@ def run_server(host=None, port=None):
                         logger.info(f"Qo'shimcha OAuth tinglovchisi ishga tushdi: http://{resolved_host}:{aux_port}")
                     except Exception as e:
                         logger.debug(f"Port {aux_port} band yoki ulanib bo'lmadi: {e}")
+                    try:
+                        aux_ipv6_site = web.TCPSite(runner, "::1", aux_port)
+                        await aux_ipv6_site.start()
+                        logger.info(f"Qo'shimcha IPv6 OAuth tinglovchisi ishga tushdi: http://[::1]:{aux_port}")
+                    except Exception as e:
+                        logger.debug(f"IPv6 port {aux_port} tinglovchisi yoqilmadi: {e}")
 
             async def _desktop_cloud_sync_loop():
                 sync_counter = 0

@@ -14,7 +14,7 @@
 - **Avto-Yangilanish Manifesti**: `v9.2/version_manifest.json` — [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.2/version_manifest.json)
 - **Asosiy Yangiliklar**:
   - To'liq 9.2 versiyaga yangilanish (Backend 9.2.0, Desktop Frontend va Native Tauri Rust v9.2.0).
-  - Yangi `release/v9.2` (va muvofiqlik uchun `release/9.2` hamda `release/v9.2.0`) papkalariga to'liq yig'ilgan paketlar.
+  - Yagona rasmiy `release/v9.2` papkasiga to'liq yig'ilgan paketlar (ortiqcha va takroriy papkalar tozalandi).
   - Moslashuvchan SemVer tahlilchisi va `DEFAULT_MANIFEST_URL` yangilanishi.
   - Native Desktop Preflight va Handshake tekshiruvlari v9.2 standartiga moslashtirildi.
   - Barcha sinovlar (Python, Frontend va Windows Smoke Suite) 100% muvaffaqiyatli.

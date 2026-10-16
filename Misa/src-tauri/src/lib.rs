@@ -88,9 +88,17 @@ impl SingleInstanceGuard {
         if last_err == ERROR_ALREADY_EXISTS {
             startup_log("SINGLE_INSTANCE", "ERROR_ALREADY_EXISTS: existing instance detected!");
             println!("[INSTANCE] Boshqa Misa AI nusxasi allaqachon faol (Single Instance Lock).");
-            let win_title: Vec<u16> = OsStr::new("MISA AI v9.0.2").encode_wide().chain(std::iter::once(0)).collect();
-            let hwnd = unsafe { FindWindowW(std::ptr::null(), win_title.as_ptr()) };
-            startup_log("SINGLE_INSTANCE", &format!("FindWindowW('MISA AI v9.0.2') returned HWND=0x{:X}", hwnd));
+            let titles = ["MISA AI v9.2", "Misa AI", "MISA AI", "MISA AI v9.0.2"];
+            let mut hwnd = 0;
+            for t in &titles {
+                let win_title: Vec<u16> = OsStr::new(t).encode_wide().chain(std::iter::once(0)).collect();
+                let found = unsafe { FindWindowW(std::ptr::null(), win_title.as_ptr()) };
+                if found != 0 {
+                    hwnd = found;
+                    startup_log("SINGLE_INSTANCE", &format!("FindWindowW('{}') returned HWND=0x{:X}", t, hwnd));
+                    break;
+                }
+            }
             if hwnd != 0 {
                 unsafe {
                     ShowWindow(hwnd, SW_SHOW);
@@ -215,7 +223,7 @@ pub fn check_backend_handshake(addr_str: &str, expected_version: &str) -> Backen
 
 /// HTTP GET /api/health tekshiruvi (Pure Rust stdlib)
 pub fn check_http_health(addr_str: &str, _path: &str) -> bool {
-    check_backend_handshake(addr_str, "9.0.2").is_healthy
+    check_backend_handshake(addr_str, "9.2.0").is_healthy
 }
 
 pub fn stop_backend(state: &SupervisorState) {
@@ -276,8 +284,6 @@ fn find_bundled_backend_binary() -> Option<(PathBuf, PathBuf)> {
     if let Ok(cwd) = std::env::current_dir() {
         candidates.push((cwd.join("backend").join("misa_backend.exe"), cwd.join("backend")));
         candidates.push((cwd.join("release").join("v9.2").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.2").join("backend")));
-        candidates.push((cwd.join("release").join("v9.2.0").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.2.0").join("backend")));
-        candidates.push((cwd.join("release").join("9.2").join("backend").join("misa_backend.exe"), cwd.join("release").join("9.2").join("backend")));
         candidates.push((cwd.join("release").join("v9.0.2").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.0.2").join("backend")));
         candidates.push((cwd.join("release").join("v9.0.1").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.0.1").join("backend")));
         candidates.push((cwd.join("release").join("v9.0.0").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.0.0").join("backend")));
@@ -290,7 +296,6 @@ fn find_bundled_backend_binary() -> Option<(PathBuf, PathBuf)> {
     if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
         let p = PathBuf::from(local_app_data);
         candidates.push((p.join("MisaAI").join("runtime").join("v9.2").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("runtime").join("v9.2").join("backend")));
-        candidates.push((p.join("MisaAI").join("runtime").join("v9.2.0").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("runtime").join("v9.2.0").join("backend")));
         candidates.push((p.join("MisaAI").join("runtime").join("v9.0.2").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("runtime").join("v9.0.2").join("backend")));
         candidates.push((p.join("MisaAI").join("runtime").join("v9.0.1").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("runtime").join("v9.0.1").join("backend")));
         candidates.push((p.join("MisaAI").join("runtime").join("v9.0.0").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("runtime").join("v9.0.0").join("backend")));
@@ -302,9 +307,13 @@ fn find_bundled_backend_binary() -> Option<(PathBuf, PathBuf)> {
     if let Ok(exe_path) = std::env::current_exe() {
         let mut curr = exe_path.as_path();
         while let Some(parent) = curr.parent() {
-            let rel92 = parent.join("release").join("v9.0.2").join("backend");
+            let rel92 = parent.join("release").join("v9.2").join("backend");
             if rel92.exists() {
                 candidates.push((rel92.join("misa_backend.exe"), rel92));
+            }
+            let rel902 = parent.join("release").join("v9.0.2").join("backend");
+            if rel902.exists() {
+                candidates.push((rel902.join("misa_backend.exe"), rel902));
             }
             let rel91 = parent.join("release").join("v9.0.1").join("backend");
             if rel91.exists() {
@@ -968,7 +977,8 @@ pub fn try_install_webview2() -> bool {
     // 2. Joriy ishchi katalogdagi kandidatlar (CWD)
     if let Ok(cwd) = std::env::current_dir() {
         setup_cands.push(cwd.join("webview2").join("MicrosoftEdgeWebview2Setup.exe"));
-        setup_cands.push(cwd.join("MicrosoftEdgeWebview2Setup.exe"));
+        setup_cands.push(cwd.join("release").join("v9.2").join("webview2").join("MicrosoftEdgeWebview2Setup.exe"));
+        setup_cands.push(cwd.join("release").join("v9.2").join("MicrosoftEdgeWebview2Setup.exe"));
         setup_cands.push(cwd.join("release").join("v9.0.2").join("webview2").join("MicrosoftEdgeWebview2Setup.exe"));
         setup_cands.push(cwd.join("release").join("v9.0.2").join("MicrosoftEdgeWebview2Setup.exe"));
         setup_cands.push(cwd.join("release").join("v9.0.1").join("webview2").join("MicrosoftEdgeWebview2Setup.exe"));

@@ -369,24 +369,7 @@ if (!existingReleases.includes(`### [${versionName}]`)) {
   fs.writeFileSync(releasesMdPath, newReleasesMd, "utf-8");
 }
 
-// 10. Mirror release directory to release/9.2 and release/v9.2.0
-const altDirs = [
-  path.join(releaseBaseDir, "9.2"),
-  path.join(releaseBaseDir, "v9.2.0"),
-];
-for (const altDir of altDirs) {
-  if (altDir !== releaseVersionDir) {
-    try {
-      if (!fs.existsSync(altDir)) {
-        fs.mkdirSync(altDir, { recursive: true });
-      }
-      fs.cpSync(releaseVersionDir, altDir, { recursive: true });
-      console.log(`✔ Qo'shimcha versiya katalogi sinxronlandi: ${path.basename(altDir)}`);
-    } catch (err) {
-      console.warn(`Ogohlantirish (${path.basename(altDir)}): ${err.message}`);
-    }
-  }
-}
+
 
 console.log(`========================================`);
 console.log(`✨ ${versionName} reliz muvaffaqiyatli saqlandi!`);

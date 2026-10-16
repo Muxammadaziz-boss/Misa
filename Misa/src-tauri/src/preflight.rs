@@ -225,10 +225,6 @@ pub fn find_or_fetch_bootstrapper() -> Option<PathBuf> {
         setup_cands.push(cwd.join("MicrosoftEdgeWebview2Setup.exe"));
         setup_cands.push(cwd.join("release").join("v9.2").join("webview2").join("MicrosoftEdgeWebview2Setup.exe"));
         setup_cands.push(cwd.join("release").join("v9.2").join("MicrosoftEdgeWebview2Setup.exe"));
-        setup_cands.push(cwd.join("release").join("v9.2.0").join("webview2").join("MicrosoftEdgeWebview2Setup.exe"));
-        setup_cands.push(cwd.join("release").join("v9.2.0").join("MicrosoftEdgeWebview2Setup.exe"));
-        setup_cands.push(cwd.join("release").join("9.2").join("webview2").join("MicrosoftEdgeWebview2Setup.exe"));
-        setup_cands.push(cwd.join("release").join("9.2").join("MicrosoftEdgeWebview2Setup.exe"));
         setup_cands.push(cwd.join("release").join("v9.0.2").join("webview2").join("MicrosoftEdgeWebview2Setup.exe"));
         setup_cands.push(cwd.join("release").join("v9.0.2").join("MicrosoftEdgeWebview2Setup.exe"));
         setup_cands.push(cwd.join("release").join("v9.0.1").join("webview2").join("MicrosoftEdgeWebview2Setup.exe"));
