@@ -201,14 +201,15 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   }, [dynamicCommands, onNavigate, onExecuteQuery, onClose]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = (query || "").trim().toLowerCase();
     if (!q) return actions.slice(0, 12);
     return actions
       .filter(
         (a) =>
-          a.title.toLowerCase().includes(q) ||
-          a.subtitle.toLowerCase().includes(q) ||
-          a.category.toLowerCase().includes(q)
+          a &&
+          (String(a.title || "").toLowerCase().includes(q) ||
+            String(a.subtitle || "").toLowerCase().includes(q) ||
+            String(a.category || "").toLowerCase().includes(q))
       )
       .slice(0, 12);
   }, [actions, query]);

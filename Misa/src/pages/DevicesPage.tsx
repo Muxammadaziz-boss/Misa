@@ -293,7 +293,7 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ onNavigateHome }) => {
   };
 
   const getStatusBadge = (status: string) => {
-    switch (status.toLowerCase()) {
+    switch (String(status || "offline").toLowerCase()) {
       case "online":
         return (
           <span
@@ -389,8 +389,8 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ onNavigateHome }) => {
     });
   };
 
-  const onlineCount = devices.filter((d) => d.status.toLowerCase() === "online").length;
-  const selectedDevice = devices.find((d) => d.device_id === selectedDeviceId || d.id === selectedDeviceId);
+  const onlineCount = devices.filter((d) => String(d?.status || d?.state || "").toLowerCase() === "online").length;
+  const selectedDevice = devices.find((d) => (d?.device_id && d.device_id === selectedDeviceId) || (d?.id && d.id === selectedDeviceId));
 
   return (
     <div
@@ -883,7 +883,7 @@ export const DevicesPage: React.FC<DevicesPageProps> = ({ onNavigateHome }) => {
                       <div>
                         <span style={{ color: "#64748B", display: "block", fontSize: "10px", textTransform: "uppercase", fontWeight: 600 }}>Agent Versiyasi</span>
                         <span style={{ color: "#93C5FD", fontFamily: "monospace", display: "block" }}>
-                          v{dev.agent_version || "9.0.1"}
+                          v{dev.agent_version || "9.2"}
                         </span>
                       </div>
                       <div>

@@ -52,6 +52,9 @@ export function unwrapCleanResponse(text: any): string {
   if (!text) return "";
   if (typeof text !== "string") {
     if (typeof text === "object") {
+      if (text.ok === false || text.error) {
+        return normalizeApiError(text.error || text.message || "", "AI xizmatiga ulanishda muammo yuz berdi.");
+      }
       return unwrapCleanResponse(text.response || text.content || text.javob || text.message || text.question || "");
     }
     return String(text);
@@ -64,6 +67,9 @@ export function unwrapCleanResponse(text: any): string {
   try {
     const parsed = JSON.parse(trimmed);
     if (parsed && typeof parsed === "object") {
+      if (parsed.ok === false || parsed.error) {
+        return normalizeApiError(parsed.error || parsed.message || "", "AI xizmatiga ulanishda muammo yuz berdi.");
+      }
       const inner = parsed.response || parsed.content || parsed.javob || parsed.question || parsed.message;
       if (inner !== undefined) {
         return unwrapCleanResponse(inner);
@@ -87,6 +93,11 @@ export function unwrapCleanResponse(text: any): string {
     .replace(/\\n/g, '\n');
   if (stripped && !stripped.startsWith("{")) {
     return stripped.trim();
+  }
+
+  // 4. Foydalanuvchiga hech qachon xom JSON xatolik chiqarmaslik
+  if (trimmed.startsWith("{") && (trimmed.includes('"error":') || trimmed.includes('"ok":false'))) {
+    return normalizeApiError(trimmed, "AI xizmatiga ulanishda muammo yuz berdi.");
   }
 
   return trimmed;
@@ -576,11 +587,14 @@ export interface AgentEventData {
 // ========== Phase 38 Remote Control & Permissions Interfaces ==========
 export interface RemoteDevice {
   device_id: string;
+  id?: string;
   hostname: string;
+  name?: string;
   os: string;
   mac_address: string;
   local_ip: string;
-  state: "online" | "offline" | "waking" | "unknown";
+  state: "online" | "offline" | "waking" | "unknown" | string;
+  status?: "online" | "offline" | "waking" | "unknown" | string;
   agent_version: string;
   is_paired: boolean;
   telegram_user_id?: string | null;
@@ -627,8 +641,14 @@ export interface RemoteAuditItem {
 
 export type AuditItem = RemoteAuditItem;
 
-export const DEFAULT_API_URL = "http://127.0.0.1:18420";
+export const LOCAL_BACKEND_URL = "http://127.0.0.1:18420";
+export const LOCAL_HARDWARE_URL = LOCAL_BACKEND_URL;
 export const PRODUCTION_API_URL = "https://misa.up.railway.app";
+export const DEFAULT_API_URL = LOCAL_BACKEND_URL;
+
+export function resolveHardwareBase(): string {
+  return LOCAL_HARDWARE_URL;
+}
 
 const FORBIDDEN_FRONTEND_PORTS = new Set(["140", "1420", "1421", "5173"]);
 const OAUTH_STATE_REGEX = /^[A-Za-z0-9_\-.:]{1,256}$/;
@@ -702,31 +722,57 @@ export function resolveApiBase(win?: any, envOverride?: Record<string, any>): st
 
   if (w) {
     let customUrl = "";
+    let serverMode = "";
     try {
       customUrl = String(w.localStorage?.getItem("misa_backend_url") || "").trim();
+      serverMode = String(w.localStorage?.getItem("misa_server_mode") || "").trim().toLowerCase();
     } catch {}
 
+    // 1. Foydalanuvchi belgilagan maxsus backend URL
+    if (customUrl && !isInvalidFrontendPortUrl(customUrl)) {
+      return customUrl.replace(/\/$/, "");
+    }
+
+    // 2. Foydalanuvchi tanlagan rejim
+    if (serverMode === "local") {
+      return LOCAL_BACKEND_URL;
+    }
+    if (serverMode === "cloud" || serverMode === "remote") {
+      return PRODUCTION_API_URL;
+    }
+
     const isProdWeb = isProductionWebRuntime(w);
+    const isLocalDev = isLocalDevRuntime(w);
 
     if (isProdWeb) {
-      if (customUrl && !isLocalhostUrl(customUrl) && !isInvalidFrontendPortUrl(customUrl)) {
-        return customUrl.replace(/\/$/, "");
-      }
       if (envUrl && !isLocalhostUrl(envUrl) && !isInvalidFrontendPortUrl(envUrl)) {
         return envUrl.replace(/\/$/, "");
       }
       return PRODUCTION_API_URL;
     }
 
-    if (customUrl && !isInvalidFrontendPortUrl(customUrl)) {
-      return customUrl.replace(/\/$/, "");
+    if (isLocalDev) {
+      // Local development running in browser with Vite dev server
+      if (envUrl && !isInvalidFrontendPortUrl(envUrl)) {
+        return envUrl.replace(/\/$/, "");
+      }
+      return LOCAL_BACKEND_URL;
     }
+
+    // 3. Desktop (Tauri) Runtime:
+    // Tauri desktop ilovasida har doim mahalliy backend (http://127.0.0.1:18420) ishlatiladi,
+    // chunki barcha apparat vositalari (mikrofon, audio capture, monitoring, tizim boshqaruvi) mahalliy jarayonda ishlaydi.
+    if (isTauriRuntime(w)) {
+      return LOCAL_BACKEND_URL;
+    }
+
+    if (envUrl && !isLocalhostUrl(envUrl) && !isInvalidFrontendPortUrl(envUrl)) {
+      return envUrl.replace(/\/$/, "");
+    }
+    return LOCAL_BACKEND_URL;
   }
 
-  if (envUrl && !isInvalidFrontendPortUrl(envUrl)) {
-    return envUrl.replace(/\/$/, "");
-  }
-  return DEFAULT_API_URL;
+  return LOCAL_BACKEND_URL;
 }
 
 export function resolveOAuthCallbackBase(options?: {
@@ -777,17 +823,57 @@ export function resolveOAuthRedirectUrl(
   return `${base}/api/auth/callback?state=${encodeURIComponent(cleanState)}`;
 }
 
-const API_BASE = resolveApiBase();
-const WS_BASE = (import.meta.env.VITE_WS_URL || API_BASE.replace(/^http/, "ws")) + "/api/ws";
+export let API_BASE = resolveApiBase();
+export let WS_BASE = (import.meta.env.VITE_WS_URL || API_BASE.replace(/^http/, "ws")) + "/api/ws";
+
+export function refreshApiBaseUrls(): string {
+  API_BASE = resolveApiBase();
+  WS_BASE = (import.meta.env.VITE_WS_URL || API_BASE.replace(/^http/, "ws")) + "/api/ws";
+  return API_BASE;
+}
 
 export function normalizeApiError(error: any, fallbackMessage: string = "Xatolik yuz berdi"): string {
   if (!error) return fallbackMessage;
-  const msg = String(error?.message || error || "").trim();
+  let msg = String(error?.message || error || "").trim();
+  if (msg.startsWith("{") && msg.endsWith("}")) {
+    try {
+      const p = JSON.parse(msg);
+      if (p && typeof p === "object") {
+        msg = String(p.error || p.message || fallbackMessage).trim();
+      }
+    } catch {}
+  }
   const lower = msg.toLowerCase();
 
-  // HTTP status codes
-  if (lower.includes("401") || lower.includes("unauthorized") || lower.includes("avtorizatsiya")) {
-    return "Avtorizatsiya xatosi (HTTP 401: Token yaroqsiz yoki muddati o'tgan).";
+  // Dinamik server nomi
+  const currentUrl = resolveApiBase();
+  const hostDisplay = (() => {
+    try {
+      return new URL(currentUrl).host;
+    } catch {
+      return currentUrl;
+    }
+  })();
+
+  // Auth & Token diagnostics (Foydalanuvchiga xavfsiz va aniq tushuntirish)
+  if (
+    lower.includes("bearer") ||
+    lower.includes("unauthorized") ||
+    lower.includes("avtorizatsiya") ||
+    lower.includes("token talab qilinadi") ||
+    lower.includes("401")
+  ) {
+    const fbLower = String(fallbackMessage || "").toLowerCase();
+    if (fbLower.includes("audio") || fbLower.includes("mikrofon") || fbLower.includes("qurilma")) {
+      return "Audio xizmatiga ulanishda sessiya xatosi (Iltimos, qayta kiring).";
+    }
+    if (fbLower.includes("ovoz") || fbLower.includes("tts") || fbLower.includes("sintez")) {
+      return "Ovoz xizmatiga ulanishda sessiya xatosi (Iltimos, qayta kiring).";
+    }
+    if (fbLower.includes("ai") || fbLower.includes("chat") || fbLower.includes("savol")) {
+      return "AI xizmatiga ulanishda muammo yuz berdi (Avtorizatsiyadan o'tilmagan yoki sessiya muddati o'tgan).";
+    }
+    return "Avtorizatsiyadan o'tilmagan yoki sessiya muddati o'tgan (Iltimos, qayta kiring).";
   }
   if (lower.includes("403") || lower.includes("forbidden") || lower.includes("cross-tenant")) {
     return "Ruxsat etilmagan (HTTP 403: Boshqa hisob ma'lumotlariga kirish taqiqlangan).";
@@ -801,7 +887,7 @@ export function normalizeApiError(error: any, fallbackMessage: string = "Xatolik
 
   // Network & connection diagnostics
   if (lower.includes("connection refused") || lower.includes("econnrefused")) {
-    return "Backend ishga tushmoqda yoki ulanib bo'lmadi (127.0.0.1:18420 Connection Refused).";
+    return `Serverga ulanib bo'lmadi (${hostDisplay} aloqani rad etdi - Port yopiq yoki server o'chiq).`;
   }
   if (
     lower.includes("failed to fetch") ||
@@ -809,7 +895,7 @@ export function normalizeApiError(error: any, fallbackMessage: string = "Xatolik
     lower.includes("load failed") ||
     lower.includes("network request failed")
   ) {
-    return "Backend ishga tushmoqda... (127.0.0.1:18420 portida xizmat yuklanmoqda)";
+    return `Serverga ulanib bo'lmadi (${hostDisplay} bilan aloqa yo'q yoki internet uzilgan).`;
   }
   if (lower.includes("timeout") || lower.includes("aborted") || lower.includes("aborterror")) {
     return "So'rov vaqti tugadi (Timeout). Server juda sekin javob berdi.";
@@ -824,6 +910,11 @@ export function normalizeApiError(error: any, fallbackMessage: string = "Xatolik
   }
   if (lower.includes("notfounderror") || lower.includes("devicesnotfound")) {
     return "Audio kirish qurilmasi (mikrofon) topilmadi.";
+  }
+
+  // Agar yakuniy matn hali ham xom JSON shaklida bo'lsa, tozalaymiz
+  if (msg.startsWith("{") && msg.endsWith("}")) {
+    return fallbackMessage;
   }
 
   return msg || fallbackMessage;
@@ -854,6 +945,48 @@ class BackendService {
 
   public isHealthy(): boolean {
     return this.isBackendHealthy;
+  }
+
+  public getApiBase(): string {
+    return resolveApiBase();
+  }
+
+  public getWsBase(): string {
+    return (import.meta.env.VITE_WS_URL || this.getApiBase().replace(/^http/, "ws")) + "/api/ws";
+  }
+
+  public setServerConfiguration(mode: "cloud" | "local" | "custom", customUrl?: string): string {
+    if (typeof window !== "undefined" && window.localStorage) {
+      if (mode === "cloud") {
+        window.localStorage.setItem("misa_server_mode", "cloud");
+        window.localStorage.removeItem("misa_backend_url");
+      } else if (mode === "local") {
+        window.localStorage.setItem("misa_server_mode", "local");
+        window.localStorage.removeItem("misa_backend_url");
+      } else if (mode === "custom" && customUrl) {
+        window.localStorage.setItem("misa_server_mode", "custom");
+        window.localStorage.setItem("misa_backend_url", customUrl.trim().replace(/\/$/, ""));
+      }
+    }
+    refreshApiBaseUrls();
+    this.reconnect();
+    return resolveApiBase();
+  }
+
+  public reconnect(): void {
+    if (this.wsReconnectTimer) {
+      clearTimeout(this.wsReconnectTimer);
+      this.wsReconnectTimer = null;
+    }
+    if (this.ws) {
+      try {
+        this.ws.close();
+      } catch {}
+      this.ws = null;
+    }
+    this.isConnectingWs = false;
+    this.connectWs();
+    this.checkStatus().catch(() => {});
   }
 
   public async waitForBackendReady(maxWaitMs: number = 6000): Promise<boolean> {
@@ -1293,14 +1426,19 @@ class BackendService {
       if (image) {
         payload.image = image;
       }
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (this.authToken) {
+        headers["Authorization"] = `Bearer ${this.authToken}`;
+      }
       const res = await fetch(`${API_BASE}/api/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(errText || "Chat xatoligi: " + res.status);
+        const errText = await res.text().catch(() => "");
+        const friendlyError = normalizeApiError(errText || `HTTP ${res.status}`, "AI xizmatiga ulanishda muammo yuz berdi.");
+        throw new Error(friendlyError);
       }
       const data: ChatResponse = await res.json();
       if (data.response) {
@@ -1313,10 +1451,12 @@ class BackendService {
       return data;
     } catch (err: any) {
       this.notifyVoiceState("idle");
+      const friendlyMsg = normalizeApiError(err, "AI xizmatiga ulanishda muammo yuz berdi.");
       return {
         ok: false,
-        response: "Backend bilan bog'lanishda xatolik: " + (err.message || String(err)),
-        error: String(err),
+        response: friendlyMsg,
+        reply: friendlyMsg,
+        error: friendlyMsg,
       };
     }
   }
@@ -1334,7 +1474,7 @@ class BackendService {
     // Brauzer SpeechRecognition va AudioContext mikrofonni bo'shatishi shart
     this.stopClientVoiceOnly();
     try {
-      const res = await fetch(`${API_BASE}/api/voice/start`, { method: "POST" });
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/start`, { method: "POST" });
       if (res.ok) {
         this.notifyVoiceState("listening");
         return true;
@@ -1347,7 +1487,7 @@ class BackendService {
 
   public async stopVoice(): Promise<boolean> {
     try {
-      const res = await fetch(`${API_BASE}/api/voice/stop`, { method: "POST" });
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/stop`, { method: "POST" });
       if (res.ok) {
         this.notifyVoiceState("idle");
         return true;
@@ -1364,7 +1504,7 @@ class BackendService {
     error?: string;
   }> {
     try {
-      const res = await fetch(`${API_BASE}/api/voice/wakeword/status`);
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/wakeword/status`);
       return await res.json();
     } catch (e: any) {
       return { ok: false, error: e?.message || "Failed to fetch wake word status" };
@@ -1377,7 +1517,7 @@ class BackendService {
     cooldown?: number;
   }): Promise<{ ok: boolean; data?: any; error?: string }> {
     try {
-      const res = await fetch(`${API_BASE}/api/voice/wakeword/configure`, {
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/wakeword/configure`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(params),
@@ -1391,8 +1531,11 @@ class BackendService {
   // ========== Real Microphone Device Management ==========
   public async getAudioInputDevices(refresh: boolean = false): Promise<AudioDevicesResponse> {
     try {
-      const url = refresh ? `${API_BASE}/api/voice/devices?refresh=true` : `${API_BASE}/api/voice/devices`;
-      const res = await fetch(url);
+      const authHeaders = await this.getFreshAuthHeaders();
+      const url = refresh ? `${LOCAL_HARDWARE_URL}/api/voice/devices?refresh=true` : `${LOCAL_HARDWARE_URL}/api/voice/devices`;
+      const res = await fetch(url, {
+        headers: { ...authHeaders },
+      });
       if (res.ok) {
         return await res.json();
       }
@@ -1401,7 +1544,7 @@ class BackendService {
         devices: [],
         selected_device_id: "default",
         selected_device_name: "Default",
-        error: normalizeApiError(`HTTP ${res.status}`),
+        error: normalizeApiError(`HTTP ${res.status}`, "Audio qurilmalar xizmatiga ulanib bo'lmadi"),
       };
     } catch (e: any) {
       return {
@@ -1409,15 +1552,17 @@ class BackendService {
         devices: [],
         selected_device_id: "default",
         selected_device_name: "Default",
-        error: normalizeApiError(e, "Backend ishga tushmoqda... (127.0.0.1:18420)"),
+        error: normalizeApiError(e, "Audio qurilmalar xizmatiga ulanib bo'lmadi"),
       };
     }
   }
 
   public async refreshAudioInputDevices(): Promise<AudioDevicesResponse> {
     try {
-      const res = await fetch(`${API_BASE}/api/voice/devices/refresh`, {
+      const authHeaders = await this.getFreshAuthHeaders();
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/devices/refresh`, {
         method: "POST",
+        headers: { ...authHeaders },
       });
       if (res.ok) {
         return await res.json();
@@ -1433,16 +1578,17 @@ class BackendService {
     deviceName?: string
   ): Promise<{ ok: boolean; selected_device_id?: string; fallback_used?: boolean; status?: string; message?: string; error?: string }> {
     try {
-      const res = await fetch(`${API_BASE}/api/voice/devices/select`, {
+      const authHeaders = await this.getFreshAuthHeaders();
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/devices/select`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ device_id: deviceId, device_name: deviceName }),
       });
       if (res.ok) {
         return await res.json();
       }
       const errText = await res.text().catch(() => "");
-      return { ok: false, error: normalizeApiError(errText || `HTTP ${res.status}`) };
+      return { ok: false, error: normalizeApiError(errText || `HTTP ${res.status}`, "Mikrofon qurilmasini tanlab bo'lmadi") };
     } catch (e: any) {
       return { ok: false, error: normalizeApiError(e, "Qurilmani tanlashda xatolik yuz berdi") };
     }
@@ -1450,14 +1596,15 @@ class BackendService {
 
   public async testMicrophone(deviceId?: string, duration: number = 1.5): Promise<MicrophoneTestResult> {
     try {
-      const res = await fetch(`${API_BASE}/api/voice/devices/test`, {
+      const authHeaders = await this.getFreshAuthHeaders();
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/devices/test`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ device_id: deviceId, duration }),
       });
       if (!res.ok) {
         const errText = await res.text().catch(() => "");
-        const normMsg = normalizeApiError(errText, `Server xatosi (HTTP ${res.status})`);
+        const normMsg = normalizeApiError(errText, "Mikrofonni sinab bo'lmadi");
         return {
           ok: false,
           working: false,
@@ -1477,37 +1624,39 @@ class BackendService {
   // ========== Real-Time Microphone Hardware Monitor & Loopback ==========
   public async startMicrophoneMonitor(
     deviceId?: string,
-    loopback: boolean = true
+    loopback: boolean = false
   ): Promise<{ ok: boolean; status?: string; message?: string; device_name?: string; loopback?: boolean; error?: string }> {
     try {
-      const res = await fetch(`${API_BASE}/api/voice/devices/monitor/start`, {
+      const authHeaders = await this.getFreshAuthHeaders();
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/devices/monitor/start`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ device_id: deviceId, loopback }),
       });
       if (!res.ok) {
         const errText = await res.text().catch(() => "");
-        const normErr = normalizeApiError(errText || `HTTP ${res.status}`, `HTTP xatosi ${res.status}`);
+        const normErr = normalizeApiError(errText || `HTTP ${res.status}`, "Mikrofon monitoringini boshlab bo'lmadi");
         return { ok: false, message: normErr, error: normErr };
       }
       return await res.json();
     } catch (e: any) {
-      const normMsg = normalizeApiError(e, "Monitoringni boshlab bo'lmadi");
+      const normMsg = normalizeApiError(e, "Mikrofon monitoringini boshlab bo'lmadi");
       return { ok: false, message: normMsg, error: normMsg };
     }
   }
 
   public async stopMicrophoneMonitor(): Promise<{ ok: boolean; status?: string; message?: string }> {
     try {
-      const res = await fetch(`${API_BASE}/api/voice/devices/monitor/stop`, {
+      const authHeaders = await this.getFreshAuthHeaders();
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/devices/monitor/stop`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({}),
       });
-      if (!res.ok) return { ok: false, message: `HTTP ${res.status}` };
+      if (!res.ok) return { ok: false, message: normalizeApiError(`HTTP ${res.status}`, "Mikrofon monitoringini to'xtatib bo'lmadi") };
       return await res.json();
     } catch (e: any) {
-      return { ok: false, message: normalizeApiError(e, "Monitoringni to'xtatib bo'lmadi") };
+      return { ok: false, message: normalizeApiError(e, "Mikrofon monitoringini to'xtatib bo'lmadi") };
     }
   }
 
@@ -1522,16 +1671,17 @@ class BackendService {
     sample_rate?: number;
   }> {
     try {
-      const res = await fetch(`${API_BASE}/api/voice/devices/monitor/status`, {
+      const authHeaders = await this.getFreshAuthHeaders();
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/devices/monitor/status`, {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
       });
       if (!res.ok) {
-        return { active: false, level: 0, rms: 0, peak: 0, status: `HTTP ${res.status}` };
+        return { active: false, level: 0, rms: 0, peak: 0, status: normalizeApiError(`HTTP ${res.status}`, "Mikrofon monitoring holati xatosi") };
       }
       return await res.json();
     } catch (e: any) {
-      return { active: false, level: 0, rms: 0, peak: 0, status: normalizeApiError(e, "Status olinmadi") };
+      return { active: false, level: 0, rms: 0, peak: 0, status: normalizeApiError(e, "Mikrofon monitoring holatini olib bo'lmadi") };
     }
   }
 
@@ -1564,9 +1714,10 @@ class BackendService {
     error?: string;
   }> {
     try {
-      const res = await fetch(`${API_BASE}/api/voice/preview`, {
+      const authHeaders = await this.getFreshAuthHeaders();
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/preview`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({
           voice_id: voiceId,
           text: text || "Salom. Men Misa, sizning sun’iy intellekt yordamchingizman.",
@@ -1612,7 +1763,10 @@ class BackendService {
     error?: string;
   }> {
     try {
-      const res = await fetch(`${API_BASE}/api/voice/runtime/status`);
+      const authHeaders = await this.getFreshAuthHeaders();
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/runtime/status`, {
+        headers: { ...authHeaders },
+      });
       if (!res.ok) {
         return {
           ok: false,
@@ -1643,9 +1797,10 @@ class BackendService {
     error?: string;
   }> {
     try {
-      const res = await fetch(`${API_BASE}/api/voice/runtime/install`, {
+      const authHeaders = await this.getFreshAuthHeaders();
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/runtime/install`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
       });
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
@@ -1670,8 +1825,10 @@ class BackendService {
     message: string;
   }> {
     try {
-      const res = await fetch(`${API_BASE}/api/voice/runtime/cancel`, {
+      const authHeaders = await this.getFreshAuthHeaders();
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/runtime/cancel`, {
         method: "POST",
+        headers: { ...authHeaders },
       });
       return await res.json();
     } catch (e: any) {
@@ -1682,7 +1839,7 @@ class BackendService {
   // ========== Real System Metrics ==========
   public async getSystemMetrics(): Promise<SystemMetrics | null> {
     try {
-      const res = await fetch(`${API_BASE}/api/system/metrics`, {
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/system/metrics`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
       });
@@ -2015,7 +2172,7 @@ class BackendService {
 
   public async getMemoryMetrics(): Promise<MemoryMetrics | null> {
     try {
-      const res = await fetch(`${API_BASE}/api/memory/metrics`, { method: "GET" });
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/memory/metrics`, { method: "GET" });
       if (!res.ok) throw new Error("HTTP " + res.status);
       const data = await res.json();
       return data.metrics || null;
@@ -2329,7 +2486,7 @@ class BackendService {
         theme: "dark",
         tts_speed: 1.0,
         ai_model: "gemini",
-        version: "9.0.1",
+        version: "9.2.0",
         voices_available: [
           { id: "ayol", name: "Madina (Ayol)", lang: "uz-UZ-MadinaNeural" },
           { id: "erkak", name: "Sardor (Erkak)", lang: "uz-UZ-SardorNeural" },
@@ -2344,7 +2501,7 @@ class BackendService {
 
   public async speakText(text: string, voiceType?: string): Promise<boolean> {
     try {
-      const res = await fetch(`${API_BASE}/api/voice/speak`, {
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/speak`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, voice_type: voiceType }),
@@ -2357,7 +2514,7 @@ class BackendService {
 
   public async getVoices(): Promise<{ ok: boolean; active_voice: string; voices: any[] }> {
     try {
-      const res = await fetch(`${API_BASE}/api/voice/voices`);
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/voices`);
       if (res.ok) {
         return await res.json();
       }
@@ -2538,20 +2695,29 @@ class BackendService {
         headers: { ...authHeaders },
       });
       const data = await res.json();
-      if (data?.ok && Array.isArray(data.devices) && isLocalhostUrl(API_BASE) && authHeaders.Authorization) {
-        const anyUnpaired = data.devices.some((d: RemoteDevice) => !d.is_paired);
-        if (anyUnpaired) {
-          try {
-            const tgAcc = await this.getTelegramAccount();
-            if (tgAcc?.ok && tgAcc?.is_linked) {
-              const tgUid = tgAcc.link?.telegram_user_id ? String(tgAcc.link.telegram_user_id) : undefined;
-              data.devices = data.devices.map((d: RemoteDevice) => ({
-                ...d,
-                is_paired: true,
-                telegram_user_id: d.telegram_user_id || tgUid,
-              }));
-            }
-          } catch {}
+      if (data?.ok && Array.isArray(data.devices)) {
+        data.devices = data.devices.map((d: any) => ({
+          ...d,
+          state: d.state || d.status || "online",
+          status: d.status || d.state || "online",
+          hostname: d.hostname || d.name || "Windows PC",
+          name: d.name || d.hostname || "Windows PC",
+        }));
+        if (isLocalhostUrl(API_BASE) && authHeaders.Authorization) {
+          const anyUnpaired = data.devices.some((d: RemoteDevice) => !d.is_paired);
+          if (anyUnpaired) {
+            try {
+              const tgAcc = await this.getTelegramAccount();
+              if (tgAcc?.ok && tgAcc?.is_linked) {
+                const tgUid = tgAcc.link?.telegram_user_id ? String(tgAcc.link.telegram_user_id) : undefined;
+                data.devices = data.devices.map((d: RemoteDevice) => ({
+                  ...d,
+                  is_paired: true,
+                  telegram_user_id: d.telegram_user_id || tgUid,
+                }));
+              }
+            } catch {}
+          }
         }
       }
       return data;
@@ -2659,7 +2825,15 @@ class BackendService {
       const res = await fetch(`${API_BASE}/api/remote/audit`, {
         headers: { ...authHeaders },
       });
-      return await res.json();
+      const data = await res.json();
+      if (data?.ok && Array.isArray(data.events)) {
+        data.events = data.events.map((evt: any) => ({
+          ...evt,
+          status: evt.status || evt.action || evt.event_type || "info",
+          action: evt.action || evt.event_type || "action",
+        }));
+      }
+      return data;
     } catch (err: any) {
       return { ok: false, total: 0, events: [], error: String(err) };
     }
@@ -2862,11 +3036,24 @@ class BackendService {
         headers: { ...authHeaders },
       });
       const data: DevicesListResponse = await res.json();
-      if (data?.ok && Array.isArray(data.devices) && data.devices.length > 0 && isLocalhostUrl(API_BASE) && authHeaders.Authorization) {
-        this.syncDevicesToCloud({
-          devices: data.devices,
-          selected_device_id: data.selected_device_id,
-        }).catch(() => {});
+      if (data?.ok && Array.isArray(data.devices)) {
+        data.devices = data.devices.map((d: any) => ({
+          ...d,
+          id: d.id || d.device_id || "dev_unknown",
+          device_id: d.device_id || d.id || "dev_unknown",
+          name: d.name || d.hostname || "Windows PC",
+          hostname: d.hostname || d.name || "Windows PC",
+          status: d.status || d.state || "online",
+          state: d.state || d.status || "online",
+          platform: d.platform || d.os || "windows",
+          client_version: d.client_version || d.version || "9.2.0",
+        }));
+        if (data.devices.length > 0 && isLocalhostUrl(API_BASE) && authHeaders.Authorization) {
+          this.syncDevicesToCloud({
+            devices: data.devices,
+            selected_device_id: data.selected_device_id,
+          }).catch(() => {});
+        }
       }
       return data;
     } catch (err: any) {
@@ -3289,7 +3476,7 @@ class BackendService {
         try {
           const { invoke } = await import("@tauri-apps/api/core");
           const st = await invoke<{ running?: boolean; healthy?: boolean }>("backend_get_status");
-          if (st && (st.running || st.healthy)) {
+          if (st && st.healthy) {
             return true;
           }
         } catch {}
@@ -4415,6 +4602,7 @@ export interface UserDevice {
   platform: string;
   agent_version: string;
   status: "online" | "offline" | "standby" | "revoked" | string;
+  state?: "online" | "offline" | "standby" | "revoked" | string;
   created_at: number;
   last_seen_at?: number | null;
   last_heartbeat_at?: number | null;

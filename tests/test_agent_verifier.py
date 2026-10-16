@@ -165,12 +165,17 @@ class TestAgentVerifier(unittest.TestCase):
         self.assertEqual(reason, "STEP_VERIFIED_SUCCESS")
 
     def test_should_continue_on_unknown(self):
-        """UNKNOWN holatida davom etishga ruxsat beriladi (yumshoq tolerantlik)"""
+        """UNKNOWN holatida retry qolgan bo'lsa re-observe/retry, tugagan bo'lsa clarification so'raydi"""
         ver = VerificationResult(verified=True, status=VerificationStatus.UNKNOWN, reason="Unknown")
         step = self._make_step("notification")
         can_cont, reason = self.verifier.should_continue(ver, step)
-        self.assertTrue(can_cont)
-        self.assertEqual(reason, "STEP_VERIFIED_UNKNOWN_PROCEED")
+        self.assertFalse(can_cont)
+        self.assertEqual(reason, "UNKNOWN_STATUS_RETRY_OBSERVATION")
+
+        step.retry_count = step.max_retries
+        can_cont_done, reason_done = self.verifier.should_continue(ver, step)
+        self.assertFalse(can_cont_done)
+        self.assertEqual(reason_done, "UNKNOWN_STATUS_REQUIRES_CLARIFICATION")
 
     def test_should_continue_on_failure(self):
         """FAILURE holatida davom etish to'xtatiladi"""

@@ -318,8 +318,8 @@ def handle_system_screenshot(params: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         logger.warning(f"Screenshot failed: {e}")
         return {
-            "captured": True,
-            "mock": True,
+            "captured": False,
+            "mock": False,
             "error": str(e)
         }
 

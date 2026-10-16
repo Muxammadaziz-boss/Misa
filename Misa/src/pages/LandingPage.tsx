@@ -22,6 +22,7 @@ import {
   SystemTelemetry,
   AgentStepItem,
 } from "../services/backendService";
+import { ServerDiagnosticModal } from "../components/ServerDiagnosticModal";
 
 interface LandingPageProps {
   userName?: string;
@@ -111,6 +112,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [startupBriefing, setStartupBriefing] = useState<string | null>(null);
   const [briefingSeverity, setBriefingSeverity] = useState<"success" | "warning" | "error">("success");
   const [isBriefingVisible, setIsBriefingVisible] = useState<boolean>(true);
+  const [isDiagModalOpen, setIsDiagModalOpen] = useState<boolean>(false);
 
   // Telemetry & Agent Loop
   const [telemetry, setTelemetry] = useState<SystemTelemetry | null>(null);
@@ -151,7 +153,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           setTelemetry(data);
           // Backend aloqada ekanligi tasdiqlandi -> xatolik bannerini darhol yopamiz
           setStartupBriefing((prev) => {
-            if (prev && prev.includes("18420-portda ishga tushirilishi kutilmoqda")) {
+            if (prev && (prev.includes("18420") || prev.includes("server bilan aloqa"))) {
               return null;
             }
             return prev;
@@ -179,7 +181,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       setBackendStatus(status);
       if (status.status === "online") {
         setStartupBriefing((prev) => {
-          if (prev && prev.includes("18420-portda ishga tushirilishi kutilmoqda")) {
+          if (prev && (prev.includes("18420") || prev.includes("server bilan aloqa"))) {
             return null;
           }
           return prev;
@@ -264,31 +266,22 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         }
       } catch {}
 
-      let textToSpeak = "";
-      let severity: "success" | "warning" | "error" = "success";
-
       if (currentStat.status === "online") {
-        const hasKey = account?.has_gemini_key || currentStat.ai_available;
-        if (hasKey) {
-          severity = "success";
-          textToSpeak = `Assalomu alaykum Ustoz! Misa tizimi muvaffaqiyatli ishga tushdi, serverga ulandi. Barcha modullar faol va tayyor. Meni chaqirish uchun "Misa..." deb gapirishingiz mumkin.`;
-        } else {
-          severity = "warning";
-          textToSpeak = `Assalomu alaykum Ustoz! Serverga ulandim, lekin menda xatolik bor: AI kaliti kiritilmagan. Sozlamalar bo'limidan API kalitini kiritishingizni so'rayman.`;
-        }
+        // Startup muvaffaqiyatli: foydalanuvchiga ortiqcha texnik success xabar yoki banner ko'rsatilmaydi
+        setStartupBriefing(null);
       } else {
-        severity = "error";
-        textToSpeak = `Salom Ustoz! Menda xatolik bor: mahalliy backend serveriga ulanib bo'lmadi. Server 18420-portda ishga tushirilishi kutilmoqda.`;
+        const currentTarget = backendService.getApiBase();
+        let targetHost = "server";
+        try {
+          targetHost = new URL(currentTarget).host;
+        } catch {
+          targetHost = currentTarget;
+        }
+        const textToSpeak = `Server bilan aloqa o'rnatib bo'lmadi (${targetHost}). Tarmoq yoki server holatini tekshirishingizni so'rayman.`;
+        setStartupBriefing(textToSpeak);
+        setBriefingSeverity("error");
       }
 
-      setStartupBriefing(textToSpeak);
-      setBriefingSeverity(severity);
-
-      // Faqat server online bo'lsa yoki haqiqiy milliy ovoz bo'lsagina ovozda ijro etamiz
-      if (currentStat.status === "online") {
-        const voiceChoice = account?.voice_type || activeVoiceType || "ayol";
-        await playSpeechAudio(textToSpeak, voiceChoice);
-      }
       setTimeout(() => {
         startSecretaryListening();
       }, 500);
@@ -316,6 +309,26 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           recognitionRef.current.stop();
         } catch {}
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    let unlistenTray: (() => void) | undefined;
+    import("@tauri-apps/api/event").then(({ listen }) => {
+      listen<string>("misa_tray_command", async (event) => {
+        if (event.payload === "pause_listening") {
+          await backendService.stopVoice();
+          isListeningRef.current = false;
+        } else if (event.payload === "resume_listening") {
+          await startSecretaryListening();
+        }
+      }).then((fn) => {
+        unlistenTray = fn;
+      });
+    }).catch(() => {});
+
+    return () => {
+      if (unlistenTray) unlistenTray();
     };
   }, []);
 
@@ -836,7 +849,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         return (
           micError ||
           (backendStatus.status === "offline"
-            ? "Menda xatolik bor: server bilan aloqa uzilgan (Port 18420)"
+            ? "Menda xatolik bor: server bilan aloqa uzilgan"
             : "Tizim holatini tekshiring yoki qayta urinib ko'ring")
         );
       case "idle":
@@ -945,8 +958,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           )}
         </div>
 
-        {/* 1.5. Startup System Status & Diagnostic Briefing Banner */}
-        {startupBriefing && isBriefingVisible && (
+        {/* 1.5. Startup System Status & Diagnostic Briefing Banner (faqat muammo bo'lganda) */}
+        {startupBriefing && isBriefingVisible && briefingSeverity !== "success" && (
           <div
             className="misa-glass-card"
             style={{
@@ -959,15 +972,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               maxWidth: "680px",
               width: "100%",
               background:
-                briefingSeverity === "success"
-                  ? "rgba(18, 53, 36, 0.72)"
-                  : briefingSeverity === "warning"
+                briefingSeverity === "warning"
                   ? "rgba(64, 43, 10, 0.72)"
                   : "rgba(56, 14, 20, 0.72)",
               border:
-                briefingSeverity === "success"
-                  ? "1px solid rgba(78, 222, 163, 0.45)"
-                  : briefingSeverity === "warning"
+                briefingSeverity === "warning"
                   ? "1px solid rgba(245, 158, 11, 0.45)"
                   : "1px solid rgba(255, 113, 108, 0.45)",
               boxShadow: "0 6px 24px rgba(0, 0, 0, 0.35)",
@@ -980,15 +989,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 borderRadius: "50%",
                 flexShrink: 0,
                 backgroundColor:
-                  briefingSeverity === "success"
-                    ? "#4EDEA3"
-                    : briefingSeverity === "warning"
+                  briefingSeverity === "warning"
                     ? "#F59E0B"
                     : "#FF716C",
                 boxShadow: `0 0 10px ${
-                  briefingSeverity === "success"
-                    ? "#4EDEA3"
-                    : briefingSeverity === "warning"
+                  briefingSeverity === "warning"
                     ? "#F59E0B"
                     : "#FF716C"
                 }`,
@@ -998,9 +1003,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               style={{
                 fontSize: "12.5px",
                 color:
-                  briefingSeverity === "success"
-                    ? "#C2F0DD"
-                    : briefingSeverity === "warning"
+                  briefingSeverity === "warning"
                     ? "#FDE68A"
                     : "#FFD1D0",
                 flex: 1,
@@ -1031,6 +1034,28 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <VolumeIcon size={12} color="currentColor" />
               <span>Ovozda</span>
             </button>
+            {briefingSeverity === "error" && (
+              <button
+                type="button"
+                onClick={() => setIsDiagModalOpen(true)}
+                title="Server diagnostikasi"
+                style={{
+                  background: "rgba(192, 76, 253, 0.22)",
+                  border: "1px solid rgba(192, 76, 253, 0.5)",
+                  borderRadius: "8px",
+                  padding: "4px 9px",
+                  color: "#F5F0FF",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  fontSize: "11px",
+                  fontWeight: 600,
+                }}
+              >
+                <span>Diagnostika</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setIsBriefingVisible(false)}
@@ -1564,6 +1589,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
         </form>
       </div>
+
+      <ServerDiagnosticModal
+        isOpen={isDiagModalOpen}
+        onClose={() => setIsDiagModalOpen(false)}
+        onServerChanged={() => {
+          backendService.checkStatus().then(setBackendStatus).catch(() => {});
+        }}
+      />
     </div>
   );
 };

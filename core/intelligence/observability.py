@@ -21,6 +21,9 @@ ADDITIONAL_SENSITIVE_PATTERNS = [
     re.compile(r"Bearer\s+[a-zA-Z0-9_\-\.]{6,}", re.I),
     re.compile(r"sk-[a-zA-Z0-9_\-\.]{10,}", re.I),
     re.compile(r"AIza[0-9A-Za-z-_]{16,}", re.I),
+    re.compile(r"eyJ[a-zA-Z0-9_\-]{10,}\.eyJ[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}", re.I),
+    re.compile(r"sbp_[a-zA-Z0-9]{20,}", re.I),
+    re.compile(r"misa_[a-zA-Z0-9]{20,}", re.I),
 ]
 
 # Phase 30 Core Stages (11 stages)
@@ -90,7 +93,11 @@ def redact_sensitive_data(obj: Any) -> Any:
         return redacted
     elif isinstance(obj, dict):
         res = {}
-        sensitive_keys = {"password", "api_key", "secret", "token", "auth", "credential"}
+        sensitive_keys = {
+            "password", "api_key", "secret", "token", "auth", "credential",
+            "private_key", "session_token", "jwt", "authorization",
+            "access_token", "refresh_token", "cookie", "signature"
+        }
         for k, v in obj.items():
             if any(sk in str(k).lower() for sk in sensitive_keys) and isinstance(v, str):
                 res[k] = "[REDACTED]"

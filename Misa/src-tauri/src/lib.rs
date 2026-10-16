@@ -8,12 +8,36 @@ use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tauri::Manager;
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
+pub mod diag;
+pub use diag::{startup_log, crash_log, network_log, backend_lifecycle_log, voice_runtime_log, install_crash_handlers, current_pid, current_tid};
+
 pub mod preflight;
 pub use preflight::{run_native_preflight, check_webview2_installed_version, find_or_fetch_bootstrapper};
+
+pub mod network_diag;
+pub use network_diag::{run_full_diagnostics, NetworkDiagnosticReport};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum AppLifecycleState {
+    Starting,
+    Ready,
+    Visible,
+    HiddenToTray,
+    Restoring,
+    ShuttingDown,
+    Exited,
+}
+
+impl Default for AppLifecycleState {
+    fn default() -> Self {
+        AppLifecycleState::Starting
+    }
+}
 
 #[derive(Clone, Default)]
 pub struct SupervisorState {
@@ -23,6 +47,7 @@ pub struct SupervisorState {
     pub is_spawning: Arc<Mutex<bool>>,
     pub spawn_attempts: Arc<Mutex<u32>>,
     pub is_permanently_failed: Arc<Mutex<bool>>,
+    pub lifecycle_state: Arc<Mutex<AppLifecycleState>>,
 }
 
 #[cfg(target_os = "windows")]
@@ -46,22 +71,37 @@ impl SingleInstanceGuard {
         }
 
         const ERROR_ALREADY_EXISTS: u32 = 183;
+        const SW_SHOW: i32 = 5;
         const SW_RESTORE: i32 = 9;
 
+        startup_log("SINGLE_INSTANCE", &format!("Acquiring mutex: {}", name));
         let wide_name: Vec<u16> = OsStr::new(name).encode_wide().chain(std::iter::once(0)).collect();
         let handle = unsafe { CreateMutexW(std::ptr::null_mut(), 1, wide_name.as_ptr()) };
+        let last_err = unsafe { GetLastError() };
+        startup_log("SINGLE_INSTANCE", &format!("CreateMutexW returned handle=0x{:X}, GetLastError={}", handle, last_err));
 
         if handle == 0 {
+            startup_log("SINGLE_INSTANCE", "CreateMutexW returned NULL handle!");
             return None;
         }
 
-        let last_err = unsafe { GetLastError() };
         if last_err == ERROR_ALREADY_EXISTS {
+            startup_log("SINGLE_INSTANCE", "ERROR_ALREADY_EXISTS: existing instance detected!");
             println!("[INSTANCE] Boshqa Misa AI nusxasi allaqachon faol (Single Instance Lock).");
-            let win_title: Vec<u16> = OsStr::new("MISA AI v9.0.1").encode_wide().chain(std::iter::once(0)).collect();
-            let hwnd = unsafe { FindWindowW(std::ptr::null(), win_title.as_ptr()) };
+            let titles = ["MISA AI v9.2", "Misa AI", "MISA AI", "MISA AI v9.0.2"];
+            let mut hwnd = 0;
+            for t in &titles {
+                let win_title: Vec<u16> = OsStr::new(t).encode_wide().chain(std::iter::once(0)).collect();
+                let found = unsafe { FindWindowW(std::ptr::null(), win_title.as_ptr()) };
+                if found != 0 {
+                    hwnd = found;
+                    startup_log("SINGLE_INSTANCE", &format!("FindWindowW('{}') returned HWND=0x{:X}", t, hwnd));
+                    break;
+                }
+            }
             if hwnd != 0 {
                 unsafe {
+                    ShowWindow(hwnd, SW_SHOW);
                     ShowWindow(hwnd, SW_RESTORE);
                     SetForegroundWindow(hwnd);
                 }
@@ -70,6 +110,7 @@ impl SingleInstanceGuard {
             return None;
         }
 
+        startup_log("SINGLE_INSTANCE", "SingleInstanceGuard acquired successfully (Primary instance) ✓");
         Some(SingleInstanceGuard { handle })
     }
 }
@@ -95,35 +136,94 @@ impl SingleInstanceGuard {
     }
 }
 
-/// HTTP GET /api/health tekshiruvi (Pure Rust stdlib, uchinchi tomon kutubxonalarisiz)
-pub fn check_http_health(addr_str: &str, path: &str) -> bool {
+#[derive(Debug, Clone)]
+pub struct BackendHandshake {
+    pub is_healthy: bool,
+    pub is_compatible_version: bool,
+    pub version: String,
+    pub app: String,
+}
+
+/// HTTP GET /api/health orqali versiya, build provenance va sog'lomlikni tekshirish
+pub fn check_backend_handshake(addr_str: &str, expected_version: &str) -> BackendHandshake {
+    let mut result = BackendHandshake {
+        is_healthy: false,
+        is_compatible_version: false,
+        version: String::new(),
+        app: String::new(),
+    };
+
     let addr: std::net::SocketAddr = match addr_str.parse() {
         Ok(a) => a,
-        Err(_) => return false,
+        Err(_) => return result,
     };
-    let mut stream = match TcpStream::connect_timeout(&addr, Duration::from_millis(500)) {
+    let mut stream = match TcpStream::connect_timeout(&addr, Duration::from_millis(1000)) {
         Ok(s) => s,
-        Err(_) => return false,
+        Err(_) => return result,
     };
-    let _ = stream.set_read_timeout(Some(Duration::from_millis(1500)));
-    let _ = stream.set_write_timeout(Some(Duration::from_millis(1500)));
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(2000)));
+    let _ = stream.set_write_timeout(Some(Duration::from_millis(2000)));
 
     let request = format!(
-        "GET {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: MisaDesktopSupervisor/9.0.1\r\nConnection: close\r\n\r\n",
-        path, addr_str
+        "GET /api/health HTTP/1.1\r\nHost: {}\r\nUser-Agent: MisaDesktopSupervisor/9.2.0\r\nConnection: close\r\n\r\n",
+        addr_str
     );
     if stream.write_all(request.as_bytes()).is_err() {
-        return false;
+        return result;
     }
 
-    let mut buf = [0u8; 2048];
-    match stream.read(&mut buf) {
-        Ok(n) if n > 0 => {
+    let mut buf = [0u8; 4096];
+    if let Ok(n) = stream.read(&mut buf) {
+        if n > 0 {
             let response = String::from_utf8_lossy(&buf[..n]);
-            response.contains("200 OK") && (response.contains("\"status\"") || response.contains("Misa AI"))
+            if response.contains("200 OK") && (response.contains("\"status\"") || response.contains("Misa AI")) {
+                result.is_healthy = true;
+
+                // "version": "..." ni ajratib olish
+                if let Some(v_idx) = response.find("\"version\"") {
+                    let rest = &response[v_idx..];
+                    if let Some(colon_idx) = rest.find(':') {
+                        let after_colon = rest[colon_idx + 1..].trim_start();
+                        if after_colon.starts_with('"') {
+                            if let Some(end_quote) = after_colon[1..].find('"') {
+                                result.version = after_colon[1..1 + end_quote].to_string();
+                            }
+                        }
+                    }
+                }
+
+                // "app": "..." ni ajratib olish
+                if let Some(a_idx) = response.find("\"app\"") {
+                    let rest = &response[a_idx..];
+                    if let Some(colon_idx) = rest.find(':') {
+                        let after_colon = rest[colon_idx + 1..].trim_start();
+                        if after_colon.starts_with('"') {
+                            if let Some(end_quote) = after_colon[1..].find('"') {
+                                result.app = after_colon[1..1 + end_quote].to_string();
+                            }
+                        }
+                    }
+                }
+
+                // Moslik tekshiruvi: 9.0.x seriyasi yoki aniq moslik
+                if !expected_version.is_empty() && !result.version.is_empty() {
+                    let exp_prefix = if expected_version.len() >= 3 { &expected_version[..3] } else { expected_version };
+                    if result.version == expected_version || result.version.starts_with(exp_prefix) {
+                        result.is_compatible_version = true;
+                    }
+                } else if result.is_healthy {
+                    result.is_compatible_version = true;
+                }
+            }
         }
-        _ => false,
     }
+
+    result
+}
+
+/// HTTP GET /api/health tekshiruvi (Pure Rust stdlib)
+pub fn check_http_health(addr_str: &str, _path: &str) -> bool {
+    check_backend_handshake(addr_str, "9.2.0").is_healthy
 }
 
 pub fn stop_backend(state: &SupervisorState) {
@@ -183,6 +283,8 @@ fn find_bundled_backend_binary() -> Option<(PathBuf, PathBuf)> {
     // 2. Joriy ishchi katalog
     if let Ok(cwd) = std::env::current_dir() {
         candidates.push((cwd.join("backend").join("misa_backend.exe"), cwd.join("backend")));
+        candidates.push((cwd.join("release").join("v9.2").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.2").join("backend")));
+        candidates.push((cwd.join("release").join("v9.0.2").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.0.2").join("backend")));
         candidates.push((cwd.join("release").join("v9.0.1").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.0.1").join("backend")));
         candidates.push((cwd.join("release").join("v9.0.0").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.0.0").join("backend")));
         candidates.push((cwd.join("release").join("v8.0.0").join("backend").join("misa_backend.exe"), cwd.join("release").join("v8.0.0").join("backend")));
@@ -193,6 +295,8 @@ fn find_bundled_backend_binary() -> Option<(PathBuf, PathBuf)> {
     // 3. LocalAppData runtime katalogi (%LOCALAPPDATA%\MisaAI\...)
     if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
         let p = PathBuf::from(local_app_data);
+        candidates.push((p.join("MisaAI").join("runtime").join("v9.2").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("runtime").join("v9.2").join("backend")));
+        candidates.push((p.join("MisaAI").join("runtime").join("v9.0.2").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("runtime").join("v9.0.2").join("backend")));
         candidates.push((p.join("MisaAI").join("runtime").join("v9.0.1").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("runtime").join("v9.0.1").join("backend")));
         candidates.push((p.join("MisaAI").join("runtime").join("v9.0.0").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("runtime").join("v9.0.0").join("backend")));
         candidates.push((p.join("MisaAI").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("backend")));
@@ -203,6 +307,14 @@ fn find_bundled_backend_binary() -> Option<(PathBuf, PathBuf)> {
     if let Ok(exe_path) = std::env::current_exe() {
         let mut curr = exe_path.as_path();
         while let Some(parent) = curr.parent() {
+            let rel92 = parent.join("release").join("v9.2").join("backend");
+            if rel92.exists() {
+                candidates.push((rel92.join("misa_backend.exe"), rel92));
+            }
+            let rel902 = parent.join("release").join("v9.0.2").join("backend");
+            if rel902.exists() {
+                candidates.push((rel902.join("misa_backend.exe"), rel902));
+            }
             let rel91 = parent.join("release").join("v9.0.1").join("backend");
             if rel91.exists() {
                 candidates.push((rel91.join("misa_backend.exe"), rel91));
@@ -318,11 +430,14 @@ fn cleanup_port_process(port: u16) {
 fn cleanup_port_process(_port: u16) {}
 
 pub fn ensure_backend_running(state: &SupervisorState) {
+    backend_lifecycle_log("HEALTH_CHECK", "Backend holati tekshirilmoqda (127.0.0.1:18420)...");
     println!("[BACKEND] Backend holati tekshirilmoqda (127.0.0.1:18420)...");
 
-    // 1. Agar 127.0.0.1:18420 da backend allaqachon ishlab turgan bo'lsa va sog'lom bo'lsa
-    if check_http_health("127.0.0.1:18420", "/api/health") {
-        println!("[BACKEND] Mavjud backend aniqlandi va faol (127.0.0.1:18420) — yangi jarayon ochilmaydi ✓");
+    // 1. Agar 127.0.0.1:18420 da backend allaqachon ishlab turgan bo'lsa va versiyasi mos bo'lsa
+    let initial_hs = check_backend_handshake("127.0.0.1:18420", "9.2.0");
+    if initial_hs.is_healthy && initial_hs.is_compatible_version {
+        backend_lifecycle_log("HEALTH_OK", &format!("Mavjud backend aniqlandi va mos (127.0.0.1:18420, v{}) — yangi jarayon ochilmaydi ✓", initial_hs.version));
+        println!("[BACKEND] Mavjud backend aniqlandi va mos (127.0.0.1:18420, v{}) — yangi jarayon ochilmaydi ✓", initial_hs.version);
         if let Ok(mut m) = state.is_managed.lock() {
             *m = false;
         }
@@ -333,40 +448,60 @@ pub fn ensure_backend_running(state: &SupervisorState) {
             *f = false;
         }
         return;
+    } else if initial_hs.is_healthy && !initial_hs.is_compatible_version {
+        backend_lifecycle_log("VERSION_MISMATCH", &format!("18420-portdagi mavjud backend versiyasi mos emas: '{}' (kutilgan: 9.2.0). Jarayon xavfsiz to'xtatilib, yangilanadi...", initial_hs.version));
+        println!("[BACKEND] 18420-portdagi mavjud backend versiyasi mos emas: '{}' (kutilgan: 9.2.0). Jarayon to'xtatilib yangilanadi...", initial_hs.version);
+        cleanup_port_process(18420);
+        std::thread::sleep(Duration::from_millis(500));
     }
 
     // 2. Barqaror xatolik va cheksiz qayta urinishdan himoya
-    if let Ok(f) = state.is_permanently_failed.lock() {
-        if *f {
-            println!("[BACKEND] Avvalgi urinishlar muvaffaqiyatsiz bo'lgan (Permanent failure guard). Cheksiz qayta urinish bloklandi.");
-            return;
-        }
-    }
-
     if let Ok(mut attempts) = state.spawn_attempts.lock() {
-        if *attempts >= 3 {
-            println!("[ERROR] Backend ishga tushirish uchun maksimal 3 ta urinish tugadi. Avtomatik qayta urinish to'xtatildi.");
+        if *attempts >= 5 {
+            backend_lifecycle_log("MAX_ATTEMPTS_REACHED", "Backend ishga tushirish uchun maksimal 5 ta urinish tugadi.");
+            println!("[ERROR] Backend ishga tushirish uchun maksimal 5 ta urinish tugadi. Avtomatik qayta urinish to'xtatildi.");
             if let Ok(mut f) = state.is_permanently_failed.lock() {
                 *f = true;
             }
             return;
         }
         *attempts += 1;
-        println!("[BACKEND] Backend ishga tushirish urinishi: {}/3", *attempts);
+        backend_lifecycle_log("SPAWN_ATTEMPT", &format!("Backend ishga tushirish urinishi: {}/5", *attempts));
+        println!("[BACKEND] Backend ishga tushirish urinishi: {}/5", *attempts);
     }
 
     // 3. Concurrency guard (bir vaqtda bir nechta spawn chaqirilmasligi uchun)
     if let Ok(mut spawning) = state.is_spawning.lock() {
         if *spawning {
+            backend_lifecycle_log("CONCURRENCY_GUARD", "Backend allaqachon initsializatsiya jarayonida, kutilmoqda...");
             println!("[BACKEND] Backend allaqachon initsializatsiya jarayonida, kutilmoqda...");
             return;
         }
         *spawning = true;
     }
 
-    // 4. Stale port jarayonini tozalash (agar port band, lekin /api/health javob bermasa)
+    // 4. Stale yoki versiyasi mos kelmagan port jarayonini xavfsiz tekshirish
     if is_port_listening(18420) {
-        println!("[BACKEND] 18420-port band, ammo /api/health javob bermayapti (Stale process). Tozalanmoqda...");
+        let mut port_healthy = false;
+        let mut port_compatible = false;
+        for _ in 0..3 {
+            std::thread::sleep(Duration::from_millis(400));
+            let hs = check_backend_handshake("127.0.0.1:18420", "9.2.0");
+            if hs.is_healthy {
+                port_healthy = true;
+                port_compatible = hs.is_compatible_version;
+                break;
+            }
+        }
+        if port_healthy && port_compatible {
+            backend_lifecycle_log("PORT_HEALTH_CONFIRMED", "18420-portdagi mavjud jarayon qayta tekshiruvda sog'lom va versiyasi mos deb tasdiqlandi ✓");
+            if let Ok(mut a) = state.spawn_attempts.lock() { *a = 0; }
+            if let Ok(mut f) = state.is_permanently_failed.lock() { *f = false; }
+            if let Ok(mut spawning) = state.is_spawning.lock() { *spawning = false; }
+            return;
+        }
+        backend_lifecycle_log("PORT_CLEANUP", "18420-port band, ammo /api/health javob bermayapti yoki versiyasi mos emas (Stale process). Tozalanmoqda...");
+        println!("[BACKEND] 18420-port band, ammo /api/health javob bermayapti yoki versiyasi mos emas (Stale process). Tozalanmoqda...");
         cleanup_port_process(18420);
         std::thread::sleep(Duration::from_millis(400));
     }
@@ -477,6 +612,7 @@ pub fn ensure_backend_running(state: &SupervisorState) {
     }
 
     if is_ready {
+        backend_lifecycle_log("BACKEND_READY", "Backend 127.0.0.1:18420 da muvaffaqiyatli tayyor bo'ldi (READY) ✓");
         println!("[BACKEND] Backend 127.0.0.1:18420 da muvaffaqiyatli tayyor bo'ldi (READY) ✓");
         if let Ok(mut a) = state.spawn_attempts.lock() {
             *a = 0;
@@ -485,6 +621,7 @@ pub fn ensure_backend_running(state: &SupervisorState) {
             *f = false;
         }
     } else {
+        backend_lifecycle_log("BACKEND_TIMEOUT", "Backend health check vaqt chegarasiga yetdi (Timeout)");
         println!("[ERROR] Backend health check vaqt chegarasiga yetdi (Timeout)");
     }
 
@@ -519,8 +656,59 @@ fn app_toggle_maximize(window: tauri::Window) -> Result<bool, String> {
 
 #[tauri::command]
 fn app_close(window: tauri::Window, state: tauri::State<SupervisorState>) -> Result<(), String> {
+    startup_log("UI", "app_close invoked -> Hiding window to system tray (Idempotent)");
+    let mut lc = state.lifecycle_state.lock().map_err(|e| e.to_string())?;
+    if *lc == AppLifecycleState::HiddenToTray {
+        startup_log("UI", "Window is already in HiddenToTray state, ignoring duplicate call.");
+        return Ok(());
+    }
+    *lc = AppLifecycleState::HiddenToTray;
+    drop(lc);
+    window.hide().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn app_exit(app_handle: tauri::AppHandle, state: tauri::State<SupervisorState>) -> Result<(), String> {
+    startup_log("UI", "app_exit invoked -> Stopping backend and exiting application...");
+    let mut lc = state.lifecycle_state.lock().map_err(|e| e.to_string())?;
+    if *lc == AppLifecycleState::ShuttingDown || *lc == AppLifecycleState::Exited {
+        return Ok(());
+    }
+    *lc = AppLifecycleState::ShuttingDown;
+    drop(lc);
     stop_backend(&state);
-    window.close().map_err(|e| e.to_string())
+    app_handle.exit(0);
+    Ok(())
+}
+
+#[tauri::command]
+fn app_show_from_tray(window: tauri::Window, state: tauri::State<SupervisorState>) -> Result<(), String> {
+    backend_lifecycle_log("APP_SHOW_FROM_TRAY", "Window restored from tray, verifying state...");
+    let mut lc = state.lifecycle_state.lock().map_err(|e| e.to_string())?;
+    *lc = AppLifecycleState::Visible;
+    drop(lc);
+    window.show().map_err(|e| e.to_string())?;
+    window.unminimize().map_err(|e| e.to_string())?;
+    let _ = window.set_focus();
+
+    // Reopen paytida backend holatini tekshirish va kutilmaganda to'xtagan bo'lsa darhol jonlantirish
+    if !check_http_health("127.0.0.1:18420", "/api/health") {
+        backend_lifecycle_log("TRAY_REOPEN_REVIVE", "Backend faol emas, traydan ochilganda qayta ishga tushirilmoqda...");
+        if let Ok(mut a) = state.spawn_attempts.lock() { *a = 0; }
+        if let Ok(mut f) = state.is_permanently_failed.lock() { *f = false; }
+        let state_clone = state.inner().clone();
+        std::thread::spawn(move || {
+            ensure_backend_running(&state_clone);
+        });
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn app_get_lifecycle_state(state: tauri::State<SupervisorState>) -> String {
+    let lc = state.lifecycle_state.lock().map(|s| *s).unwrap_or(AppLifecycleState::Starting);
+    format!("{:?}", lc)
 }
 
 #[tauri::command]
@@ -551,6 +739,7 @@ fn backend_get_status(state: tauri::State<SupervisorState>) -> serde_json::Value
     if let Ok(mut lock) = state.backend_child.lock() {
         if let Some(ref mut child) = *lock {
             if let Ok(Some(_exit_status)) = child.try_wait() {
+                backend_lifecycle_log("CHILD_EXITED", &format!("Backend child jarayoni yakunlandi: {:?}", _exit_status));
                 *lock = None;
                 if let Ok(mut pid_lock) = state.backend_pid.lock() {
                     *pid_lock = None;
@@ -568,7 +757,8 @@ fn backend_get_status(state: tauri::State<SupervisorState>) -> serde_json::Value
     let attempts = state.spawn_attempts.lock().map(|a| *a).unwrap_or(0);
 
     // Qayta urinish faqat limit doirasida va barqaror xato holatida bo'lmasa
-    if !is_healthy && !is_spawning && !permanently_failed && attempts < 3 {
+    if !is_healthy && !is_spawning && attempts < 5 {
+        backend_lifecycle_log("AUTO_RECOVERY", &format!("Backend sog'lom emas, auto-recovery chaqirilmoqda (urinish: {}/5)", attempts));
         let state_clone = state.inner().clone();
         std::thread::spawn(move || {
             ensure_backend_running(&state_clone);
@@ -592,6 +782,7 @@ fn backend_get_status(state: tauri::State<SupervisorState>) -> serde_json::Value
 
 #[tauri::command]
 fn backend_restart(state: tauri::State<SupervisorState>) -> Result<bool, String> {
+    backend_lifecycle_log("MANUAL_RESTART", "Foydalanuvchi/Frontend orqali backend_restart chaqirildi");
     let currently_spawning = state.is_spawning.lock().map(|s| *s).unwrap_or(false);
     if currently_spawning || check_http_health("127.0.0.1:18420", "/api/health") {
         return Ok(true);
@@ -612,6 +803,36 @@ fn backend_restart(state: tauri::State<SupervisorState>) -> Result<bool, String>
         ensure_backend_running(&state_clone);
     });
     Ok(true)
+}
+
+#[tauri::command]
+fn get_backend_lifecycle_log_path() -> Result<String, String> {
+    let log_file = crate::diag::get_log_dir().join("backend-lifecycle.log");
+    Ok(log_file.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn get_voice_runtime_log_path() -> Result<String, String> {
+    let log_file = crate::diag::get_log_dir().join("voice-runtime.log");
+    Ok(log_file.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn network_diagnostic_check(url: Option<String>) -> Result<crate::network_diag::NetworkDiagnosticReport, String> {
+    let target = url.unwrap_or_else(|| "https://misa.up.railway.app/api/health".to_string());
+    Ok(crate::network_diag::run_full_diagnostics(&target))
+}
+
+#[tauri::command]
+fn get_network_log_path() -> Result<String, String> {
+    let log_file = crate::diag::get_log_dir().join("network.log");
+    Ok(log_file.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn append_network_log(message: String) -> Result<(), String> {
+    crate::diag::network_log(&message);
+    Ok(())
 }
 
 pub struct BackendGuard {
@@ -756,7 +977,10 @@ pub fn try_install_webview2() -> bool {
     // 2. Joriy ishchi katalogdagi kandidatlar (CWD)
     if let Ok(cwd) = std::env::current_dir() {
         setup_cands.push(cwd.join("webview2").join("MicrosoftEdgeWebview2Setup.exe"));
-        setup_cands.push(cwd.join("MicrosoftEdgeWebview2Setup.exe"));
+        setup_cands.push(cwd.join("release").join("v9.2").join("webview2").join("MicrosoftEdgeWebview2Setup.exe"));
+        setup_cands.push(cwd.join("release").join("v9.2").join("MicrosoftEdgeWebview2Setup.exe"));
+        setup_cands.push(cwd.join("release").join("v9.0.2").join("webview2").join("MicrosoftEdgeWebview2Setup.exe"));
+        setup_cands.push(cwd.join("release").join("v9.0.2").join("MicrosoftEdgeWebview2Setup.exe"));
         setup_cands.push(cwd.join("release").join("v9.0.1").join("webview2").join("MicrosoftEdgeWebview2Setup.exe"));
         setup_cands.push(cwd.join("release").join("v9.0.1").join("MicrosoftEdgeWebview2Setup.exe"));
         setup_cands.push(cwd.join("Misa").join("src-tauri").join("resources").join("MicrosoftEdgeWebview2Setup.exe"));
@@ -914,16 +1138,27 @@ pub fn show_native_message_box(_title: &str, _message: &str, _is_error: bool) {}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    println!("[BOOT] MISA AI v9.0.1 Desktop Application ishga tushmoqda...");
+    install_crash_handlers();
+
+    let exe_path = std::env::current_exe()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|_| "unknown".to_string());
+    startup_log("STARTUP", "Misa AI process started");
+    startup_log("STARTUP", &format!("Executable path: {}", exe_path));
+    startup_log("STARTUP", &format!("PID: {} TID: {}", current_pid(), current_tid()));
+    println!("[BOOT] MISA AI v9.2.0 Desktop Application ishga tushmoqda...");
 
     // 1. Single-Instance Guard tekshiruvi (faqat 1 ta Misa UI instansiyasi ishlaydi)
+    startup_log("SINGLE_INSTANCE", "Checking single instance guard...");
     println!("[INSTANCE] Yagona nusxa (Single-Instance) tekshirilmoqda...");
-    let _instance_guard = match SingleInstanceGuard::acquire("Local\\Misa_AI_SingleInstance_Mutex_v9.0.1") {
+    let _instance_guard = match SingleInstanceGuard::acquire("Local\\Misa_AI_SingleInstance_Mutex_v9.2") {
         Some(g) => {
+            startup_log("SINGLE_INSTANCE", "Acquired mutex successfully (Primary instance)");
             println!("[INSTANCE] Yagona nusxa qulfi o'rnatildi (Primary instance) ✓");
             g
         }
         None => {
+            startup_log("SINGLE_INSTANCE", "Existing instance detected! Exiting process cleanly.");
             println!("[INSTANCE] Mavjud Misa AI nusxasi topildi. Yangi jarayon to'xtatildi (No duplicate instance).");
             return;
         }
@@ -940,6 +1175,8 @@ pub fn run() {
     let state_for_panic = supervisor_state.clone();
     let old_panic_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
+        let err_msg = format!("Panic: {:?}", info);
+        crash_log("RUST_PANIC_SUPERVISOR", &err_msg);
         eprintln!("[ERROR] Kutilmagan qulash (Panic): {:?}", info);
         stop_backend(&state_for_panic);
         old_panic_hook(info);
@@ -948,9 +1185,12 @@ pub fn run() {
     // 4. Windows Native Misa Preflight: WebView2 tekshiruvi va avtomatik o'rnatish
     #[cfg(target_os = "windows")]
     {
+        startup_log("PREFLIGHT", "Entering run_native_preflight()...");
         println!("[PREFLIGHT] Misa Native Preflight tekshiruvi boshlanmoqda...");
         let preflight_ok = preflight::run_native_preflight();
+        startup_log("PREFLIGHT", &format!("run_native_preflight returned: {}", preflight_ok));
         if !preflight_ok {
+            startup_log("PREFLIGHT", "Preflight FAILED or aborted by user! Stopping backend and exiting.");
             eprintln!("[ERROR] Microsoft WebView2 Runtime o'rnatilmadi.");
             eprintln!("[INFO] UI startup aborted.");
             eprintln!("[INFO] Backend process was NOT started.");
@@ -958,33 +1198,192 @@ pub fn run() {
             stop_backend(&supervisor_state);
             return;
         }
+        startup_log("PREFLIGHT", "Preflight SUCCEEDED ✓");
         println!("[PREFLIGHT] WebView2 Runtime muvaffaqiyatli tasdiqlandi ✓");
     }
 
     // 5. Tauri App Builder
     let state_for_setup = supervisor_state.clone();
-    let state_for_window = supervisor_state.clone();
     let state_for_exit = supervisor_state.clone();
     let state_for_build_err = supervisor_state.clone();
 
+    startup_log("TAURI", "Tauri Builder initsializatsiya qilinmoqda...");
     println!("[UI] Tauri oynasi va muhiti initsializatsiya qilinmoqda...");
     let builder = tauri::Builder::default()
         .manage(supervisor_state)
         .setup(move |app| {
             use tauri::Manager;
-            println!("[UI] Tauri asosiy oynasi sozlanmoqda...");
+            use tauri::Emitter;
+            use tauri::menu::{Menu, MenuItem};
+            use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState};
+
+            startup_log("TAURI", "setup hook entered");
+            println!("[UI] Tauri asosiy oynasi va System Tray sozlanmoqda...");
+
+            // 1. Asosiy oyna holatini yangilash
             if let Some(win) = app.get_webview_window("main") {
+                startup_log("TAURI", "Main webview window found in setup hook");
+                let is_vis = win.is_visible().unwrap_or(false);
+                startup_log("TAURI", &format!("Main webview window initial is_visible={}", is_vis));
                 let _ = win.set_background_color(Some(tauri::window::Color(6, 3, 12, 255)));
+                let _ = win.show();
+                let _ = win.set_focus();
+                let is_vis_after = win.is_visible().unwrap_or(false);
+                startup_log("TAURI", &format!("Main webview window after win.show() is_visible={}", is_vis_after));
+            } else {
+                startup_log("TAURI", "WARNING: Webview window 'main' NOT found via get_webview_window('main')!");
             }
+
+            // 2. Lifecycle holatini Visible ga o'tkazish
+            if let Some(state) = app.try_state::<SupervisorState>() {
+                if let Ok(mut lc) = state.lifecycle_state.lock() {
+                    *lc = AppLifecycleState::Visible;
+                }
+            }
+
+            // 3. System Tray Menyu yaratish
+            let show_item = MenuItem::with_id(app, "tray_show", "Ochish", true, None::<&str>)?;
+            let pause_item = MenuItem::with_id(app, "tray_pause", "Tinglashni pauza qilish", true, None::<&str>)?;
+            let resume_item = MenuItem::with_id(app, "tray_resume", "Tinglashni davom ettirish", true, None::<&str>)?;
+            let settings_item = MenuItem::with_id(app, "tray_settings", "Sozlamalar", true, None::<&str>)?;
+            let exit_item = MenuItem::with_id(app, "tray_exit", "Chiqish", true, None::<&str>)?;
+
+            let tray_menu = Menu::with_items(app, &[
+                &show_item,
+                &pause_item,
+                &resume_item,
+                &settings_item,
+                &exit_item,
+            ])?;
+
+            let mut tray_builder = TrayIconBuilder::with_id("misa_main_tray")
+                .menu(&tray_menu)
+                .tooltip("Misa AI v9.2")
+                .show_menu_on_left_click(false);
+
+            if let Some(icon) = app.default_window_icon() {
+                tray_builder = tray_builder.icon(icon.clone());
+            }
+
+            let restore_window_and_verify_backend = |app_handle: &tauri::AppHandle| {
+                if let Some(win) = app_handle.get_webview_window("main") {
+                    let _ = win.show();
+                    let _ = win.unminimize();
+                    let _ = win.set_focus();
+                }
+                if let Some(state) = app_handle.try_state::<SupervisorState>() {
+                    if let Ok(mut lc) = state.lifecycle_state.lock() {
+                        *lc = AppLifecycleState::Visible;
+                    }
+                    backend_lifecycle_log("TRAY_RESTORE", "Oyna tray orqali tiklandi, backend tekshirilmoqda...");
+                    if !check_http_health("127.0.0.1:18420", "/api/health") {
+                        backend_lifecycle_log("TRAY_REOPEN_REVIVE", "Backend traydan ochilganda faol emas, auto-revive boshlanmoqda...");
+                        if let Ok(mut a) = state.spawn_attempts.lock() { *a = 0; }
+                        if let Ok(mut f) = state.is_permanently_failed.lock() { *f = false; }
+                        let state_clone = state.inner().clone();
+                        std::thread::spawn(move || {
+                            ensure_backend_running(&state_clone);
+                        });
+                    }
+                }
+            };
+
+            let _tray = tray_builder
+                .on_menu_event(move |app_handle, event| {
+                    let id_str = event.id().as_ref();
+                    startup_log("TRAY", &format!("Tray menu event: {}", id_str));
+                    match id_str {
+                        "tray_show" => {
+                            restore_window_and_verify_backend(app_handle);
+                        }
+                        "tray_pause" => {
+                            let _ = app_handle.emit("misa_tray_command", "pause_listening");
+                        }
+                        "tray_resume" => {
+                            let _ = app_handle.emit("misa_tray_command", "resume_listening");
+                        }
+                        "tray_settings" => {
+                            restore_window_and_verify_backend(app_handle);
+                            let _ = app_handle.emit("misa_navigate", "/account");
+                        }
+                        "tray_exit" => {
+                            startup_log("TRAY", "Tray Exit bosildi -> Backend to'xtatilib dastur yopilmoqda...");
+                            if let Some(state) = app_handle.try_state::<SupervisorState>() {
+                                let mut do_exit = false;
+                                if let Ok(mut lc) = state.lifecycle_state.lock() {
+                                    if *lc != AppLifecycleState::ShuttingDown && *lc != AppLifecycleState::Exited {
+                                        *lc = AppLifecycleState::ShuttingDown;
+                                        do_exit = true;
+                                    }
+                                }
+                                if do_exit {
+                                    stop_backend(&state);
+                                    app_handle.exit(0);
+                                }
+                            } else {
+                                app_handle.exit(0);
+                            }
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                        let app = tray.app_handle();
+                        if let Some(win) = app.get_webview_window("main") {
+                            let is_vis = win.is_visible().unwrap_or(false);
+                            if is_vis {
+                                let _ = win.set_focus();
+                            } else {
+                                let _ = win.show();
+                                let _ = win.unminimize();
+                                let _ = win.set_focus();
+                                if let Some(state) = app.try_state::<SupervisorState>() {
+                                    if let Ok(mut lc) = state.lifecycle_state.lock() {
+                                        *lc = AppLifecycleState::Visible;
+                                    }
+                                    backend_lifecycle_log("TRAY_RESTORE", "Oyna tray icon click orqali tiklandi, backend tekshirilmoqda...");
+                                    if !check_http_health("127.0.0.1:18420", "/api/health") {
+                                        backend_lifecycle_log("TRAY_REOPEN_REVIVE", "Backend faol emas, auto-revive boshlanmoqda...");
+                                        if let Ok(mut a) = state.spawn_attempts.lock() { *a = 0; }
+                                        if let Ok(mut f) = state.is_permanently_failed.lock() { *f = false; }
+                                        let state_clone = state.inner().clone();
+                                        std::thread::spawn(move || {
+                                            ensure_backend_running(&state_clone);
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                })
+                .build(app)?;
+
+            startup_log("TRAY", "System Tray muvaffaqiyatli yaratildi va ro'yxatdan o'tdi ✓");
+
+            // 4. Backend nazoratchi oqimini boshlash
             std::thread::spawn(move || {
+                startup_log("BACKEND", "Starting managed backend supervisor thread...");
                 ensure_backend_running(&state_for_setup);
             });
             Ok(())
         })
-        .on_window_event(move |_window, event| {
-            if let tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed = event {
-                println!("[UI] Oyna yopilish so'rovi qabul qilindi. Backend to'xtatilmoqda...");
-                stop_backend(&state_for_window);
+        .on_window_event(move |window, event| {
+            match event {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    startup_log("TAURI_WINDOW", "CloseRequested qabul qilindi -> Chiqish bekor qilindi, oyna trayga yashirilmoqda.");
+                    api.prevent_close();
+                    if let Some(state) = window.try_state::<SupervisorState>() {
+                        if let Ok(mut lc) = state.lifecycle_state.lock() {
+                            if *lc == AppLifecycleState::HiddenToTray {
+                                return;
+                            }
+                            *lc = AppLifecycleState::HiddenToTray;
+                        }
+                    }
+                    let _ = window.hide();
+                }
+                _ => {}
             }
         })
         .plugin(tauri_plugin_opener::init())
@@ -993,15 +1392,28 @@ pub fn run() {
             app_minimize,
             app_toggle_maximize,
             app_close,
+            app_exit,
+            app_show_from_tray,
+            app_get_lifecycle_state,
             app_is_maximized,
             app_start_resize,
             backend_get_status,
-            backend_restart
+            backend_restart,
+            network_diagnostic_check,
+            get_network_log_path,
+            append_network_log,
+            get_backend_lifecycle_log_path,
+            get_voice_runtime_log_path
         ]);
 
+    startup_log("TAURI", "Calling builder.build(tauri::generate_context!())...");
     let app = match builder.build(tauri::generate_context!()) {
-        Ok(a) => a,
+        Ok(a) => {
+            startup_log("TAURI", "builder.build() SUCCEEDED ✓");
+            a
+        }
         Err(e) => {
+            startup_log("TAURI", &format!("ERROR builder.build() failed: {}", e));
             eprintln!("[ERROR] Tauri oynasini yaratishda xatolik: {}", e);
             stop_backend(&state_for_build_err);
             #[cfg(target_os = "windows")]
@@ -1014,11 +1426,31 @@ pub fn run() {
         }
     };
 
+    startup_log("TAURI", "Calling app.run()...");
     println!("[UI] Misa AI Desktop dasturi muvaffaqiyatli ochildi ✓");
     app.run(move |_app_handle, event| {
         match event {
-            tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
-                println!("[SHUTDOWN] Ilovadan chiqish hodisasi. Backend to'xtatilmoqda...");
+            tauri::RunEvent::Ready => {
+                startup_log("TAURI", "RunEvent::Ready received ✓");
+            }
+            tauri::RunEvent::Resumed => {
+                startup_log("TAURI", "RunEvent::Resumed received");
+            }
+            tauri::RunEvent::ExitRequested { api, .. } => {
+                // Agar foydalanuvchi menyudan 'Chiqish' ni tanlamagan bo'lsa (masalan oyna yashiringanda), jarayonni to'xtatmaymiz!
+                if let Some(state) = _app_handle.try_state::<SupervisorState>() {
+                    let is_shutting_down = state.lifecycle_state.lock().map(|lc| *lc == AppLifecycleState::ShuttingDown).unwrap_or(false);
+                    if !is_shutting_down {
+                        startup_log("TAURI", "ExitRequested received while in Tray mode. Preventing exit.");
+                        api.prevent_exit();
+                        return;
+                    }
+                }
+                startup_log("TAURI", "ExitRequested confirmed in ShuttingDown state. Stopping backend...");
+                stop_backend(&state_for_exit);
+            }
+            tauri::RunEvent::Exit => {
+                startup_log("TAURI", "RunEvent::Exit received. Ensuring backend stopped...");
                 stop_backend(&state_for_exit);
             }
             _ => {}

@@ -38,17 +38,31 @@ class CommandResult:
     duration_ms: float = 0.0
     timestamp: float = field(default_factory=time.time)
 
-
 class RemoteCommandExecutor:
     """Xavfsiz buyruq bajaruvchi (Secure command executor)."""
     
+    DESTRUCTIVE_OR_POWER_TOOLS = {
+        "system_shutdown",
+        "system_restart",
+        "shutdown",
+        "restart",
+        "power_action",
+        "file_delete",
+        "process_kill",
+        "destructive_file_op",
+        "clear_memory",
+        "delete_all_reminders",
+    }
+
     def __init__(self, tool_registry=None, audit_logger=None, max_result_size=65536):
         self._tool_registry = tool_registry or AgentToolRegistry.get_default_instance()
         self._audit = audit_logger  # AgentAuditLogger instance  
         self._max_result_size = max_result_size  # 64KB
         self._idempotency_cache: Dict[str, CommandResult] = {}  # command_id -> result
         self._seen_nonces: Dict[str, float] = {}  # nonce -> expires_at
+        self._in_progress_commands: set = set()  # Currently executing command_ids
         self._dangerous_lock = asyncio.Lock()  # Lock for dangerous operations
+        self._state_lock = asyncio.Lock()  # Concurrency lock for state checks
         self._execution_count: int = 0
         self._max_cache_size: int = 200
 
@@ -57,66 +71,98 @@ class RemoteCommandExecutor:
         self._purge_expired_nonces()
         
         start_time = time.time()
-        command_id = command.get("command_id", "")
-        tool_id = command.get("tool_id", "")
-        params = command.get("params", {})
-        nonce = command.get("nonce", "")
-        expires_at = command.get("expires_at", 0.0)
-        confirmation_status = command.get("confirmation_status", "pending")
-        timeout = command.get("timeout", 30.0)
+        command_id = str(command.get("command_id", "") or "").strip()
+        tool_id = str(command.get("tool_id", "") or "").strip()
+        params = command.get("params", {}) or {}
+        nonce = str(command.get("nonce", "") or "").strip()
+        expires_at = float(command.get("expires_at", 0.0) or 0.0)
+        confirmation_status = str(command.get("confirmation_status", "pending") or "pending").lower()
+        timeout = float(command.get("timeout", 30.0) or 30.0)
 
-        # 2. Idempotency check
-        if command_id in self._idempotency_cache:
-            cached = self._idempotency_cache[command_id]
-            return self._build_result_dict(cached)
-
-        # 3. Expiry check
-        if expires_at and time.time() > expires_at:
-            res = CommandResult(command_id, CommandStatus.REJECTED, tool_id, error="COMMAND_EXPIRED")
+        # 1. Validation & Deduplication check
+        if not command_id:
+            res = CommandResult("unknown", CommandStatus.REJECTED, tool_id, error="MISSING_COMMAND_ID")
             return self._finalize(res, start_time)
 
-        # 4. Nonce replay check
-        if nonce in self._seen_nonces:
-            res = CommandResult(command_id, CommandStatus.REJECTED, tool_id, error="REPLAY_BLOCKED")
-            return self._finalize(res, start_time)
+        async with self._state_lock:
+            # 2. Idempotency check
+            if command_id in self._idempotency_cache:
+                cached = self._idempotency_cache[command_id]
+                return self._build_result_dict(cached)
 
-        # 5. Record nonce
-        if nonce:
-            self._seen_nonces[nonce] = expires_at
+            # Prevent duplicate concurrent execution of same command
+            if command_id in self._in_progress_commands:
+                return {
+                    "command_id": command_id,
+                    "status": CommandStatus.EXECUTING.value,
+                    "tool_id": tool_id,
+                    "error": "COMMAND_ALREADY_IN_PROGRESS"
+                }
+            self._in_progress_commands.add(command_id)
 
-        # 6. Tool lookup
-        if not self._tool_registry:
-            res = CommandResult(command_id, CommandStatus.FAILED, tool_id, error="NO_TOOL_REGISTRY")
-            return self._finalize(res, start_time)
-            
-        tool = None
-        if hasattr(self._tool_registry, "get"):
-            tool = self._tool_registry.get(tool_id)
-        elif hasattr(self._tool_registry, "get_tool"):
-            tool = self._tool_registry.get_tool(tool_id)
-
-        if not tool:
-            res = CommandResult(command_id, CommandStatus.REJECTED, tool_id, error="INVALID_TOOL")
-            return self._finalize(res, start_time)
-
-        # 7. Confirmation check
-        requires_confirmation = getattr(tool, "requires_confirmation", False)
-        if requires_confirmation and confirmation_status != 'confirmed':
-            res = CommandResult(command_id, CommandStatus.REJECTED, tool_id, error="CONFIRMATION_REQUIRED")
-            return self._finalize(res, start_time)
-
-        # 8. Execute
-        self._execution_count += 1
         try:
-            exec_result = await self._execute_with_timeout(tool, params, timeout)
-            res = CommandResult(command_id, CommandStatus.SUCCEEDED, tool_id, result=exec_result)
-        except asyncio.TimeoutError:
-            res = CommandResult(command_id, CommandStatus.FAILED, tool_id, error="TIMEOUT")
-        except Exception as e:
-            res = CommandResult(command_id, CommandStatus.FAILED, tool_id, error=str(e))
+            # Audit log command received
+            if self._audit:
+                self._audit.log(
+                    RemoteEventType.COMMAND_RECEIVED,
+                    event_data={"command_id": command_id, "tool_id": tool_id}
+                )
 
-        # 9, 10, 11, 12. Finalize
-        return self._finalize(res, start_time)
+            # 3. Expiry check
+            if expires_at and time.time() > expires_at:
+                res = CommandResult(command_id, CommandStatus.REJECTED, tool_id, error="COMMAND_EXPIRED")
+                return self._finalize(res, start_time)
+
+            # 4. Nonce replay check
+            if nonce:
+                if nonce in self._seen_nonces:
+                    res = CommandResult(command_id, CommandStatus.REJECTED, tool_id, error="REPLAY_BLOCKED")
+                    return self._finalize(res, start_time)
+                # Record nonce with TTL (at least 300s)
+                self._seen_nonces[nonce] = max(expires_at, time.time() + 300.0)
+
+            # 5. Tool lookup
+            if not self._tool_registry:
+                res = CommandResult(command_id, CommandStatus.FAILED, tool_id, error="NO_TOOL_REGISTRY")
+                return self._finalize(res, start_time)
+                
+            tool = None
+            if hasattr(self._tool_registry, "get"):
+                tool = self._tool_registry.get(tool_id)
+            elif hasattr(self._tool_registry, "get_tool"):
+                tool = self._tool_registry.get_tool(tool_id)
+
+            if not tool:
+                res = CommandResult(command_id, CommandStatus.REJECTED, tool_id, error="INVALID_TOOL")
+                return self._finalize(res, start_time)
+
+            # 6. Authoritative Confirmation check (Hech qanday destructive yoki power action avtomatik bajarilmasin)
+            tool_risk = str(getattr(tool, "risk_level", "LOW") or "").lower()
+            is_destructive = bool(getattr(tool, "destructive", False)) or tool_id in self.DESTRUCTIVE_OR_POWER_TOOLS
+            requires_confirmation = (
+                bool(getattr(tool, "requires_confirmation", False)) or
+                is_destructive or
+                tool_risk in ("high", "critical", "risklevel.high", "risklevel.critical")
+            )
+
+            if requires_confirmation and confirmation_status != "confirmed":
+                res = CommandResult(command_id, CommandStatus.REJECTED, tool_id, error="CONFIRMATION_REQUIRED")
+                return self._finalize(res, start_time)
+
+            # 7. Execute
+            self._execution_count += 1
+            try:
+                exec_result = await self._execute_with_timeout(tool, params, timeout)
+                res = CommandResult(command_id, CommandStatus.SUCCEEDED, tool_id, result=exec_result)
+            except asyncio.TimeoutError:
+                res = CommandResult(command_id, CommandStatus.FAILED, tool_id, error="TIMEOUT")
+            except Exception as e:
+                res = CommandResult(command_id, CommandStatus.FAILED, tool_id, error=str(e))
+
+            return self._finalize(res, start_time)
+        finally:
+            async with self._state_lock:
+                self._in_progress_commands.discard(command_id)
 
     def _finalize(self, res: CommandResult, start_time: float) -> Dict[str, Any]:
         """Tugatish ishlari (cache, audit, sanitize)."""
@@ -153,26 +199,42 @@ class RemoteCommandExecutor:
         }
 
     async def _execute_with_timeout(self, tool: Any, params: Dict, timeout: float) -> Dict[str, Any]:
-        """Buyruqni vaqt cheklovi bilan bajarish."""
-        is_dangerous = getattr(tool, "risk_level", "LOW") in ("HIGH", "CRITICAL") or getattr(tool, "requires_confirmation", False)
-        
-        def _sync_call():
+        """Buyruqni vaqt cheklovi bilan xavfsiz bajarish (sync va async qo'llab-quvvatlaydi)."""
+        is_dangerous = (
+            getattr(tool, "risk_level", "LOW") in ("HIGH", "CRITICAL") or
+            getattr(tool, "requires_confirmation", False) or
+            getattr(tool, "destructive", False)
+        )
+
+        def _get_callable():
             if hasattr(tool, "handler") and callable(tool.handler):
-                return tool.handler(params)
+                return tool.handler
             elif hasattr(tool, "executor") and callable(tool.executor):
-                return tool.executor(params)
+                return tool.executor
             elif hasattr(tool, "execute") and callable(tool.execute):
-                try:
-                    return tool.execute(**params)
-                except TypeError:
-                    return tool.execute(params)
+                return tool.execute
             elif callable(tool):
-                return tool(params)
+                return tool
+            return None
+
+        target_fn = _get_callable()
+        if not target_fn:
             return {"error": "TOOL_NOT_CALLABLE"}
 
         async def _run():
-            loop = asyncio.get_running_loop()
-            return await loop.run_in_executor(None, _sync_call)
+            if asyncio.iscoroutinefunction(target_fn):
+                try:
+                    return await target_fn(**params)
+                except TypeError:
+                    return await target_fn(params)
+            else:
+                loop = asyncio.get_running_loop()
+                def _sync_wrapper():
+                    try:
+                        return target_fn(**params)
+                    except TypeError:
+                        return target_fn(params)
+                return await loop.run_in_executor(None, _sync_wrapper)
 
         if is_dangerous:
             async with self._dangerous_lock:
@@ -182,10 +244,7 @@ class RemoteCommandExecutor:
 
     def _sanitize_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """Natijani tozalash va qisqartirish."""
-        # Redact secrets via shared utility
         sanitized = sanitize_event_data(result)
-        
-        # Check size
         try:
             dumped = json.dumps(sanitized)
             if len(dumped.encode('utf-8')) > self._max_result_size:
@@ -200,9 +259,7 @@ class RemoteCommandExecutor:
         now = time.time()
         self._seen_nonces = {k: v for k, v in self._seen_nonces.items() if v >= now}
         
-        # Enforce max cache size on idempotency cache
         if len(self._idempotency_cache) > self._max_cache_size:
-            # Sort by timestamp, keep newest
             sorted_items = sorted(self._idempotency_cache.items(), key=lambda x: x[1].timestamp)
             to_keep = sorted_items[-self._max_cache_size:]
             self._idempotency_cache = dict(to_keep)
@@ -212,14 +269,15 @@ class RemoteCommandExecutor:
         return {
             "execution_count": self._execution_count,
             "cache_size": len(self._idempotency_cache),
-            "nonce_count": len(self._seen_nonces)
+            "nonce_count": len(self._seen_nonces),
+            "in_progress_count": len(self._in_progress_commands)
         }
 
 
 class CommandPoller:
     """Backenddan buyruqlarni tekshiruvchi (Polling service)."""
     
-    def __init__(self, transport, device_id, executor, poll_interval=5.0, audit_logger=None):
+    def __init__(self, transport, device_id, executor, poll_interval=3.0, audit_logger=None):
         self._transport = transport
         self._device_id = device_id
         self._executor = executor
@@ -227,25 +285,34 @@ class CommandPoller:
         self._running = False
         self._audit = audit_logger
         self._poll_task: Optional[asyncio.Task] = None
+        self._lock = asyncio.Lock()
+
+    @property
+    def is_running(self) -> bool:
+        return self._running and self._poll_task is not None and not self._poll_task.done()
 
     async def start(self):
-        """Pollingni boshlash."""
-        if self._running:
-            return
-        self._running = True
-        self._poll_task = asyncio.create_task(self._poll_loop())
-        logger.info("Command poller started.")
+        """Pollingni boshlash (Idempotent, dublikatsiz)."""
+        async with self._lock:
+            if self._running and self._poll_task and not self._poll_task.done():
+                logger.debug("[CommandPoller] Poller allaqachon faol, duplicate start bloklandi")
+                return
+            self._running = True
+            self._poll_task = asyncio.create_task(self._poll_loop())
+            logger.info(f"[CommandPoller] Command poller ishga tushirildi (interval: {self._poll_interval}s)")
 
     async def stop(self):
         """Pollingni to'xtatish."""
-        self._running = False
-        if self._poll_task:
-            self._poll_task.cancel()
-            try:
-                await self._poll_task
-            except asyncio.CancelledError:
-                pass
-        logger.info("Command poller stopped.")
+        async with self._lock:
+            self._running = False
+            if self._poll_task:
+                self._poll_task.cancel()
+                try:
+                    await self._poll_task
+                except asyncio.CancelledError:
+                    pass
+                self._poll_task = None
+            logger.info("[CommandPoller] Command poller to'xtatildi")
 
     async def _poll_loop(self):
         """Asosiy sikl."""

@@ -587,9 +587,27 @@ def _capture_screen_pil():
         return None
 
 
-def ekran_tahlil(savol="Ekranda nima ko'rinmoqda? Qisqacha tushuntir.", user_id=None):
-    """Ekran screenshot olib, AI Vision orqali tahlil qilish"""
+def ekran_tahlil(savol="Ekranda nima ko'rinmoqda? Qisqacha tushuntir.", user_id=None, allow_cloud: bool = False):
+    """Ekran tahlili: default bo'yicha lokal maxfiy rejim; faqat allow_cloud=True bo'lganda tashqi AI ga yuboriladi"""
     try:
+        active_title = "Noma'lum oyna"
+        active_proc = "Noma'lum jarayon"
+        try:
+            from core.gui.controller import WindowsGUIController
+            act = WindowsGUIController.get_active_window()
+            if act:
+                active_title = act.title
+                active_proc = act.process_name
+        except Exception:
+            pass
+
+        if not allow_cloud:
+            logging.info("Ekran tahlili maxfiylik siyosati bo'yicha lokal bajarildi (allow_cloud=False).")
+            return (
+                f"Lokal ekran tahlili: Hozirgi faol oyna: '{active_title}' (Jarayon: {active_proc}). "
+                f"Ekranning to'liq screenshotini tashqi AI providerga yuborish uchun aniq foydalanuvchi tasdig'i talab etiladi."
+            )
+
         screenshot = _capture_screen_pil()
         if not screenshot:
             logging.error("Ekran tahlili: screenshot olinmadi")

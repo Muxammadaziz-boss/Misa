@@ -141,6 +141,9 @@ class TestToolAgentIntegration(unittest.TestCase):
         )
         self.registry.register(dest_tool)
 
+        from core.tools.security_policy import get_security_policy
+        token = get_security_policy().token_manager.create_token("disk_formatter", {})
+
         plan = AgentPlan(
             plan_id="plan_dest_1",
             goal="Format disk",
@@ -150,7 +153,7 @@ class TestToolAgentIntegration(unittest.TestCase):
                     order=1,
                     intent="Format",
                     tool="disk_formatter",
-                    parameters={},
+                    parameters={"_confirmation_token": token},
                     risk_level=RiskLevel.LOW,
                     max_retries=3  # 3 ta ruxsat berilgan bo'lsa ham!
                 )

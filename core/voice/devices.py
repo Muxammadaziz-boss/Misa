@@ -24,6 +24,59 @@ logger = logging.getLogger("MicrophoneManager")
 # Config fayli
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
 
+
+def _get_misa_log_dir() -> str:
+    """%LOCALAPPDATA%\\MisaAI\\logs katalogini xavfsiz olish"""
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        log_dir = os.path.join(local_app_data, "MisaAI", "logs")
+    else:
+        log_dir = os.path.join(os.path.expanduser("~"), ".misa", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    return log_dir
+
+
+def log_voice_runtime(event_type: str, details: Optional[Dict[str, Any]] = None) -> None:
+    """%LOCALAPPDATA%\\MisaAI\\logs\\voice-runtime.log ga xavfsiz va maxfiyliksiz log yozish"""
+    try:
+        log_dir = _get_misa_log_dir()
+        log_file = os.path.join(log_dir, "voice-runtime.log")
+        ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        pid = os.getpid()
+        det_str = ""
+        if details:
+            safe = {
+                k: v for k, v in details.items()
+                if not any(s in str(k).lower() for s in ["key", "token", "password", "secret", "auth", "bearer", "cookie"])
+            }
+            det_str = " ".join(f"{k}={v}" for k, v in safe.items())
+        line = f"{ts} [VOICE_RUNTIME] PID={pid} event={event_type} {det_str}\n"
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception:
+        pass
+
+
+def log_backend_lifecycle(event_type: str, details: Optional[Dict[str, Any]] = None) -> None:
+    """%LOCALAPPDATA%\\MisaAI\\logs\\backend-lifecycle.log ga xavfsiz log yozish"""
+    try:
+        log_dir = _get_misa_log_dir()
+        log_file = os.path.join(log_dir, "backend-lifecycle.log")
+        ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        pid = os.getpid()
+        det_str = ""
+        if details:
+            safe = {
+                k: v for k, v in details.items()
+                if not any(s in str(k).lower() for s in ["key", "token", "password", "secret", "auth", "bearer", "cookie"])
+            }
+            det_str = " ".join(f"{k}={v}" for k, v in safe.items())
+        line = f"{ts} [BACKEND_LIFECYCLE] PID={pid} event={event_type} {det_str}\n"
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception:
+        pass
+
 # Virtual Windows drayver dublikatlari (bular "Tizim standarti" opsiya orqali qamrab olinadi)
 VIRTUAL_MAPPER_NAMES = {
     "microsoft sound mapper - input",
@@ -103,10 +156,18 @@ class MicrophoneManager:
     def refresh_devices(self) -> List[Dict[str, Any]]:
         """
         Hot-plug qo'llab-quvvatlashi:
-        PortAudio quyi tizimini qayta initsializatsiya qilib, yangi ulangan yoki
-        uzilgan Windows audio qurilmalarini to'liq yangidan skanerlash.
+        Yangi ulangan yoki uzilgan Windows audio qurilmalarini xavfsiz skanerlash.
+        MUHIM: sd._terminate() ish vaqtida chaqirilmaydi, chunki u faol audio oqimlar
+        va DLL xotirasini buzib (0xC0000005) Python jarayonini o'ldiradi.
         """
-        return self.get_input_devices(force_refresh=True)
+        log_voice_runtime("DEVICE_REFRESH_START", {"status": "scanning"})
+        devices = self.get_input_devices(force_refresh=False)
+        log_voice_runtime("DEVICE_REFRESH_COMPLETE", {
+            "status": "ready",
+            "device_count": len(devices),
+            "selected_device": self._selected_device_id or "default"
+        })
+        return devices
 
     def get_input_devices(self, force_refresh: bool = False) -> List[Dict[str, Any]]:
         """
@@ -119,15 +180,8 @@ class MicrophoneManager:
             import sounddevice as sd
         except ImportError:
             logger.error("sounddevice o'rnatilmagan")
+            log_voice_runtime("DEVICE_ENUM_ERROR", {"error": "sounddevice_not_installed"})
             return []
-
-        if force_refresh:
-            try:
-                sd._terminate()
-                sd._initialize()
-                logger.info("[MicrophoneManager] PortAudio muvaffaqiyatli qayta initsializatsiya qilindi (hot-plug refresh)")
-            except Exception as e:
-                logger.warning(f"[MicrophoneManager] PortAudio qayta initsializatsiyasida xatolik: {e}")
 
         devices_list: List[Dict[str, Any]] = []
         try:
@@ -415,6 +469,15 @@ class MicrophoneManager:
             # Signal darajasi (0.0 - 1.0)
             level = min(1.0, max(0.0, peak if peak > 0 else rms * 3.0))
 
+            log_voice_runtime("MIC_TEST_SUCCESS", {
+                "status": "connected",
+                "device_name": dev_name,
+                "level": round(level, 3),
+                "rms": round(rms, 4),
+                "peak": round(peak, 4),
+                "sample_rate": used_sr
+            })
+
             return {
                 "ok": True,
                 "working": True,
@@ -437,6 +500,13 @@ class MicrophoneManager:
                 msg = "Mikrofon ruxsati berilmagan."
             else:
                 msg = f"Mikrofonni ochib bo'lmadi: {err_str}"
+
+            log_voice_runtime("MIC_TEST_ERROR", {
+                "status": "error",
+                "device_name": dev_name,
+                "error": err_str
+            })
+
             return {
                 "ok": False,
                 "working": False,
@@ -450,7 +520,7 @@ class MicrophoneManager:
     def start_realtime_monitor(
         self,
         device_id: Optional[str] = None,
-        enable_loopback: bool = True,
+        enable_loopback: bool = False,
         broadcast_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> Dict[str, Any]:
         """Mikrofonni real-time audio capture va loopback monitoring rejimida ishga tushirish"""
@@ -512,7 +582,7 @@ class RealtimeAudioMonitor:
     def start(
         self,
         device_id: Optional[str] = None,
-        enable_loopback: bool = True,
+        enable_loopback: bool = False,
         broadcast_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> Dict[str, Any]:
         with self._stream_lock:
@@ -712,6 +782,14 @@ class RealtimeAudioMonitor:
                     f"(SR: {used_sr}Hz, Loopback: {self._enable_loopback})"
                 )
 
+                log_voice_runtime("MONITOR_START", {
+                    "status": "running",
+                    "device_name": dev_name,
+                    "device_id": self._device_id,
+                    "sample_rate": used_sr,
+                    "loopback": self._enable_loopback
+                })
+
                 return {
                     "ok": True,
                     "status": "running",
@@ -778,6 +856,11 @@ class RealtimeAudioMonitor:
         with self._stream_lock:
             self._stop_internal()
             logger.info("[RealtimeMonitor] Mikrofon monitoringi to'xtatildi")
+            log_voice_runtime("MONITOR_STOP", {
+                "status": "stopped",
+                "device_name": self._device_name,
+                "device_id": self._device_id
+            })
             if self._broadcast_cb:
                 try:
                     self._broadcast_cb({

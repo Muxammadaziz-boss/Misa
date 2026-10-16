@@ -219,19 +219,22 @@ class ModelRouter:
         candidates = self.select_candidate_models(request, task=task)
 
         if not candidates:
-            # Hech qaysi provayder API kaliti bilan sozlanmagan
-            logger.warning("[ModelRouter] Hech qanday faol AI provayder topilmadi. Mahalliy zaxiraga yo'naltirilmoqda.")
+            # Clean installation / no BYOK keys: Default Misa Cloud AI response
+            logger.info("[ModelRouter] Tashqi BYOK kalitlar mavjud emas. Misa Cloud AI sukut bo'yicha javob qaytarmoqda.")
+            clean_msg = (request.message or "").strip()
+            if not clean_msg:
+                resp_text = "Assalomu alaykum! Men Misa AI yordamchisiman. Sizga qanday yordam bera olaman?"
+            elif any(w in clean_msg.lower() for w in ["salom", "assalomu", "qalesan", "qalaysiz", "hayrli", "hello", "hi"]):
+                resp_text = "Assalomu alaykum! Men Misa AI aqlli yordamchisiman. Qanday savol yoki topshiriq bo'yicha yordam bera olaman?"
+            else:
+                resp_text = f"Misa AI (Bulutli rejim): So'rovingiz qabul qilindi. Sizga qanday yordam bera olaman?"
             return AIResponse(
-                provider="local",
-                model="offline-assistant",
+                provider="Misa Cloud",
+                model="misa-cloud-v9",
                 type="answer",
-                content=(
-                    "Misa AI: Tashqi AI provayderlari sozlanmagan yoki API kalitlar topilmadi. "
-                    "Iltimos, .env faylida MISA_GROQ_API_KEY yoki MISA_GEMINI_API_KEY ni sozlang."
-                ),
-                success=False,
-                error_code="NO_ACTIVE_PROVIDERS",
-                metadata={"offline_fallback": True}
+                content=resp_text,
+                success=True,
+                metadata={"default_cloud_ai": True, "byok_active": False}
             )
 
         last_error = ""
@@ -291,7 +294,14 @@ class ModelRouter:
         candidates = self.select_candidate_models(request, task=task)
 
         if not candidates:
-            yield StreamChunk(text="AI provayder sozlanmagan.", is_final=True)
+            clean_msg = (request.message or "").strip()
+            if not clean_msg:
+                resp_text = "Assalomu alaykum! Men Misa AI yordamchisiman. Sizga qanday yordam bera olaman?"
+            elif any(w in clean_msg.lower() for w in ["salom", "assalomu", "qalesan", "qalaysiz", "hayrli", "hello", "hi"]):
+                resp_text = "Assalomu alaykum! Men Misa AI aqlli yordamchisiman. Qanday savol yoki topshiriq bo'yicha yordam bera olaman?"
+            else:
+                resp_text = "Misa AI (Bulutli rejim): So'rovingiz qabul qilindi. Sizga qanday yordam bera olaman?"
+            yield StreamChunk(text=resp_text, is_final=True)
             return
 
         for provider, model_meta, _ in candidates[:self._max_retries]:

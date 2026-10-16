@@ -68,7 +68,7 @@ def get_app_version() -> str:
         from core.v8.device import get_current_app_version
         return get_current_app_version()
     except Exception:
-        return "9.0.1"
+        return "9.2.0"
 
 
 def load_runtime_dotenv() -> None:
@@ -279,7 +279,7 @@ async def handle_status(request):
     return web.json_response({
         "status": "online",
         "app": "MISA AI",
-        "version": "9.0.1",
+        "version": "9.2.0",
         "user": user,
         "ai_available": ai_ok,
         "voice_state": _voice_state,
@@ -596,7 +596,7 @@ async def handle_chat(request):
     except Exception:
         return web.json_response({"ok": False, "error": "Noto'g'ri JSON formati"}, status=400)
 
-    text = (body.get("text") or body.get("query") or "").strip()
+    text = (body.get("text") or body.get("query") or body.get("message") or "").strip()
     image_data = body.get("image") or body.get("image_base64") or body.get("image_url")
     mode = body.get("mode", "ask")
     speak_param = body.get("speak")
@@ -1294,7 +1294,7 @@ async def handle_voice_device_monitor_start(request):
             except Exception:
                 data = {}
         device_id = data.get("device_id") or request.query.get("device_id")
-        enable_loopback = data.get("loopback", True)
+        enable_loopback = data.get("loopback", False)
         if isinstance(enable_loopback, str):
             enable_loopback = enable_loopback.lower() in ("true", "1", "yes")
 
@@ -2711,14 +2711,37 @@ async def handle_plugins_update(request):
 
 
 async def handle_plugins_execute(request):
-    """POST /api/plugins/execute - Toolni bevosita chaqirib sinash"""
+    """POST /api/plugins/execute - Toolni bevosita chaqirib sinash (Vakolatli xavfsizlik va session token himoyasi bilan)"""
     try:
         body = await request.json()
     except Exception:
         return web.json_response({"ok": False, "error": "Noto'g'ri JSON formati"}, status=400)
 
+    from core.tools.security_policy import verify_internal_api_request, get_security_policy
+    from core.tools.runner import get_tool_runner
+    from core.tools.contract import ToolContract2
+    from core.intelligence.types import RiskLevel
+
+    headers = dict(getattr(request, "headers", {}) or {})
+    origin = headers.get("Origin") or headers.get("origin") or ""
+    referer = headers.get("Referer") or headers.get("referer") or ""
+    user_agent = headers.get("User-Agent") or headers.get("user-agent") or ""
+
+    # 1. 127.0.0.1 lokal chaqiruvchini suiiste'mol qilishdan himoyalash
+    is_authorized = verify_internal_api_request(headers, body)
+    is_local_frontend = any(o in origin.lower() for o in ("tauri://", "localhost:5173", "localhost:1420", "127.0.0.1:5173", "127.0.0.1:1420")) or any(r in referer.lower() for r in ("tauri://", "localhost:5173", "localhost:1420", "127.0.0.1:5173", "127.0.0.1:1420"))
+
+    if not is_authorized and not is_local_frontend:
+        logger.warning(f"[API Server] Ruxsatsiz lokal processdan /api/plugins/execute chaqiruvi rad etildi (Origin: '{origin}', User-Agent: '{user_agent}')")
+        return web.json_response({
+            "ok": False,
+            "error": "UNAUTHORIZED_LOCAL_CALLER",
+            "message": "Ushbu endpointga faqat vakolatli Misa Desktop sessiyasi murojaat qilishi mumkin"
+        }, status=403)
+
     tool_name = body.get("name", "").strip()
-    params = body.get("params", {})
+    params = body.get("params", {}) or {}
+    confirmation_token = body.get("confirmation_token")
 
     if not tool_name:
         return web.json_response({"ok": False, "error": "Tool nomi ko'rsatilmadi"}, status=400)
@@ -2727,18 +2750,60 @@ async def handle_plugins_execute(request):
     if not tools:
         return web.json_response({"ok": False, "error": "Tools registry mavjud emas"}, status=500)
 
-    loop = asyncio.get_running_loop()
-    
-    def _call():
-        return tools.call(tool_name, **params)
+    # 2. Asbobni qidirish
+    tool_contract = None
+    if hasattr(tools, "get_tool"):
+        tool_contract = tools.get_tool(tool_name)
+    elif hasattr(tools, "get"):
+        tool_contract = tools.get(tool_name)
 
-    res = await loop.run_in_executor(None, _call)
+    if not tool_contract:
+        return web.json_response({"ok": False, "error": f"Tool '{tool_name}' topilmadi"}, status=404)
+
+    # Agar eski Tool obyekt bo'lsa va ToolContract2 bo'lmasa, uni moslashtirish
+    if not isinstance(tool_contract, ToolContract2):
+        tool_contract = ToolContract2(
+            name=tool_name,
+            description=getattr(tool_contract, "description", ""),
+            function=getattr(tool_contract, "function", None) or getattr(tool_contract, "func", None),
+            risk_level=getattr(tool_contract, "risk_level", RiskLevel.LOW),
+            destructive=getattr(tool_contract, "destructive", False),
+            requires_confirmation=getattr(tool_contract, "requires_confirmation", False),
+            timeout=getattr(tool_contract, "timeout", 15.0)
+        )
+
+    # 3. Asbobni SafeToolRunner va Vakolatli Xavfsizlik Siyosati orqali bajarish
+    runner = get_tool_runner()
+    loop = asyncio.get_running_loop()
+
+    def _execute():
+        return runner.execute_tool(
+            tool=tool_contract,
+            params=params,
+            confirmation_token=confirmation_token
+        )
+
+    res = await loop.run_in_executor(None, _execute)
+
+    # 4. Agar tasdiqlash talab etilsa
+    if not res.success and res.error == "CONFIRMATION_REQUIRED":
+        return web.json_response({
+            "ok": False,
+            "requires_confirmation": True,
+            "error": "CONFIRMATION_REQUIRED",
+            "prompt": res.message,
+            "challenge_token": res.metadata.get("challenge_token"),
+            "risk_level": res.metadata.get("risk_level", "high"),
+            "action_class": res.metadata.get("action_class")
+        }, status=403)
+
     res_dict = res.to_dict() if hasattr(res, "to_dict") else res
     return web.json_response({
-        "ok": True,
+        "ok": res.success,
         "tool": tool_name,
-        "result": res_dict
-    })
+        "result": res_dict,
+        "error": res.error if not res.success else None
+    }, status=200 if res.success else 400)
 
 
 async def handle_tools_catalog(request):
@@ -3368,7 +3433,7 @@ async def handle_remote_devices(request):
         agent_ver = (
             local_ident.agent_version
             if (is_local and local_ident and local_ident.agent_version)
-            else (d.agent_version or (local_ident.agent_version if local_ident else "9.0.1"))
+            else (d.agent_version or (local_ident.agent_version if local_ident else "9.2.0"))
         )
         if is_local and local_ident and d.agent_version != local_ident.agent_version:
             d.agent_version = local_ident.agent_version
@@ -5139,6 +5204,7 @@ async def handle_oauth_callback(request):
     <h1>Misa AI</h1>
     <p id="msg">Google orqali autentifikatsiya yakunlanmoqda...</p>
     <div id="badge" class="status">Kutilmoqda...</div>
+    <div id="actionArea" style="margin-top:20px;"></div>
   </div>
   <script>
     (function() {
@@ -5242,10 +5308,36 @@ async def handle_oauth_callback(request):
           badgeEl.textContent = "Xatolik";
           badgeEl.className = "status error";
         });
+      } else if (state) {
+        // Tekshirish: balki sessiya allaqachon serverda saqlangan bo'lishi mumkin (masalan, refresh qilinganda)
+        fetch('/api/auth/callback/session?state=' + encodeURIComponent(state), {
+          headers: { 'Accept': 'application/json' }
+        }).then(function(res) {
+          return res.json();
+        }).then(function(data) {
+          if (data && data.ok && data.session) {
+            msgEl.innerHTML = "Tizimga muvaffaqiyatli kirdingiz!<br>Ushbu oynani yopib, Misa ilovasiga qaytishingiz mumkin.";
+            badgeEl.textContent = "Tasdiqlandi ✓";
+            badgeEl.className = "status";
+            setTimeout(function() { try { window.close(); } catch(e) {} }, 1500);
+          } else {
+            showMissingTokenUi();
+          }
+        }).catch(function() {
+          showMissingTokenUi();
+        });
       } else {
-        msgEl.textContent = "Avtorizatsiya tokeni qabul qilinmadi.";
-        badgeEl.textContent = "Xatolik";
+        showMissingTokenUi();
+      }
+
+      function showMissingTokenUi() {
+        msgEl.innerHTML = "Avtorizatsiya tokeni qabul qilinmadi.<br><span style='font-size:13px;color:#94A3B8;margin-top:8px;display:block;'>Agar siz sahifani yangilagan (refresh) bo'lsangiz, xavfsizlik maqsadida tokenlar tozalangan. Iltimos, ushbu oynani yopib, Misa ilovasi orqali qaytadan kiring.</span>";
+        badgeEl.textContent = "Token topilmadi";
         badgeEl.className = "status error";
+        var actEl = document.getElementById('actionArea');
+        if (actEl) {
+          actEl.innerHTML = '<button onclick="try{window.close();}catch(e){}" style="padding:10px 24px;border-radius:12px;background:#38BDF8;color:#0F172A;font-weight:700;border:none;cursor:pointer;font-size:14px;transition:opacity 0.2s;" onmouseover="this.style.opacity=0.9" onmouseout="this.style.opacity=1">Misa ilovasiga qaytish</button>';
+        }
       }
     })();
   </script>
@@ -6611,12 +6703,15 @@ _AUTH_EXEMPT_PATHS = frozenset({
     "/api/auth/forgot-password", "/api/auth/verify-email",
     "/api/auth/reset-password",
     "/api/devices/pairing/complete",
+    "/api/ai/providers",
+    "/api/ai/config",
     "/api/ws",
 })
 
 _AUTH_EXEMPT_PREFIXES = (
     "/telegram/webhook",
     "/webhook/telegram/",
+    "/api/voice/",
 )
 
 def _is_production_mode() -> bool:
@@ -6821,6 +6916,13 @@ def create_app():
     app.router.add_post("/api/voice/devices/monitor/start", handle_voice_device_monitor_start)
     app.router.add_post("/api/voice/devices/monitor/stop", handle_voice_device_monitor_stop)
     app.router.add_get("/api/voice/devices/monitor/status", handle_voice_device_monitor_status)
+    # Direct aliases without /devices/
+    app.router.add_post("/api/voice/monitor/start", handle_voice_device_monitor_start)
+    app.router.add_post("/api/voice/monitor/stop", handle_voice_device_monitor_stop)
+    app.router.add_get("/api/voice/monitor/status", handle_voice_device_monitor_status)
+    app.router.add_post("/api/voice/test", handle_voice_device_test)
+    app.router.add_get("/api/voice/test", handle_voice_device_test)
+    app.router.add_post("/api/voice/refresh", handle_voice_devices_refresh)
     app.router.add_post("/api/voice/preview", handle_voice_preview)
     app.router.add_get("/api/voice/preview", handle_voice_preview)
     app.router.add_get("/api/voice/runtime/status", handle_voice_runtime_status)
@@ -7011,7 +7113,7 @@ def run_server(host=None, port=None):
         import urllib.request
         req = urllib.request.Request(
             f"http://{resolved_host}:{resolved_port}/api/health",
-            headers={"User-Agent": "MisaSingleInstanceCheck/9.0.1"}
+            headers={"User-Agent": "MisaSingleInstanceCheck/9.2.0"}
         )
         with urllib.request.urlopen(req, timeout=0.8) as resp:
             if resp.status == 200:
@@ -7066,6 +7168,16 @@ def run_server(host=None, port=None):
         await primary_site.start()
         logger.info(f"Asosiy API server ishga tushdi: http://{resolved_host}:{resolved_port}")
 
+        # Dual-stack IPv6 loopback (::1) qo'llab-quvvatlash: zamonaviy brauzerlar (Edge/Chrome) 'localhost' ni
+        # birinchi navbatda IPv6 ::1 orqali tekshiradi. ::1 tinglovchisi bo'lmasa ERR_CONNECTION_REFUSED yuz beradi.
+        if resolved_host in ("127.0.0.1", "localhost"):
+            try:
+                ipv6_primary_site = web.TCPSite(runner, "::1", resolved_port)
+                await ipv6_primary_site.start()
+                logger.info(f"IPv6 loopback tinglovchisi ishga tushdi: http://[::1]:{resolved_port}")
+            except Exception as e:
+                logger.debug(f"IPv6 loopback ::1 tinglovchisi yoqilmadi: {e}")
+
         # Desktop rejimida avtonom lokal ovoz xizmatini (Wake-word "Misa") avtomatik ishga tushirish
         if not _is_headless_server_mode():
             try:
@@ -7095,6 +7207,12 @@ def run_server(host=None, port=None):
                         logger.info(f"Qo'shimcha OAuth tinglovchisi ishga tushdi: http://{resolved_host}:{aux_port}")
                     except Exception as e:
                         logger.debug(f"Port {aux_port} band yoki ulanib bo'lmadi: {e}")
+                    try:
+                        aux_ipv6_site = web.TCPSite(runner, "::1", aux_port)
+                        await aux_ipv6_site.start()
+                        logger.info(f"Qo'shimcha IPv6 OAuth tinglovchisi ishga tushdi: http://[::1]:{aux_port}")
+                    except Exception as e:
+                        logger.debug(f"IPv6 port {aux_port} tinglovchisi yoqilmadi: {e}")
 
             async def _desktop_cloud_sync_loop():
                 sync_counter = 0

@@ -1,5 +1,5 @@
 // ========== AccountPage.tsx ==========
-// Misa AI v9.0.1 — Shaxsiy Profil va Tizim Sozlamalari
+// Misa AI v9.2 — Shaxsiy Profil va Tizim Sozlamalari
 // Refined Ultra Glass Edition: Toza 4-tabli arxitektura, jonli Ovoz/AI selektori,
 // Google Avatar integratsiyasi va to'liq ma'lumotlar sinxronizatsiyasi.
 
@@ -182,7 +182,13 @@ export const AccountPage: React.FC<AccountPageProps> = ({
 
   // Real-time apparat audio monitor holati
   const [micMonitorActive, setMicMonitorActive] = useState<boolean>(false);
-  const [micLoopbackEnabled, setMicLoopbackEnabled] = useState<boolean>(false);
+  const [micLoopbackEnabled, setMicLoopbackEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("misa_mic_loopback") === "true";
+    } catch {
+      return false;
+    }
+  });
   const [micMonitorRms, setMicMonitorRms] = useState<number>(0);
   const [micMonitorPeak, setMicMonitorPeak] = useState<number>(0);
   const [micMonitorError, setMicMonitorError] = useState<string | null>(null);
@@ -488,25 +494,64 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   const loadMicrophoneDevices = async (refresh: boolean = false) => {
     try {
       if (!backendService.isHealthy()) {
-        setMicStatusText("Backend ishga tushmoqda... (127.0.0.1:18420)");
+        setMicStatusText("Serverga ulanmoqda...");
         await backendService.waitForBackendReady(3000);
       }
       const res = await backendService.getAudioInputDevices(refresh);
       if (res.ok) {
-        setAudioDevices(res.devices || []);
+        const devs = res.devices || [];
+        setAudioDevices(devs);
         setSelectedMicId(res.selected_device_id || "default");
         setSelectedMicName(res.selected_device_name || "Tizim standarti");
-        setMicStatusText(res.message || "Ulangan / Ishlamoqda");
+        if (devs.length === 0) {
+          setMicStatusText("Mikrofonlarni aniqlab bo'lmadi");
+        } else {
+          setMicStatusText(res.message || "Ulangan / Ishlamoqda");
+        }
         setMicFallbackUsed(!!res.fallback_used);
+        setMicMonitorError(null);
       } else {
-        const errorMsg = normalizeApiError(res.error, "Mikrofon qurilmalarini yuklab bo'lmadi");
+        const errorMsg = normalizeApiError(res.error, "Mikrofonlarni aniqlab bo'lmadi");
         setMicStatusText(errorMsg);
       }
     } catch (err) {
-      const errorMsg = normalizeApiError(err, "Mikrofon qurilmalarini yuklashda xatolik");
+      const errorMsg = normalizeApiError(err, "Mikrofonlarni aniqlab bo'lmadi");
       setMicStatusText(errorMsg);
       console.warn("Mikrofon qurilmalarini yuklashda xatolik:", err);
     }
+  };
+
+  // ========== Authoritative Voice Connection State ==========
+  type VoiceConnectionState = "DISCONNECTED" | "CONNECTING" | "CONNECTED" | "DEGRADED" | "ERROR";
+
+  const getVoiceConnectionState = (): VoiceConnectionState => {
+    const isConnErr = (str?: string | null) => {
+      if (!str) return false;
+      const l = str.toLowerCase();
+      return (
+        l.includes("serverga ulanib bo'lmadi") ||
+        l.includes("127.0.0.1:18420") ||
+        l.includes("aloqa yo'q") ||
+        l.includes("refused") ||
+        l.includes("fetch failed") ||
+        l.includes("failed to fetch") ||
+        l.includes("econnrefused")
+      );
+    };
+
+    if (micRefreshing || micStatusText === "Serverga ulanmoqda..." || micStatusText === "Yuklanmoqda...") {
+      return "CONNECTING";
+    }
+    if (isConnErr(micMonitorError) || isConnErr(micStatusText) || !backendService.isHealthy()) {
+      return "DISCONNECTED";
+    }
+    if (micMonitorError || (micTestResult && !micTestResult.ok)) {
+      return "ERROR";
+    }
+    if (micFallbackUsed || audioDevices.length === 0) {
+      return "DEGRADED";
+    }
+    return "CONNECTED";
   };
 
   // Yangi ulangan mikrofonlarni qidirish (Hot-plug re-scan)
@@ -514,24 +559,30 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     setMicRefreshing(true);
     try {
       if (!backendService.isHealthy()) {
-        setMicStatusText("Backend ishga tushmoqda... (127.0.0.1:18420)");
+        setMicStatusText("Serverga ulanmoqda...");
         await backendService.waitForBackendReady(3000);
       }
       const res = await backendService.refreshAudioInputDevices();
       if (res.ok) {
-        setAudioDevices(res.devices || []);
+        const devs = res.devices || [];
+        setAudioDevices(devs);
         setSelectedMicId(res.selected_device_id || "default");
         setSelectedMicName(res.selected_device_name || "Tizim standarti");
-        setMicStatusText(res.message || "Ulangan / Ishlamoqda");
+        if (devs.length === 0) {
+          setMicStatusText("Mikrofonlarni aniqlab bo'lmadi");
+        } else {
+          setMicStatusText(res.message || "Ulangan / Ishlamoqda");
+        }
         setMicFallbackUsed(!!res.fallback_used);
+        setMicMonitorError(null);
         showToast("Audio qurilmalar ro'yxati yangilandi ✓");
       } else {
-        const errText = normalizeApiError(res.error, "Qurilmalarni yangilab bo'lmadi");
+        const errText = normalizeApiError(res.error, "Mikrofonlarni aniqlab bo'lmadi");
         setMicStatusText(errText);
         showToast(errText);
       }
     } catch (err: any) {
-      const errText = normalizeApiError(err, "Qurilmalarni yangilashda xatolik");
+      const errText = normalizeApiError(err, "Mikrofonlarni aniqlab bo'lmadi");
       setMicStatusText(errText);
       showToast(errText);
     } finally {
@@ -551,6 +602,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       if (res.ok) {
         setMicStatusText(res.message || "Ulangan / Ishlamoqda");
         setMicFallbackUsed(!!res.fallback_used);
+        setMicMonitorError(null);
         showToast(res.message || "Mikrofon tanlandi ✓");
       } else {
         const msg = normalizeApiError(res.error, "Mikrofonni tanlashda xatolik yuz berdi");
@@ -742,6 +794,9 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   const handleToggleLoopback = async () => {
     const next = !micLoopbackEnabled;
     setMicLoopbackEnabled(next);
+    try {
+      localStorage.setItem("misa_mic_loopback", String(next));
+    } catch {}
     if (micMonitorActive) {
       try {
         await backendService.startMicrophoneMonitor(selectedMicId, next);
@@ -749,6 +804,8 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       } catch (err: any) {
         showToast(normalizeApiError(err, "Loopback holatini o'zgartirishda xatolik"));
       }
+    } else {
+      showToast(next ? "Loopback yoqildi (Sinov vaqtida o'z ovozingiz eshitiladi) 🎧" : "Loopback o'chirildi (Standart rejim)");
     }
   };
 
@@ -1051,7 +1108,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
               {email && <span>•</span>}
               <span>💼 {roleTitle || "Foydalanuvchi"}</span>
               <span>•</span>
-              <span style={{ color: "#4EDEA3" }}>● Misa AI v9.0.1</span>
+              <span style={{ color: "#4EDEA3" }}>● Misa AI v9.2</span>
             </div>
 
             {bio ? (
@@ -1415,58 +1472,82 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                   </div>
                 </div>
 
-                {/* Jonli Qurilma Holati Indikatori */}
-                <div
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    padding: "4px 12px",
-                    borderRadius: "999px",
-                    background: micMonitorActive
-                      ? "rgba(16, 185, 129, 0.2)"
-                      : micFallbackUsed
-                      ? "rgba(245, 158, 11, 0.15)"
-                      : micTestResult && !micTestResult.ok
-                      ? "rgba(239, 68, 68, 0.15)"
-                      : "rgba(16, 185, 129, 0.15)",
-                    border: micMonitorActive
-                      ? "1px solid rgba(52, 211, 153, 0.55)"
-                      : micFallbackUsed
-                      ? "1px solid rgba(245, 158, 11, 0.35)"
-                      : micTestResult && !micTestResult.ok
-                      ? "1px solid rgba(239, 68, 68, 0.35)"
-                      : "1px solid rgba(52, 211, 153, 0.35)",
-                    color: micMonitorActive
-                      ? "#34D399"
-                      : micFallbackUsed
-                      ? "#FBBF24"
-                      : micTestResult && !micTestResult.ok
-                      ? "#F87171"
-                      : "#34D399",
-                    fontSize: "11.5px",
-                    fontWeight: 600,
-                  }}
-                >
-                  <span
-                    style={{
-                      width: "7px",
-                      height: "7px",
-                      borderRadius: "50%",
-                      backgroundColor: "currentColor",
-                      boxShadow: "0 0 8px currentColor",
-                    }}
-                  />
-                  <span>
-                    {micMonitorActive
-                      ? "Jonli Monitor Faol"
-                      : micFallbackUsed
-                      ? "Tanlangan mikrofon ulanmagan"
-                      : micTestResult && !micTestResult.ok
-                      ? "Xatolik / Ulanmagan"
-                      : "Ulangan / Ishlamoqda"}
-                  </span>
-                </div>
+                {/* Jonli Qurilma Holati Indikatori (Authoritative Voice Connection State) */}
+                {(() => {
+                  const voiceState = getVoiceConnectionState();
+                  let badgeText = "Ulangan / Ishlamoqda";
+                  let badgeBg = "rgba(16, 185, 129, 0.15)";
+                  let badgeBorder = "1px solid rgba(52, 211, 153, 0.35)";
+                  let badgeColor = "#34D399";
+                  let dotColor = "#10B981";
+
+                  switch (voiceState) {
+                    case "DISCONNECTED":
+                      badgeText = "Serverga ulanmagan (127.0.0.1:18420)";
+                      badgeBg = "rgba(239, 68, 68, 0.15)";
+                      badgeBorder = "1px solid rgba(239, 68, 68, 0.45)";
+                      badgeColor = "#F87171";
+                      dotColor = "#EF4444";
+                      break;
+                    case "CONNECTING":
+                      badgeText = "Ulanmoqda...";
+                      badgeBg = "rgba(147, 3, 197, 0.18)";
+                      badgeBorder = "1px solid rgba(192, 76, 253, 0.45)";
+                      badgeColor = "#E8B3FF";
+                      dotColor = "#C04CFD";
+                      break;
+                    case "ERROR":
+                      badgeText = "Xatolik / Ulanmagan";
+                      badgeBg = "rgba(239, 68, 68, 0.15)";
+                      badgeBorder = "1px solid rgba(239, 68, 68, 0.45)";
+                      badgeColor = "#F87171";
+                      dotColor = "#EF4444";
+                      break;
+                    case "DEGRADED":
+                      badgeText = micFallbackUsed ? "Tanlangan mikrofon ulanmagan" : "Mikrofon topilmadi";
+                      badgeBg = "rgba(245, 158, 11, 0.15)";
+                      badgeBorder = "1px solid rgba(245, 158, 11, 0.45)";
+                      badgeColor = "#FBBF24";
+                      dotColor = "#F59E0B";
+                      break;
+                    case "CONNECTED":
+                    default:
+                      badgeText = micMonitorActive ? "Jonli Monitor Faol" : "Ulangan / Ishlamoqda";
+                      badgeBg = micMonitorActive ? "rgba(16, 185, 129, 0.2)" : "rgba(16, 185, 129, 0.15)";
+                      badgeBorder = micMonitorActive ? "1px solid rgba(52, 211, 153, 0.55)" : "1px solid rgba(52, 211, 153, 0.35)";
+                      badgeColor = "#34D399";
+                      dotColor = "#10B981";
+                      break;
+                  }
+
+                  return (
+                    <div
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        padding: "4px 12px",
+                        borderRadius: "999px",
+                        background: badgeBg,
+                        border: badgeBorder,
+                        color: badgeColor,
+                        fontSize: "11.5px",
+                        fontWeight: 600,
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: "7px",
+                          height: "7px",
+                          borderRadius: "50%",
+                          backgroundColor: dotColor,
+                          boxShadow: `0 0 8px ${dotColor}`,
+                        }}
+                      />
+                      <span>{badgeText}</span>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Tanlash boshqaruvi va amallar */}
@@ -1523,15 +1604,17 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       <option value="default" style={{ background: "#0D1117", color: "#FFFFFF" }}>
                         Default (Tizim standarti)
                       </option>
-                      {audioDevices.map((d) => (
-                        <option
-                          key={d.id}
-                          value={d.id}
-                          style={{ background: "#0D1117", color: d.available ? "#FFFFFF" : "#888888" }}
-                        >
-                          {d.name} {d.is_default ? "★ (Default)" : ""} {!d.available ? "(Ulanmagan)" : ""}
-                        </option>
-                      ))}
+                      {audioDevices
+                        .filter((d) => d.id !== "default")
+                        .map((d) => (
+                          <option
+                            key={d.id}
+                            value={d.id}
+                            style={{ background: "#0D1117", color: d.available ? "#FFFFFF" : "#888888" }}
+                          >
+                            {d.name} {d.is_default ? "★ (Default)" : ""} {!d.available ? "(Ulanmagan)" : ""}
+                          </option>
+                        ))}
                     </select>
                     <span
                       style={{
@@ -3466,7 +3549,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       Faol qurilmalar ({Math.max(1, devices.length)})
                     </div>
                     <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
-                      Windows PC • Agent v9.0.1
+                      Windows PC • Agent v9.2
                     </div>
                   </div>
                 </div>

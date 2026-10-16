@@ -83,6 +83,23 @@ export const AppShell: React.FC<AppShellProps> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [moreMenuOpen]);
 
+  useEffect(() => {
+    let unlistenNav: (() => void) | undefined;
+    import("@tauri-apps/api/event").then(({ listen }) => {
+      listen<string>("misa_navigate", (event) => {
+        if (event.payload) {
+          onNavigate(event.payload);
+        }
+      }).then((fn) => {
+        unlistenNav = fn;
+      });
+    }).catch(() => {});
+
+    return () => {
+      if (unlistenNav) unlistenNav();
+    };
+  }, [onNavigate]);
+
   return (
     <div
       className="misa-app-shell mikasa-app-shell"

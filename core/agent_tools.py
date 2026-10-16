@@ -1386,14 +1386,19 @@ TOOL_TRANSLATOR = Tool(
 
 
 # --- 14. SCREEN ANALYZE (Ekran tahlil) ---
-def _screen_analyze(question: str = "Ekranda nima bor?") -> dict:
-    """Ekranni screenshot olib, AI bilan tahlil qilish"""
+def _screen_analyze(question: str = "Ekranda nima bor?", allow_cloud: bool = False) -> dict:
+    """Ekranni screenshot olib, tahlil qilish (lokal maxfiy rejim default, cloud faqat tasdiq bilan)"""
     try:
         from core.ai_engine import ekran_tahlil
 
-        result = ekran_tahlil(question)
+        result = ekran_tahlil(question, allow_cloud=allow_cloud)
         if result and not result.startswith("Ekran tasvirini olib bo'lmadi"):
-            return {"message": result, "question": question}
+            return {
+                "message": result,
+                "question": question,
+                "local_analysis": not allow_cloud,
+                "cloud_allowed": allow_cloud
+            }
         else:
             return {"error": result or "Ekran tahlil qilinmadi"}
     except ImportError:
@@ -1404,11 +1409,16 @@ def _screen_analyze(question: str = "Ekranda nima bor?") -> dict:
 
 TOOL_SCREEN = Tool(
     name="screen_analyze",
-    description="Ekranni screenshot olib, AI bilan tahlil qilish. Ekranda nima borligini ko'rish",
+    description="Ekranni screenshot olib, AI bilan tahlil qilish. Ekranda nima borligini ko'rish (lokal maxfiy default)",
     parameters={
         "question": {
             "type": "string",
             "description": "Ekran haqida savol, masalan: 'Ekranda qaysi ilova ochiq?'. Default: 'Ekranda nima bor?'",
+            "required": False,
+        },
+        "allow_cloud": {
+            "type": "boolean",
+            "description": "Tashqi bulutli AI (Gemini/OpenRouter) ga screenshot yuborishga ruxsat. Default: false",
             "required": False,
         },
     },
@@ -1944,101 +1954,65 @@ TOOL_ASK_USER = Tool(
 def _screen_click(
     action: str = "click", x: int = 0, y: int = 0, window: str = "", text: str = ""
 ) -> dict:
-    """Ekranda sichqoncha bilan bosish, oyna fokusga olish"""
-    import ctypes
-    import pyautogui
+    """Ekranda sichqoncha bilan bosish, oyna fokusga olish (WindowsGUIController orqali)"""
+    from core.gui.controller import get_gui_controller
+    gui_ctrl = get_gui_controller()
 
-    if action == "click":
-        if x <= 0 or y <= 0:
-            return {"error": "x va y koordinatalar kerak (0 dan katta)"}
-        screen_w, screen_h = pyautogui.size()
-        if x > screen_w or y > screen_h:
+    if action in ("click", "double_click", "right_click"):
+        target = None
+        if window:
+            target = gui_ctrl.find_window(window)
+            if not target:
+                return {"error": f"Target oyna '{window}' topilmadi", "success": False}
+        res = gui_ctrl.safe_click(x=x, y=y, target=target, click_type=action)
+        if res.get("success"):
             return {
-                "error": f"Koordinata ekrandan tashqarida. Ekran: {screen_w}x{screen_h}"
+                "message": f"{action.capitalize()} bajarildi: ({x}, {y})",
+                "x": x,
+                "y": y,
+                "postcondition_verified": res.get("postcondition_verified", True),
+                "success": True
             }
-        pyautogui.click(x, y)
-        return {"message": f"Bosildi: ({x}, {y})", "x": x, "y": y}
-
-    elif action == "double_click":
-        if x <= 0 or y <= 0:
-            return {"error": "x va y koordinatalar kerak"}
-        pyautogui.doubleClick(x, y)
-        return {"message": f"Ikki marta bosildi: ({x}, {y})", "x": x, "y": y}
-
-    elif action == "right_click":
-        if x <= 0 or y <= 0:
-            return {"error": "x va y koordinatalar kerak"}
-        pyautogui.rightClick(x, y)
-        return {"message": f"O'ng tugma bosildi: ({x}, {y})", "x": x, "y": y}
+        return res
 
     elif action == "focus_window":
         if not window:
-            return {"error": "window nomi kerak"}
-        window_lower = window.lower()
-        try:
-            hwnd_list = []
-            WNDENUMPROC = ctypes.WINFUNCTYPE(
-                ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p
-            )
-
-            def enum_cb(hwnd, _):
-                if ctypes.windll.user32.IsWindowVisible(hwnd):
-                    length = ctypes.windll.user32.GetWindowTextLengthW(hwnd)
-                    if length > 0:
-                        buf = ctypes.create_unicode_buffer(length + 1)
-                        ctypes.windll.user32.GetWindowTextW(hwnd, buf, length + 1)
-                        title = buf.value.lower()
-                        if window_lower in title:
-                            hwnd_list.append((hwnd, buf.value))
-                return True
-
-            ctypes.windll.user32.EnumWindows(WNDENUMPROC(enum_cb), 0)
-
-            if hwnd_list:
-                hwnd, title = hwnd_list[0]
-                ctypes.windll.user32.SetForegroundWindow(hwnd)
-                return {
-                    "message": f"Oyna fokusga olindi: {title}",
-                    "window": title,
-                    "found": True,
-                }
-            else:
-                return {"message": f"'{window}' oynasi topilmadi", "found": False}
-        except Exception as e:
-            return {"error": f"Fokus xatolik: {e}"}
+            return {"error": "window nomi kerak", "success": False}
+        target = gui_ctrl.find_window(window)
+        if target:
+            focused = gui_ctrl.focus_window(target)
+            return {
+                "message": f"Oyna fokusga olindi: {target.title}",
+                "window": target.title,
+                "found": True,
+                "focused": focused,
+                "pid": target.pid,
+                "rect": target.rect,
+                "success": focused
+            }
+        else:
+            return {"message": f"'{window}' oynasi topilmadi", "found": False, "success": False}
 
     elif action == "list_windows":
-        # Barcha ochiq oynalarni ro'yxati
-        try:
-            windows = []
-            WNDENUMPROC = ctypes.WINFUNCTYPE(
-                ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p
-            )
-
-            def enum_cb(hwnd, _):
-                if ctypes.windll.user32.IsWindowVisible(hwnd):
-                    length = ctypes.windll.user32.GetWindowTextLengthW(hwnd)
-                    if length > 0:
-                        buf = ctypes.create_unicode_buffer(length + 1)
-                        ctypes.windll.user32.GetWindowTextW(hwnd, buf, length + 1)
-                        if buf.value.strip():
-                            windows.append(buf.value)
-                return True
-
-            ctypes.windll.user32.EnumWindows(WNDENUMPROC(enum_cb), 0)
-            return {"message": f"{len(windows)} ta oyna ochiq", "windows": windows[:20]}
-        except Exception as e:
-            return {"error": f"Oynalar ro'yxati xatolik: {e}"}
+        windows = gui_ctrl.list_windows()
+        titles = [w.title for w in windows if w.title.strip()]
+        return {
+            "message": f"{len(titles)} ta oyna ochiq",
+            "windows": titles[:20],
+            "total_count": len(titles),
+            "success": True
+        }
 
     elif action == "scroll":
-        amount = y if y != 0 else -3  # y = scroll miqdori (manfiy = pastga)
+        import pyautogui
+        amount = y if y != 0 else -3
         pyautogui.scroll(amount)
         direction = "yuqoriga" if amount > 0 else "pastga"
-        return {"message": f"Scroll {direction}: {abs(amount)}", "amount": amount}
+        return {"message": f"Scroll {direction}: {abs(amount)}", "amount": amount, "success": True}
 
     else:
         return {
-            "error": f"Noma'lum: {action}",
+            "error": f"Noma'lum harakat: {action}",
             "available": [
                 "click",
                 "double_click",
@@ -2047,6 +2021,7 @@ def _screen_click(
                 "list_windows",
                 "scroll",
             ],
+            "success": False
         }
 
 
@@ -2079,7 +2054,8 @@ TOOL_SCREEN_CLICK = Tool(
     category="interaction",
     capabilities=['mouse_click', 'gui_interaction', 'desktop_automation'],
     aliases=['bosish', 'click', 'mouse'],
-    risk_level=RiskLevel.MEDIUM,
+    risk_level=RiskLevel.HIGH,
+    requires_confirmation=True,
     timeout=5.0,
     idempotent=False,
     destructive=False,
@@ -2087,35 +2063,53 @@ TOOL_SCREEN_CLICK = Tool(
 
 
 # --- 19. KEYBOARD TYPE (Matn yozish) ---
-def _keyboard_type(text: str, interval: float = 0.02) -> dict:
-    """Fokuslanagan ilovaga matn yozish"""
-    import pyautogui
-    import time
+def _keyboard_type(text: str, target_window: str = "", interval: float = 0.02) -> dict:
+    """Fokuslangan yoki ko'rsatilgan target ilovaga matn xavfsiz yozish"""
+    from core.gui.controller import get_gui_controller
 
     if not text:
-        return {"error": "Matn kerak"}
-
+        return {"error": "Matn kerak", "success": False}
     if len(text) > 5000:
-        return {"error": f"Matn juda uzun ({len(text)} belgi). Maksimal: 5000"}
+        return {"error": f"Matn juda uzun ({len(text)} belgi). Maksimal: 5000", "success": False}
 
-    try:
-        time.sleep(0.3)  # Ilova tayyorlanishi uchun
-        pyautogui.typewrite(
-            text, interval=interval
-        ) if text.isascii() else pyautogui.write(text)
+    gui_ctrl = get_gui_controller()
+
+    # Target oyna aniqlash
+    target = None
+    if target_window:
+        target = gui_ctrl.find_window(target_window)
+        if not target:
+            return {"error": f"Target oyna '{target_window}' topilmadi", "success": False}
+        gui_ctrl.focus_window(target)
+    else:
+        target = gui_ctrl.get_foreground_window()
+
+    if not target:
+        return {"error": "Fokuslangan oyna aniqlanmadi (None)", "success": False}
+
+    res = gui_ctrl.safe_type(text, target=target, interval=interval)
+    if res.get("success"):
         return {
             "message": f"Yozildi: {text[:50]}{'...' if len(text) > 50 else ''}",
             "length": len(text),
+            "target_window": target.title,
+            "target_pid": target.pid,
+            "postcondition_verified": res.get("postcondition_verified", True),
+            "success": True
         }
-    except Exception as e:
-        return {"error": f"Yozish xatolik: {e}"}
+    return res
 
 
 TOOL_KEYBOARD_TYPE = Tool(
     name="keyboard_type",
-    description="Fokuslanagan ilovaga matn yozish. Masalan: qidiruv maydoniga matn kiritish, fayl nomi yozish",
+    description="Fokuslanagan ilovaga matn xavfsiz yozish. Har doim tasdiqlangan target oynaga yo'naltiriladi",
     parameters={
         "text": {"type": "string", "description": "Yoziladigan matn", "required": True},
+        "target_window": {
+            "type": "string",
+            "description": "Maqsadli oyna nomi (masalan: 'Notepad', 'Calculator'). Agar berilmasa aktiv oyna tekshiriladi",
+            "required": False,
+        },
         "interval": {
             "type": "number",
             "description": "Harflar orasidagi pauza (soniya). Default: 0.02",
@@ -2126,7 +2120,8 @@ TOOL_KEYBOARD_TYPE = Tool(
     category="interaction",
     capabilities=['keyboard_input', 'type_text', 'desktop_automation'],
     aliases=['yozish', 'type', 'keyboard'],
-    risk_level=RiskLevel.MEDIUM,
+    risk_level=RiskLevel.HIGH,
+    requires_confirmation=True,
     timeout=10.0,
     idempotent=False,
     destructive=False,

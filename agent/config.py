@@ -26,7 +26,8 @@ class AgentConfig:
     reconnect_max_delay: float = 60.0
     reconnect_jitter: bool = True
     protocol_version: str = "1.0"
-    agent_version: str = "9.0.0"
+    agent_version: str = "9.2.0"
+    poll_interval: float = 3.0
     vault_dir: Optional[str] = None
     config_path: Optional[str] = None
     ca_cert_path: Optional[str] = None
@@ -38,6 +39,10 @@ class AgentConfig:
     @property
     def heartbeat_interval_seconds(self) -> float:
         return self.heartbeat_interval
+
+    @property
+    def poll_interval_seconds(self) -> float:
+        return self.poll_interval
 
     def validate(self):
         """Konfiguratsiya parametrlarini xavfsizlik va mantiqiy jihatdan tekshirish"""

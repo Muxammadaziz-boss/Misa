@@ -62,6 +62,13 @@ class GoalDecomposer:
         "qulfla": ("lock", "system_power", {}),
         "lock": ("lock", "system_power", {}),
         "oynani yop": ("close_window", "window_management", {}),
+        "notepad": ("focus_window", "window_management", {"title": "Notepad"}),
+        "bloknot": ("focus_window", "window_management", {"title": "Notepad"}),
+        "kalkulyator": ("calculator", "calculation", {"expression": "0"}),
+        "calculator": ("calculator", "calculation", {"expression": "0"}),
+        "screen_click": ("screen_click", "gui_automation", {}),
+        "keyboard_type": ("keyboard_type", "gui_automation", {}),
+        "screen_analyze": ("screen_analyze", "screen_vision", {}),
     }
 
     def __init__(
@@ -85,6 +92,10 @@ class GoalDecomposer:
         clean = goal.strip().lower()
         words = clean.split()
         conjunctions = ["va", "keyin", "so'ng", "hamda", "agar", "lekin", "ammo", "and", "then", "after"]
+
+        # Ko'p bosqichli GUI amallari hech qachon 'oddiy' (single-step) hisoblanmaydi
+        if any(kw in clean for kw in ["ochib", "och va", "hisoblash", "yozish", "deb yoz", "matn yoz", "hisobla va"]):
+            return False
 
         # Matematik ifodalar
         for pat in self.SIMPLE_MATH_PATTERNS:
@@ -260,6 +271,22 @@ class GoalDecomposer:
         if any(w in low for w in ["tizim", "kompyuter", "protsessor", "ram", "xotira", "disk", "gpu", "cpu", "specs"]):
             return "system_info", "system_information", {}
 
+        # GUI amallari
+        if any(w in low for w in ["bos", "click", "bosing", "sichqoncha"]):
+            mx = re.search(r"x\s*=\s*(\d+)", low)
+            my = re.search(r"y\s*=\s*(\d+)", low)
+            px = int(mx.group(1)) if mx else 100
+            py = int(my.group(1)) if my else 100
+            return "screen_click", "gui_automation", {"x": px, "y": py}
+
+        if any(w in low for w in ["yoz", "matn kirit", "type"]):
+            m = re.search(r"['\"](.*?)['\"]", text)
+            txt = m.group(1) if m else text
+            return "keyboard_type", "gui_automation", {"text": txt}
+
+        if any(w in low for w in ["ekranni ko'r", "ekranni tahlil", "screen_analyze", "ekranda nima"]):
+            return "screen_analyze", "screen_vision", {"question": text}
+
         # Standart qidiruv
         query = low.replace("qidir", "").replace("izla", "").replace("top", "").strip()
         return "search", "web_search", {"query": query or low}
@@ -267,12 +294,122 @@ class GoalDecomposer:
     def _decompose_locally(self, text: str) -> Optional[List[PlanStep]]:
         """
         Murakkab maqsadlarni tahliliy qoliplar va bog'lovchilar orqali ajratish.
-        Masalan:
-        1. "Ob-havoni tekshir va natijaga qarab menga tavsiya ber"
-        2. "Kompyuterni tekshir, muammo bo'lsa aniqlab, yechim ber"
-        3. "25 * 4 ni hisobla va Toshkent ob-havosini ko'r"
         """
         low = text.lower().strip()
+
+        # Qolib A: Notepad'ga matn yozish workflow
+        if any(w in low for w in ["notepad", "bloknot"]) and any(w in low for w in ["yoz", "matn", "ochib"]):
+            m = re.search(r"(?:^|\s)[\x22\x27]([^\x22\x27]+)[\x22\x27]", text)
+            target_text = m.group(1) if m else "Salom Dunyo"
+            if not m and "deb" in low:
+                parts = text.split("deb")
+                if len(parts) > 1:
+                    target_text = parts[0].split()[-1] if parts[0].split() else "Salom Dunyo"
+
+            s1 = PlanStep(
+                step_id="step_1",
+                order=1,
+                intent="focus_window",
+                description="Notepad ilovasini ochish va fokuslash",
+                purpose="Matn kiritish uchun Notepad oynasini aktiv holatga keltirish",
+                dependencies=[],
+                required_capability="window_management",
+                tool="focus_window",
+                parameters={"title": "Notepad"},
+                precondition="Windows GUI tayyor",
+                postcondition="Notepad oynasi faol va fokusda",
+                expected_result="Notepad oynasi faollashdi",
+                risk_level=RiskLevel.LOW
+            )
+            s2 = PlanStep(
+                step_id="step_2",
+                order=2,
+                intent="keyboard_type",
+                description=f"Notepad oynasiga '{target_text}' matnini kiritish",
+                purpose=f"Foydalanuvchi so'ragan '{target_text}' matnini yozish",
+                dependencies=["step_1"],
+                required_capability="gui_automation",
+                tool="keyboard_type",
+                parameters={"text": target_text, "target_window": "Notepad"},
+                precondition="Notepad oynasi aktiv va fokusda",
+                postcondition="Matn kiritildi",
+                expected_result=f"'{target_text}' matni Notepad ichiga yozildi",
+                risk_level=RiskLevel.HIGH
+            )
+            s3 = PlanStep(
+                step_id="step_3",
+                order=3,
+                intent="screen_analyze",
+                description="Notepad ichidagi kiritilgan matnni tekshirish",
+                purpose="Kiritilgan matnning to'g'riligini verifikatsiya qilish",
+                dependencies=["step_2"],
+                required_capability="screen_vision",
+                tool="screen_analyze",
+                parameters={"question": "Notepadda kiritilgan matn mavjudmi?"},
+                precondition="Klaviatura kiritish amali yakunlandi",
+                postcondition="Kiritilgan matn verifikatsiya qilindi",
+                expected_result="Notepadda matn mavjudligi tasdiqlandi",
+                risk_level=RiskLevel.LOW
+            )
+            return [s1, s2, s3]
+
+        # Qolib B: Calculator'ni ochib hisoblash workflow
+        if any(w in low for w in ["calculator", "kalkulyator"]) and any(w in low for w in ["ochib", "hisobla", "hisoblash"]):
+            expr = "7"
+            m = re.search(r"(\d+[\s\+\-\*\/\(\)\.\^\%]+\d+)", low)
+            if m:
+                expr = m.group(1).strip()
+            else:
+                m_single = re.search(r"(\d+)\s*(ni|chiqar|hisobla)", low)
+                if m_single:
+                    expr = m_single.group(1).strip()
+
+            s1 = PlanStep(
+                step_id="step_1",
+                order=1,
+                intent="focus_window",
+                description="Calculator ilovasini ochish va fokuslash",
+                purpose="Hisoblash amali uchun Calculator oynasini tayyorlash",
+                dependencies=[],
+                required_capability="window_management",
+                tool="focus_window",
+                parameters={"title": "Calculator"},
+                precondition="Windows GUI tayyor",
+                postcondition="Calculator faol va fokusda",
+                expected_result="Calculator oynasi ochildi",
+                risk_level=RiskLevel.LOW
+            )
+            s2 = PlanStep(
+                step_id="step_2",
+                order=2,
+                intent="calculator",
+                description=f"Kalkulyator yordamida '{expr}' ifodasini hisoblash",
+                purpose=f"Ifodani aniq hisoblash: {expr}",
+                dependencies=["step_1"],
+                required_capability="calculation",
+                tool="calculator",
+                parameters={"expression": expr},
+                precondition="Calculator oynasi faol",
+                postcondition="Hisoblash natijasi olindi",
+                expected_result=f"{expr} hisoblandi",
+                risk_level=RiskLevel.LOW
+            )
+            s3 = PlanStep(
+                step_id="step_3",
+                order=3,
+                intent="screen_analyze",
+                description="Kalkulyator natijasini tekshirish",
+                purpose="Hisoblash natijasini verifikatsiya qilish",
+                dependencies=["step_2"],
+                required_capability="screen_vision",
+                tool="screen_analyze",
+                parameters={"question": f"Kalkulyatorda {expr} natijasi bormi?"},
+                precondition="Hisoblash bajarildi",
+                postcondition="Hisob to'g'riligi tasdiqlandi",
+                expected_result="Hisoblash natijasi tasdiqlandi",
+                risk_level=RiskLevel.LOW
+            )
+            return [s1, s2, s3]
 
         # Qolib 1: "X tekshir va shunga/natijaga qarab tavsiya ber" (Data-dependent pipeline)
         if any(p in low for p in ["shunga qarab", "natijaga qarab", "tavsiya ber", "maslahat ber", "nima qilishimni ayt"]):

@@ -123,25 +123,40 @@ class TestV9ProductionHardening(unittest.TestCase):
         asyncio.run(_run())
 
     def test_05_api_voice_preview_edge_tts(self):
-        """POST /api/voice/preview orqali haqiqiy Base64 audio generatsiyasi"""
-        async def _run():
-            payload = {
-                "voice_id": "ayol",
-                "text": "Salom. Men Misa, sizning sun’iy intellekt yordamchingizman."
-            }
-            req = MockRequest(json_data=payload, method="POST")
-            res = await handle_voice_preview(req)
-            self.assertEqual(res.status, 200)
-            data = json.loads(res.text)
+        """POST /api/voice/preview orqali Base64 audio generatsiyasi"""
+        import tempfile
+        from unittest.mock import patch
 
-            self.assertTrue(data.get("ok"))
-            self.assertIn("audio_data", data)
-            self.assertTrue(data["audio_data"].startswith("data:audio/mp3;base64,"))
-            self.assertEqual(data.get("voice_id"), "ayol")
-            self.assertIn("Madina", data.get("voice_name", ""))
-            self.assertIn("is_fallback", data)
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+            f.write(b"ID3\x03\x00\x00\x00\x00\x00#TSSE\x00\x00\x00\x0f\x00\x00\x03Lavf58.29.100\x00mockaudio")
+            temp_audio = f.name
 
-        asyncio.run(_run())
+        try:
+            with patch("core.voice.voice_manager.VoiceManager.synthesize", return_value=temp_audio):
+                async def _run():
+                    payload = {
+                        "voice_id": "ayol",
+                        "text": "Salom. Men Misa, sizning sun’iy intellekt yordamchingizman."
+                    }
+                    req = MockRequest(json_data=payload, method="POST")
+                    res = await handle_voice_preview(req)
+                    self.assertEqual(res.status, 200)
+                    data = json.loads(res.text)
+
+                    self.assertTrue(data.get("ok"))
+                    self.assertIn("audio_data", data)
+                    self.assertTrue(data["audio_data"].startswith("data:audio/mp3;base64,"))
+                    self.assertEqual(data.get("voice_id"), "ayol")
+                    self.assertIn("Madina", data.get("voice_name", ""))
+                    self.assertIn("is_fallback", data)
+
+                asyncio.run(_run())
+        finally:
+            if os.path.exists(temp_audio):
+                try:
+                    os.remove(temp_audio)
+                except Exception:
+                    pass
 
     def test_06_account_first_name_last_name_and_neutral_bio(self):
         """Ism, Familiya ajratilishi, neutral Bio va bo'sh role saqlanishi"""

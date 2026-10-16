@@ -9,8 +9,8 @@ const crypto = require("crypto");
 // 1. Get current version from package.json
 const packageJsonPath = path.resolve(__dirname, "../package.json");
 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
-const version = packageJson.version || "9.0.0";
-const versionName = `v${version}`;
+const version = packageJson.version || "9.2.0";
+const versionName = (version === "9.2.0" || version === "9.2") ? "v9.2" : `v${version}`;
 
 // 2. Define release target directory inside yordamchi_9.0.0/release/v<version>
 const projectRoot = path.resolve(__dirname, "../../");
@@ -123,6 +123,7 @@ const backendSrcCandidates = [
   path.join(projectRoot, "dist/backend_build/misa_backend"),
   path.resolve(__dirname, "../src-tauri/backend"),
   path.join(releaseVersionDir, "backend"),
+  path.join(projectRoot, "release", "v9.0.1", "backend"),
   path.join(projectRoot, "dist/backend_build/mikasa_backend"),
   path.join(projectRoot, "release", "v8.0.0", "backend"),
 ];
@@ -233,7 +234,7 @@ if (webview2Source) {
   copyFileWithLog(webview2Source, path.join(releaseVersionDir, "MicrosoftEdgeWebview2Setup.exe"), "WebView2 Bootstrapper (root)");
 }
 
-// 7.2 Create Dedicated Portable Directory: release/v9.0.1/portable/
+// 7.2 Create Dedicated Portable Directory: release/v<version>/portable/
 const portableDir = path.join(releaseVersionDir, "portable");
 if (!fs.existsSync(portableDir)) {
   fs.mkdirSync(portableDir, { recursive: true });
@@ -327,6 +328,26 @@ const manifestPath = path.join(releaseVersionDir, "version_manifest.json");
 fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf-8");
 console.log(`✔ Versiya manifesti: version_manifest.json`);
 
+// 8.1 Write SHA256SUMS.txt
+const sumsLines = [];
+const primaryFiles = [
+  `Misa-AI-${versionName}.exe`,
+  `Misa-AI-Setup-${versionName}.exe`,
+  `Misa-AI-${versionName}.msi`,
+  `Misa-AI-${versionName}-Portable.zip`
+];
+for (const pf of primaryFiles) {
+  const pfp = path.join(releaseVersionDir, pf);
+  if (fs.existsSync(pfp)) {
+    const h = calculateSha256(pfp);
+    sumsLines.push(`${h}  ${pf}`);
+  }
+}
+if (sumsLines.length > 0) {
+  fs.writeFileSync(path.join(releaseVersionDir, "SHA256SUMS.txt"), sumsLines.join("\n") + "\n", "utf-8");
+  console.log(`✔ Kriptografik nazorat summalari: SHA256SUMS.txt`);
+}
+
 // 9. Update global RELEASES.md in release directory
 const releasesMdPath = path.join(releaseBaseDir, "RELEASES.md");
 let existingReleases = "";
@@ -347,6 +368,8 @@ if (!existingReleases.includes(`### [${versionName}]`)) {
   const newReleasesMd = `# 🚀 Misa AI Versiyalar Arxiv (Releases Archive)\n\n` + releaseEntry + existingReleases.replace(/^# 🚀 (Mikasa|Misa) AI Versiyalar Arxiv \(Releases Archive\)\r?\n\r?\n/, "");
   fs.writeFileSync(releasesMdPath, newReleasesMd, "utf-8");
 }
+
+
 
 console.log(`========================================`);
 console.log(`✨ ${versionName} reliz muvaffaqiyatli saqlandi!`);

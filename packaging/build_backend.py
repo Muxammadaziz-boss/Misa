@@ -143,8 +143,8 @@ def build():
     shutil.copytree(built_dir, tauri_backend_dir)
     logger.info(f"✔ Deployed backend to Tauri resources: {tauri_backend_dir}")
 
-    # Destination 2: release/v9.0.1/backend/ (for release distribution)
-    for rel_ver in ["v9.0.1", "v9.0.0", "v8.0.0"]:
+    # Destination 2: release/v9.2/backend/ (for release distribution)
+    for rel_ver in ["v9.2"]:
         rel_dir = root_dir / "release" / rel_ver
         if rel_dir.exists():
             release_backend_dir = rel_dir / "backend"

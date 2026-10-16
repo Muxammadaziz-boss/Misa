@@ -199,11 +199,28 @@ class RemoteAuditEvent:
     details: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
+        # Contract-compliant status resolution (never undefined)
+        status_val = str(self.details.get("status") or "").strip().lower()
+        if not status_val:
+            ev_upper = self.event_type.value.upper()
+            if any(w in ev_upper for w in ("DENIED", "FAILED", "REJECTED", "BLOCKED", "TIMEOUT", "EXPIRED", "REVOKED", "VIOLATION", "ERROR")):
+                status_val = "denied" if "DENIED" in ev_upper else "failed"
+            elif any(w in ev_upper for w in ("SUCCESS", "AUTHORIZED", "COMPLETED", "ENABLED", "PASSED", "ONLINE")):
+                status_val = "authorized" if "AUTHORIZED" in ev_upper else "success"
+            else:
+                status_val = "info"
+
+        event_uid = self.request_id or f"evt_{int(self.timestamp * 1000)}"
         return {
+            "event_id": event_uid,
+            "id": event_uid,
             "event_type": self.event_type.value,
+            "action": str(self.details.get("action") or self.event_type.value),
+            "status": status_val,
             "request_id": self.request_id,
             "device_id": self.device_id,
             "user_id": self.user_id,
+            "telegram_user_id": str(self.details.get("telegram_user_id") or self.user_id or ""),
             "timestamp": self.timestamp,
             "details": sanitize_event_data(self.details)
         }
