@@ -2783,9 +2783,11 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                         <span style={{ color: "#E8B3FF", fontWeight: 600 }}>{info.title}</span>
                         <a
                           href={info.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ color: "#38BDF8", textDecoration: "none", fontSize: "11px" }}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            backendService.openExternalUrl(info.url);
+                          }}
+                          style={{ color: "#38BDF8", textDecoration: "none", fontSize: "11px", cursor: "pointer" }}
                         >
                           Kalit olish ↗
                         </a>

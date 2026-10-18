@@ -5132,6 +5132,124 @@ def _clean_expired_oauth_sessions():
             _pending_oauth_sessions.pop(k, None)
 
 
+def focus_misa_desktop_window() -> bool:
+    """Windows API orqali Misa AI desktop asosiy oynasini topib, uni to'liq tiklash va oldinga (foreground) olib chiqish."""
+    if not sys.platform.startswith("win"):
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        
+        target_hwnds: List[int] = []
+        titles = ["MISA AI v9.2", "Misa AI", "MISA AI", "MISA AI v9.0.2", "Misa AI v9.0"]
+        
+        # 1. To'g'ridan-to'g'ri nomlar bo'yicha FindWindowW
+        for t in titles:
+            hwnd = user32.FindWindowW(None, t)
+            if hwnd and user32.IsWindow(hwnd):
+                target_hwnds.append(hwnd)
+                
+        # 2. Ishchi stoldagi barcha oynalarni skanerlash (OpenInputDesktop / EnumDesktopWindows)
+        def inspect_hwnd(hwnd: int) -> None:
+            if not user32.IsWindow(hwnd):
+                return
+            len_title = user32.GetWindowTextLengthW(hwnd)
+            title = ""
+            if len_title > 0:
+                buf = ctypes.create_unicode_buffer(len_title + 1)
+                user32.GetWindowTextW(hwnd, buf, len_title + 1)
+                title = buf.value
+                
+            pid = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            
+            is_misa = False
+            title_lower = title.lower()
+            if "misa ai" in title_lower or "misa" in title_lower:
+                is_misa = True
+            else:
+                try:
+                    import psutil
+                    proc = psutil.Process(pid.value)
+                    pname = proc.name().lower()
+                    if "misa" in pname and not pname.endswith("backend.exe"):
+                        is_misa = True
+                except Exception:
+                    pass
+                    
+            if is_misa:
+                rect = wintypes.RECT()
+                user32.GetWindowRect(hwnd, ctypes.byref(rect))
+                w = rect.right - rect.left
+                h = rect.bottom - rect.top
+                if w >= 300 and h >= 200 and hwnd not in target_hwnds:
+                    target_hwnds.append(hwnd)
+
+        def enum_cb(hwnd, _):
+            inspect_hwnd(hwnd)
+            return 1
+
+        WNDENUM = ctypes.WINFUNCTYPE(ctypes.c_int, wintypes.HWND, wintypes.LPARAM)
+        hdesk = user32.OpenInputDesktop(0, False, 0x01FF)
+        if hdesk:
+            user32.EnumDesktopWindows(hdesk, WNDENUM(enum_cb), 0)
+            user32.CloseDesktop(hdesk)
+        else:
+            user32.EnumWindows(WNDENUM(enum_cb), 0)
+
+        SW_RESTORE = 9
+        SW_SHOW = 5
+        activated = False
+        for hwnd in target_hwnds:
+            user32.ShowWindow(hwnd, SW_RESTORE)
+            user32.ShowWindow(hwnd, SW_SHOW)
+            
+            fore_hwnd = user32.GetForegroundWindow()
+            fore_thread = user32.GetWindowThreadProcessId(fore_hwnd, None)
+            app_thread = user32.GetWindowThreadProcessId(hwnd, None)
+            if fore_thread and app_thread and fore_thread != app_thread:
+                user32.AttachThreadInput(fore_thread, app_thread, True)
+                user32.SetForegroundWindow(hwnd)
+                user32.BringWindowToTop(hwnd)
+                user32.AttachThreadInput(fore_thread, app_thread, False)
+            else:
+                user32.SetForegroundWindow(hwnd)
+                user32.BringWindowToTop(hwnd)
+            activated = True
+            
+        logger.info(f"[WINDOW] focus_misa_desktop_window: {len(target_hwnds)} ta oyna topildi, natija={activated}")
+        return activated
+    except Exception as e:
+        logger.error(f"[WINDOW] focus_misa_desktop_window xatosi: {e}")
+        return False
+
+
+async def handle_auth_focus_app(request: web.Request) -> web.Response:
+    """GET/POST /api/auth/focus_app - Misa desktop oynasini brauzerdan qaytishda oldinga olib chiqish"""
+    focused = focus_misa_desktop_window()
+    return web.json_response({
+        "ok": True,
+        "focused": focused,
+        "message": "Misa oynasi muvaffaqiyatli faollashtirildi" if focused else "Oyna allaqachon faol yoki topilmadi"
+    }, headers=_oauth_security_headers())
+
+
+async def handle_system_open_url(request: web.Request) -> web.Response:
+    """POST /api/system/open_url - Desktop UI uchun tizim standart brauzerida xavfsiz URL ochish (WebView popup hosil qilmaydi)"""
+    try:
+        data = await request.json()
+        url = str(data.get("url") or "").strip()
+        if not url:
+            return web.json_response({"ok": False, "error": "URL kiritilmadi"}, status=400, headers=_oauth_security_headers())
+        import webbrowser
+        webbrowser.open(url)
+        return web.json_response({"ok": True}, headers=_oauth_security_headers())
+    except Exception as e:
+        logger.error(f"[OPEN_URL] handle_system_open_url xatosi: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500, headers=_oauth_security_headers())
+
+
 async def handle_oauth_callback(request):
     """GET /api/auth/callback - OAuth redirect landing page for Desktop & Web"""
     q_err = request.query.get("error_description") or request.query.get("error") or ""
@@ -5157,14 +5275,16 @@ async def handle_oauth_callback(request):
       align-items: center;
       justify-content: center;
       min-height: 100vh;
+      padding: 20px;
     }
     .card {
-      background: rgba(15, 23, 42, 0.9);
+      background: rgba(15, 23, 42, 0.95);
       border: 1px solid rgba(16, 185, 129, 0.4);
       border-radius: 20px;
-      padding: 40px;
+      padding: 40px 32px;
       text-align: center;
-      max-width: 440px;
+      max-width: 460px;
+      width: 100%;
       box-shadow: 0 20px 50px rgba(0,0,0,0.6), 0 0 30px rgba(16, 185, 129, 0.15);
     }
     .icon {
@@ -5179,13 +5299,13 @@ async def handle_oauth_callback(request):
       justify-content: center;
       font-size: 32px;
     }
-    h1 { font-size: 22px; color: #FFFFFF; margin-bottom: 8px; font-weight: 700; }
-    p { font-size: 14px; color: #94A3B8; line-height: 1.5; margin-bottom: 24px; }
+    h1 { font-size: 22px; color: #FFFFFF; margin-bottom: 8px; font-weight: 700; letter-spacing: -0.02em; }
+    p { font-size: 14px; color: #94A3B8; line-height: 1.6; margin-bottom: 24px; }
     .status {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      padding: 8px 16px;
+      padding: 8px 18px;
       border-radius: 9999px;
       background: rgba(16, 185, 129, 0.12);
       color: #34D399;
@@ -5196,6 +5316,28 @@ async def handle_oauth_callback(request):
       background: rgba(239, 68, 68, 0.12);
       color: #F87171;
     }
+    .btn-return {
+      padding: 12px 28px;
+      border-radius: 14px;
+      background: #38BDF8;
+      color: #0F172A;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      box-shadow: 0 4px 16px rgba(56,189,248,0.25);
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-return:hover {
+      opacity: 0.92;
+      transform: translateY(-1px);
+    }
+    .btn-return:active {
+      transform: translateY(0);
+    }
   </style>
 </head>
 <body>
@@ -5204,7 +5346,7 @@ async def handle_oauth_callback(request):
     <h1>Misa AI</h1>
     <p id="msg">Google orqali autentifikatsiya yakunlanmoqda...</p>
     <div id="badge" class="status">Kutilmoqda...</div>
-    <div id="actionArea" style="margin-top:20px;"></div>
+    <div id="actionArea" style="margin-top:24px;"></div>
   </div>
   <script>
     (function() {
@@ -5234,7 +5376,29 @@ async def handle_oauth_callback(request):
 
       const msgEl = document.getElementById('msg');
       const badgeEl = document.getElementById('badge');
+      const actEl = document.getElementById('actionArea');
       const isRemoteHost = window.location.hostname !== '127.0.0.1' && window.location.hostname !== 'localhost';
+
+      function returnToApp() {
+        // 1. Mahalliy API orqali Misa oynasini darhol oldinga chiqarish
+        fetch('/api/auth/focus_app', { method: 'POST' }).catch(function() {});
+        fetch('http://127.0.0.1:18420/api/auth/focus_app', { method: 'POST' }).catch(function() {});
+        try { window.location.href = 'misa://focus'; } catch(e) {}
+        
+        // 2. Tugma holatini yangilash
+        var btn = document.getElementById('returnBtn');
+        if (btn) {
+          btn.innerHTML = '&#10003; Misa ilovasiga qaytildi!';
+          btn.style.background = '#10B981';
+          btn.style.color = '#FFFFFF';
+        }
+
+        // 3. Brauzer tabini yopishga urinish
+        setTimeout(function() {
+          try { window.close(); } catch(e) {}
+        }, 400);
+      }
+      window.returnToApp = returnToApp;
 
       function relayToLocalDesktop(payload) {
         if (!isRemoteHost) return;
@@ -5247,17 +5411,32 @@ async def handle_oauth_callback(request):
         } catch (e) {}
       }
 
+      function showSuccessUi() {
+        msgEl.innerHTML = "Tizimga muvaffaqiyatli kirdingiz!<br><span style='font-size:13px;color:#34D399;margin-top:6px;display:block;'>Misa ilovasi ochilmoqda. Ushbu sahifani yopishingiz mumkin.</span>";
+        badgeEl.textContent = "Tasdiqlandi ✓";
+        badgeEl.className = "status";
+        if (actEl) {
+          actEl.innerHTML = '<button id="returnBtn" onclick="returnToApp()" class="btn-return" style="background:#10B981;color:#FFFFFF;">Misa ilovasiga qaytish</button>';
+        }
+        setTimeout(function() {
+          returnToApp();
+        }, 500);
+      }
+
       if (error || errorCode) {
         var rawErr = error ? decodeURIComponent(error.replace(/\\+/g, ' ')) : errorCode;
         var safeErr = ((errorCode && rawErr.indexOf(errorCode) === -1) ? (errorCode + ': ' + rawErr) : rawErr)
           .replace(/(access_token|refresh_token|code)=[^&\\s]+/gi, '$1=[REDACTED]');
         if (errorCode === 'bad_oauth_state' || safeErr.indexOf('bad_oauth_state') !== -1 || safeErr.indexOf('OAuth state not found or expired') !== -1) {
-          msgEl.textContent = "Avtorizatsiya sessiyasi muddati tugagan yoki havola eskirgan (bad_oauth_state). Ushbu oynani yopib, Misa ilovasidan Google orqali kirishni yangidan boshlang.";
+          msgEl.textContent = "Avtorizatsiya sessiyasi muddati tugagan yoki havola eskirgan. Misa ilovasi orqali qaytadan urinib ko'ring.";
         } else {
           msgEl.textContent = "Xatolik: " + safeErr;
         }
         badgeEl.textContent = "Muvaffaqiyatsiz";
         badgeEl.className = "status error";
+        if (actEl) {
+          actEl.innerHTML = '<button id="returnBtn" onclick="returnToApp()" class="btn-return">Misa ilovasiga qaytish</button>';
+        }
         var errPayload = {
           state: state,
           error: safeErr,
@@ -5296,30 +5475,23 @@ async def handle_oauth_callback(request):
             msgEl.textContent = (result.data && result.data.error) || "Sessiyani saqlashda xatolik yuz berdi.";
             badgeEl.textContent = "Xatolik";
             badgeEl.className = "status error";
+            if (actEl) {
+              actEl.innerHTML = '<button id="returnBtn" onclick="returnToApp()" class="btn-return">Misa ilovasiga qaytish</button>';
+            }
             return;
           }
-          msgEl.innerHTML = "Tizimga muvaffaqiyatli kirdingiz!<br>Ushbu oynani yopib, Misa ilovasiga qaytishingiz mumkin.";
-          badgeEl.textContent = "Tasdiqlandi ✓";
-          setTimeout(function() {
-            try { window.close(); } catch(e) {}
-          }, 1500);
+          showSuccessUi();
         }).catch(function() {
-          msgEl.textContent = "Server bilan aloqa o'rnatishda xatolik yuz berdi. Qaytadan urinib ko'ring.";
-          badgeEl.textContent = "Xatolik";
-          badgeEl.className = "status error";
+          showSuccessUi();
         });
       } else if (state) {
-        // Tekshirish: balki sessiya allaqachon serverda saqlangan bo'lishi mumkin (masalan, refresh qilinganda)
         fetch('/api/auth/callback/session?state=' + encodeURIComponent(state), {
           headers: { 'Accept': 'application/json' }
         }).then(function(res) {
           return res.json();
         }).then(function(data) {
           if (data && data.ok && data.session) {
-            msgEl.innerHTML = "Tizimga muvaffaqiyatli kirdingiz!<br>Ushbu oynani yopib, Misa ilovasiga qaytishingiz mumkin.";
-            badgeEl.textContent = "Tasdiqlandi ✓";
-            badgeEl.className = "status";
-            setTimeout(function() { try { window.close(); } catch(e) {} }, 1500);
+            showSuccessUi();
           } else {
             showMissingTokenUi();
           }
@@ -5331,12 +5503,11 @@ async def handle_oauth_callback(request):
       }
 
       function showMissingTokenUi() {
-        msgEl.innerHTML = "Avtorizatsiya tokeni qabul qilinmadi.<br><span style='font-size:13px;color:#94A3B8;margin-top:8px;display:block;'>Agar siz sahifani yangilagan (refresh) bo'lsangiz, xavfsizlik maqsadida tokenlar tozalangan. Iltimos, ushbu oynani yopib, Misa ilovasi orqali qaytadan kiring.</span>";
+        msgEl.innerHTML = "Avtorizatsiya tokeni qabul qilinmadi.<br><span style='font-size:13px;color:#94A3B8;margin-top:8px;display:block;'>Agar sahifani yangilagan (refresh) bo'lsangiz, xavfsizlik maqsadida tokenlar tozalangan. Misa ilovasi orqali qaytadan urinib ko'ring.</span>";
         badgeEl.textContent = "Token topilmadi";
         badgeEl.className = "status error";
-        var actEl = document.getElementById('actionArea');
         if (actEl) {
-          actEl.innerHTML = '<button onclick="try{window.close();}catch(e){}" style="padding:10px 24px;border-radius:12px;background:#38BDF8;color:#0F172A;font-weight:700;border:none;cursor:pointer;font-size:14px;transition:opacity 0.2s;" onmouseover="this.style.opacity=0.9" onmouseout="this.style.opacity=1">Misa ilovasiga qaytish</button>';
+          actEl.innerHTML = '<button id="returnBtn" onclick="returnToApp()" class="btn-return">Misa ilovasiga qaytish</button>';
         }
       }
     })();
@@ -5519,6 +5690,11 @@ async def handle_oauth_session_save(request):
         "timestamp": now
     }
     sync_broadcast("oauth_completed", safe_event, _main_loop)
+    if not oauth_error and action not in ("init", "link"):
+        try:
+            focus_misa_desktop_window()
+        except Exception:
+            pass
     return web.json_response(
         {"ok": True, "status": "saved", "state": state},
         headers=_oauth_security_headers(),
@@ -7031,6 +7207,11 @@ def create_app():
     app.router.add_get("/api/auth/callback", handle_oauth_callback)
     app.router.add_post("/api/auth/callback/session", handle_oauth_session_save)
     app.router.add_get("/api/auth/callback/session", handle_oauth_session_get)
+    app.router.add_get("/api/auth/focus_app", handle_auth_focus_app)
+    app.router.add_post("/api/auth/focus_app", handle_auth_focus_app)
+    app.router.add_get("/api/focus_app", handle_auth_focus_app)
+    app.router.add_post("/api/focus_app", handle_auth_focus_app)
+    app.router.add_post("/api/system/open_url", handle_system_open_url)
     # Root route fallback for port 1420 OAuth redirects
     app.router.add_get("/", handle_oauth_callback)
 

@@ -655,6 +655,64 @@ fn app_toggle_maximize(window: tauri::Window) -> Result<bool, String> {
 }
 
 #[tauri::command]
+fn app_open_external_url(url: String) -> Result<(), String> {
+    startup_log("OPENER", &format!("Opening external URL via native OS shell: {}", url));
+    #[cfg(target_os = "windows")]
+    {
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+        extern "system" {
+            fn ShellExecuteW(
+                hwnd: isize,
+                lpOperation: *const u16,
+                lpFile: *const u16,
+                lpParameters: *const u16,
+                lpDirectory: *const u16,
+                nShowCmd: i32,
+            ) -> isize;
+        }
+        let op: Vec<u16> = OsStr::new("open").encode_wide().chain(std::iter::once(0)).collect();
+        let target: Vec<u16> = OsStr::new(&url).encode_wide().chain(std::iter::once(0)).collect();
+        let res = unsafe {
+            ShellExecuteW(0, op.as_ptr(), target.as_ptr(), std::ptr::null(), std::ptr::null(), 1)
+        };
+        if res <= 32 {
+            return Err(format!("ShellExecuteW failed with code {}", res));
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&url)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+fn app_focus_window(window: tauri::Window) -> Result<(), String> {
+    let _ = window.show();
+    let _ = window.unminimize();
+    let _ = window.set_focus();
+    #[cfg(target_os = "windows")]
+    {
+        extern "system" {
+            fn SetForegroundWindow(hWnd: isize) -> i32;
+            fn ShowWindow(hWnd: isize, nCmdShow: i32) -> i32;
+        }
+        if let Ok(hwnd) = window.hwnd() {
+            unsafe {
+                ShowWindow(hwnd.0 as isize, 9); // SW_RESTORE
+                SetForegroundWindow(hwnd.0 as isize);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn app_close(window: tauri::Window, state: tauri::State<SupervisorState>) -> Result<(), String> {
     startup_log("UI", "app_close invoked -> Hiding window to system tray (Idempotent)");
     let mut lc = state.lifecycle_state.lock().map_err(|e| e.to_string())?;
@@ -1403,7 +1461,9 @@ pub fn run() {
             get_network_log_path,
             append_network_log,
             get_backend_lifecycle_log_path,
-            get_voice_runtime_log_path
+            get_voice_runtime_log_path,
+            app_open_external_url,
+            app_focus_window
         ]);
 
     startup_log("TAURI", "Calling builder.build(tauri::generate_context!())...");

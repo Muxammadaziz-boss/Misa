@@ -3810,13 +3810,49 @@ class BackendService {
   }
 
   public async openExternalUrl(url: string): Promise<boolean> {
+    // 1. Native Rust shell execution (eng xavfsiz va to'g'ridan-to'g'ri tizim brauzerida ochadi)
     try {
-      const { openUrl } = await import("@tauri-apps/plugin-opener");
-      await openUrl(url);
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("app_open_external_url", { url });
+      return true;
+    } catch {
+      // 2. Tauri plugin opener fallback
+      try {
+        const { openUrl } = await import("@tauri-apps/plugin-opener");
+        await openUrl(url);
+        return true;
+      } catch {
+        // 3. Mahalliy Python backend orqali tizim brauzerida ochish (WebView popup ochilmasligi kafolatlanadi)
+        try {
+          const res = await fetch("http://127.0.0.1:18420/api/system/open_url", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url }),
+          });
+          if (res.ok) return true;
+        } catch {}
+
+        // 4. Faqat sof web muhitida (Tauri desktop EMAS) window.open ishlatiladi
+        const isTauri = typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
+        if (!isTauri) {
+          try {
+            window.open(url, "_blank");
+            return true;
+          } catch {}
+        }
+        return false;
+      }
+    }
+  }
+
+  public async focusDesktopWindow(): Promise<boolean> {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("app_focus_window");
       return true;
     } catch {
       try {
-        window.open(url, "_blank");
+        await fetch("http://127.0.0.1:18420/api/auth/focus_app", { method: "POST" });
         return true;
       } catch {
         return false;
