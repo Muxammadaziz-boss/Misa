@@ -10,23 +10,7 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [
-      {
-        "label": "main",
-        "title": "MISA AI v9.2",
-        "width": 1280,
-        "height": 800,
-        "minWidth": 1024,
-        "minHeight": 700,
-        "resizable": true,
-        "center": true,
-        "decorations": false,
-        "transparent": false,
-        "shadow": false,
-        "backgroundColor": "#06030C",
-        "theme": "Dark"
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": "default-src 'self' tauri: http://localhost:18420 ws://localhost:18420 http://127.0.0.1:18420 ws://127.0.0.1:18420; connect-src 'self' tauri: http://localhost:18420 ws://localhost:18420 http://127.0.0.1:18420 ws://127.0.0.1:18420 https://*.up.railway.app wss://*.up.railway.app https://*.railway.app wss://*.railway.app https://*.supabase.co wss://*.supabase.co https://accounts.google.com https://*.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: asset: https:; font-src 'self' data: https://fonts.gstatic.com;"
     }

@@ -23,6 +23,66 @@
 
   <body style="background-color: #06030C; margin: 0; padding: 0; overflow: hidden;">
     <div id="root"></div>
+    <script>
+      (function() {
+        function openInSystemBrowser(url) {
+          if (!url) return;
+          var strUrl = String(url);
+          try {
+            if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke) {
+              window.__TAURI_INTERNALS__.invoke("app_open_external_url", { url: strUrl }).catch(function() {
+                fallbackHttpOpen(strUrl);
+              });
+              return;
+            }
+          } catch(e) {}
+          fallbackHttpOpen(strUrl);
+        }
+
+        function fallbackHttpOpen(url) {
+          try {
+            fetch("http://127.0.0.1:18420/api/system/open_url", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ url: url })
+            }).catch(function() {});
+          } catch(e) {}
+        }
+
+        // 1. window.open ni to'liq zararsizlantirish va tizim brauzeriga yo'naltirish
+        window.open = function(url) {
+          if (url && typeof url === "string" && url !== "about:blank") {
+            openInSystemBrowser(url);
+          }
+          return {
+            closed: false,
+            close: function() {},
+            focus: function() {},
+            blur: function() {},
+            postMessage: function() {}
+          };
+        };
+
+        // 2. Barcha <a target="_blank"> yoki tashqi havolalarni ushlab qolish (Capturing phase)
+        document.addEventListener("click", function(e) {
+          var el = e.target;
+          while (el && el.tagName !== "A") {
+            el = el.parentElement;
+          }
+          if (el && el.tagName === "A" && el.href) {
+            var href = el.href;
+            var target = el.getAttribute("target");
+            var isHttp = href.indexOf("http://") === 0 || href.indexOf("https://") === 0;
+            var isInternal = href.indexOf(window.location.host) !== -1 || href.indexOf("tauri://") === 0;
+            if (target === "_blank" || (isHttp && !isInternal)) {
+              e.preventDefault();
+              e.stopPropagation();
+              openInSystemBrowser(href);
+            }
+          }
+        }, true);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

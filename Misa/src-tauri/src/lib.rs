@@ -1278,19 +1278,33 @@ pub fn run() {
             startup_log("TAURI", "setup hook entered");
             println!("[UI] Tauri asosiy oynasi va System Tray sozlanmoqda...");
 
-            // 1. Asosiy oyna holatini yangilash
-            if let Some(win) = app.get_webview_window("main") {
-                startup_log("TAURI", "Main webview window found in setup hook");
-                let is_vis = win.is_visible().unwrap_or(false);
-                startup_log("TAURI", &format!("Main webview window initial is_visible={}", is_vis));
-                let _ = win.set_background_color(Some(tauri::window::Color(6, 3, 12, 255)));
-                let _ = win.show();
-                let _ = win.set_focus();
-                let is_vis_after = win.is_visible().unwrap_or(false);
-                startup_log("TAURI", &format!("Main webview window after win.show() is_visible={}", is_vis_after));
-            } else {
-                startup_log("TAURI", "WARNING: Webview window 'main' NOT found via get_webview_window('main')!");
-            }
+            // 1. Asosiy oynani yaratish (on_new_window handler bilan — bo'sh qora oyna chiqishini butunlay bloklaydi)
+            startup_log("TAURI", "Building main WebviewWindow with on_new_window interceptor...");
+            let win = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
+                .title("MISA AI v9.2")
+                .inner_size(1280.0, 800.0)
+                .min_inner_size(1024.0, 700.0)
+                .resizable(true)
+                .center()
+                .decorations(false)
+                .transparent(false)
+                .shadow(false)
+                .background_color(tauri::window::Color(6, 3, 12, 255))
+                .theme(Some(tauri::Theme::Dark))
+                .on_new_window(move |url, _features| {
+                    startup_log("OPENER", &format!("Intercepted on_new_window -> opening in system browser: {}", url));
+                    let _ = app_open_external_url(url.to_string());
+                    tauri::webview::NewWindowResponse::Deny
+                })
+                .build()?;
+
+            let is_vis = win.is_visible().unwrap_or(false);
+            startup_log("TAURI", &format!("Main webview window initial is_visible={}", is_vis));
+            let _ = win.set_background_color(Some(tauri::window::Color(6, 3, 12, 255)));
+            let _ = win.show();
+            let _ = win.set_focus();
+            let is_vis_after = win.is_visible().unwrap_or(false);
+            startup_log("TAURI", &format!("Main webview window after win.show() is_visible={}", is_vis_after));
 
             // 2. Lifecycle holatini Visible ga o'tkazish
             if let Some(state) = app.try_state::<SupervisorState>() {
