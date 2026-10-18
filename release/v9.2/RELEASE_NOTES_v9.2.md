@@ -10,11 +10,10 @@ Misa AI v9.2 rasmiy relizi tizimning barcha qismlarini (backend, frontend, nativ
 
 | Fayl nomi | Hajmi | Turi | SHA-256 Nazorat Yig'indisi | Yuklab olish |
 | :--- | :--- | :--- | :--- | :--- |
-| **`Misa-AI-Setup-v9.2.exe`** | **13.55 MB** | Windows NSIS O'rnatuvchisi | `30cca0a57f4140dd2e2effbea83751a6299ac9f03179e516ecb2d8facc031319` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.2/Misa-AI-Setup-v9.2.exe) |
-| **`Misa-AI-v9.2-Portable.zip`** | **235.96 MB** | To'liq Portativ Paket (Backend bilan) | `a9fa727d117ca4d06233e0067e6f379375210fa884a7d2b0bd4beac99eba2539` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.2/Misa-AI-v9.2-Portable.zip) |
-| **`Misa-AI-v9.2.exe`** | **4.61 MB** | Standalone Desktop Executable | `49dad7250c32524ec7cf8f6ac081782816653fbacab157ea97e42a7e7915213a` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.2/Misa-AI-v9.2.exe) |
-| **`Misa-AI-v9.2.msi`** | **14.37 MB** | Windows MSI O'rnatuvchisi | `d07688b384327c978320335eba9eae539d5da5e99f3bb1aefd4ec77bdb0576d8` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.2/Misa-AI-v9.2.msi) |
-| **`SHA256SUMS.txt`** | **347 B** | Nazorat Summalari | Mustaqil tekshirilgan | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.2/SHA256SUMS.txt) |
-| **`version_manifest.json`** | **2.56 KB** | Kriptografik Manifest | Ed25519 & SHA-256 | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.2/version_manifest.json) |
+| **`Misa-AI-v9.2-Portable.zip`** | **236.02 MB** | To'liq Portativ Paket (Backend + Runtime bilan) | `56c73f0989ab1eeb569ee2dda981ee785d49ac5c746ff70d0691f2af6fef479d` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.2.0/Misa-AI-v9.2-Portable.zip) |
+| **`Misa-AI-v9.2.exe`** | **4.63 MB** | Mustaqil Standalone Desktop Executable | `3e72a39c632b237447bcf7ddaafd198b58e778b888df01963759af228f9c3dcd` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.2.0/Misa-AI-v9.2.exe) |
+| **`SHA256SUMS.txt`** | **175 B** | Kriptografik Nazorat Summalari | Mustaqil tekshirilgan | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.2.0/SHA256SUMS.txt) |
+| **`version_manifest.json`** | **1.00 KB** | Versiya Manifesti | SHA-256 | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.2.0/version_manifest.json) |
 
-*Barcha reliz fayllari rasmiy [GitHub Releases Sahifasida](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.2) joylashtirilgan.*
+*Barcha reliz fayllari rasmiy [GitHub Releases Sahifasida](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.2.0) joylashtirilgan.*
+
