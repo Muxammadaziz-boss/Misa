@@ -1,5 +1,5 @@
 [package]
-name = "misa-7"
+name = "misa"
 version = "9.2.0"
 description = "Misa AI v9.2.0 Desktop Application"
 authors = ["Misa Team"]
@@ -11,8 +11,12 @@ edition = "2021"
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "misa_7_lib"
+name = "misa_lib"
 crate-type = ["staticlib", "rlib"]
+
+[[bin]]
+name = "misa"
+path = "src/main.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

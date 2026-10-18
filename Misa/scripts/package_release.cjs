@@ -34,28 +34,28 @@ const envReleaseFile = path.join(releaseVersionDir, ".env");
 if (fs.existsSync(envReleaseFile)) {
   try { fs.unlinkSync(envReleaseFile); } catch {}
 }
-const legacyCands = ["misa-7.exe", "Misa.exe"];
+// 3. Locate built binaries (Always prioritize pure misa.exe)
+const tauriReleaseDir = path.resolve(__dirname, "../src-tauri/target/release");
+const tauriBundleDir = path.join(tauriReleaseDir, "bundle");
+
+const legacyCands = ["misa-7.exe", "mikasa-7.exe", "mikasa.exe"];
 for (const leg of legacyCands) {
   const p = path.join(releaseVersionDir, leg);
   if (fs.existsSync(p)) {
     try { fs.unlinkSync(p); } catch {}
   }
+  const inTauri = path.join(tauriReleaseDir, leg);
+  if (fs.existsSync(inTauri)) {
+    try { fs.unlinkSync(inTauri); } catch {}
+  }
 }
 
-// 3. Locate built binaries
-const tauriReleaseDir = path.resolve(__dirname, "../src-tauri/target/release");
-const tauriBundleDir = path.join(tauriReleaseDir, "bundle");
-
-let exeSource = path.join(tauriReleaseDir, "misa-7.exe");
+let exeSource = path.join(tauriReleaseDir, "misa.exe");
 const candidateExes = [
-  path.join(tauriReleaseDir, "misa-7.exe"),
+  path.join(tauriReleaseDir, "misa.exe"),
+  path.join(tauriReleaseDir, "Misa.exe"),
   path.join(tauriReleaseDir, "Misa AI.exe"),
   path.join(tauriReleaseDir, "Misa-AI.exe"),
-  path.join(tauriReleaseDir, "misa.exe"),
-  path.join(tauriReleaseDir, "mikasa-7.exe"),
-  path.join(tauriReleaseDir, "Mikasa AI.exe"),
-  path.join(tauriReleaseDir, "Mikasa-AI.exe"),
-  path.join(tauriReleaseDir, "mikasa.exe"),
 ];
 for (const cand of candidateExes) {
   if (fs.existsSync(cand)) {
@@ -157,43 +157,61 @@ if (fs.existsSync(internalCoreTarget) && fs.existsSync(workspaceCore)) {
   console.log(`✔ Backend _internal/core ga yangi kodlar sinxronlandi`);
 }
 
-// 5. Copy MSI Installer if exists
-const msiDir = path.join(tauriBundleDir, "msi");
-if (fs.existsSync(msiDir)) {
-  const msiFiles = fs.readdirSync(msiDir)
-    .filter((f) => f.endsWith(".msi"))
-    .sort((a, b) => {
-      const aVer = a.includes(version) ? 1 : 0;
-      const bVer = b.includes(version) ? 1 : 0;
-      if (bVer !== aVer) return bVer - aVer;
-      return fs.statSync(path.join(msiDir, b)).mtimeMs - fs.statSync(path.join(msiDir, a)).mtimeMs;
-    });
-  if (msiFiles.length > 0) {
-    const srcMsi = path.join(msiDir, msiFiles[0]);
-    const destMsi = path.join(releaseVersionDir, `Misa-AI-${versionName}.msi`);
-    copyFileWithLog(srcMsi, destMsi, "MSI Installer");
+// 5. Installers: Portable build is ALWAYS prioritized.
+// Installers (.msi / .exe Setup) are only bundled if explicitly requested via --include-installers flag.
+const includeInstallers = process.argv.includes("--include-installers") || process.argv.includes("--installers");
+
+if (includeInstallers) {
+  console.log(`📦 O'rnatuvchilar rejimi (--include-installers) faol`);
+  // 5.1 Copy MSI Installer if exists
+  const msiDir = path.join(tauriBundleDir, "msi");
+  if (fs.existsSync(msiDir)) {
+    const msiFiles = fs.readdirSync(msiDir)
+      .filter((f) => f.endsWith(".msi"))
+      .sort((a, b) => {
+        const aVer = a.includes(version) ? 1 : 0;
+        const bVer = b.includes(version) ? 1 : 0;
+        if (bVer !== aVer) return bVer - aVer;
+        return fs.statSync(path.join(msiDir, b)).mtimeMs - fs.statSync(path.join(msiDir, a)).mtimeMs;
+      });
+    if (msiFiles.length > 0) {
+      const srcMsi = path.join(msiDir, msiFiles[0]);
+      const destMsi = path.join(releaseVersionDir, `Misa-AI-${versionName}.msi`);
+      copyFileWithLog(srcMsi, destMsi, "MSI Installer");
+    }
+  }
+
+  // 5.2 Copy NSIS Setup if exists
+  const nsisDir = path.join(tauriBundleDir, "nsis");
+  if (fs.existsSync(nsisDir)) {
+    const nsisFiles = fs.readdirSync(nsisDir)
+      .filter((f) => f.endsWith(".exe"))
+      .sort((a, b) => {
+        const aVer = a.includes(version) ? 1 : 0;
+        const bVer = b.includes(version) ? 1 : 0;
+        if (bVer !== aVer) return bVer - aVer;
+        return fs.statSync(path.join(nsisDir, b)).mtimeMs - fs.statSync(path.join(nsisDir, a)).mtimeMs;
+      });
+    if (nsisFiles.length > 0) {
+      const srcNsis = path.join(nsisDir, nsisFiles[0]);
+      const destNsis = path.join(releaseVersionDir, `Misa-AI-Setup-${versionName}.exe`);
+      copyFileWithLog(srcNsis, destNsis, "NSIS Setup (.exe)");
+    }
+  }
+} else {
+  console.log(`✔ Standart Portativ reliz rejimi (O'rnatuvchi .msi / .exe faqat foydalanuvchi buyurtmasi bilan --include-installers orqali qilinadi)`);
+  // Clean up any old installer files from release folder
+  const staleInstallers = [
+    path.join(releaseVersionDir, `Misa-AI-${versionName}.msi`),
+    path.join(releaseVersionDir, `Misa-AI-Setup-${versionName}.exe`),
+  ];
+  for (const s of staleInstallers) {
+    if (fs.existsSync(s)) {
+      try { fs.unlinkSync(s); } catch {}
+    }
   }
 }
 
-// 6. Copy NSIS Setup if exists
-const nsisDir = path.join(tauriBundleDir, "nsis");
-if (fs.existsSync(nsisDir)) {
-  const nsisFiles = fs.readdirSync(nsisDir)
-    .filter((f) => f.endsWith(".exe"))
-    .sort((a, b) => {
-      const aVer = a.includes(version) ? 1 : 0;
-      const bVer = b.includes(version) ? 1 : 0;
-      if (bVer !== aVer) return bVer - aVer;
-      return fs.statSync(path.join(nsisDir, b)).mtimeMs - fs.statSync(path.join(nsisDir, a)).mtimeMs;
-    });
-  if (nsisFiles.length > 0) {
-    const srcNsis = path.join(nsisDir, nsisFiles[0]);
-    const destNsis = path.join(releaseVersionDir, `Misa-AI-Setup-${versionName}.exe`);
-    copyFileWithLog(srcNsis, destNsis, "NSIS Setup (.exe)");
-  }
-}
-
-// 7. Write Quick One-Click Launcher (run_portable.bat)
 // 7. Write Quick One-Click Launcher (run_portable.bat)
 const launcherBatContent = `@echo off
 title Misa AI ${versionName} Launcher
@@ -259,34 +277,9 @@ if (webview2Source) {
 }
 console.log(`✔ Tayyor Portativ Katalog: release/${versionName}/portable/`);
 
-// 7.3 Build Complete Self-Contained Portable ZIP
+// 7.3 Build Complete Self-Contained Portable ZIP directly from portableDir
 const zipTarget = path.join(releaseVersionDir, `Misa-AI-${versionName}-Portable.zip`);
-const tempZipStaging = path.join(releaseVersionDir, `Misa-AI-${versionName}-Portable`);
 try {
-  if (fs.existsSync(tempZipStaging)) {
-    fs.rmSync(tempZipStaging, { recursive: true, force: true });
-  }
-  fs.mkdirSync(tempZipStaging, { recursive: true });
-
-  if (fs.existsSync(exeTarget)) {
-    fs.copyFileSync(exeTarget, path.join(tempZipStaging, `Misa-AI-${versionName}.exe`));
-  }
-  if (fs.existsSync(dllTarget)) {
-    fs.copyFileSync(dllTarget, path.join(tempZipStaging, "WebView2Loader.dll"));
-  }
-  if (fs.existsSync(batPath)) {
-    fs.copyFileSync(batPath, path.join(tempZipStaging, "run_portable.bat"));
-  }
-  if (fs.existsSync(backendTargetDir)) {
-    fs.cpSync(backendTargetDir, path.join(tempZipStaging, "backend"), { recursive: true });
-  }
-  if (webview2Source) {
-    const stagingWvDir = path.join(tempZipStaging, "webview2");
-    if (!fs.existsSync(stagingWvDir)) fs.mkdirSync(stagingWvDir, { recursive: true });
-    fs.copyFileSync(webview2Source, path.join(stagingWvDir, "MicrosoftEdgeWebview2Setup.exe"));
-    fs.copyFileSync(webview2Source, path.join(tempZipStaging, "MicrosoftEdgeWebview2Setup.exe"));
-  }
-
   if (fs.existsSync(zipTarget)) {
     fs.unlinkSync(zipTarget);
   }
@@ -304,20 +297,25 @@ with zipfile.ZipFile(dst, 'w', zipfile.ZIP_DEFLATED) as zf:
   const venvPy = path.join(projectRoot, ".venv", "Scripts", "python.exe");
   const pyExe = fs.existsSync(venvPy) ? `"${venvPy}"` : "python";
   const { execSync } = require("child_process");
-  execSync(`${pyExe} "${pyScript}" "${tempZipStaging}" "${zipTarget}"`, { stdio: "inherit" });
+  execSync(`${pyExe} "${pyScript}" "${portableDir}" "${zipTarget}"`, { stdio: "inherit" });
   if (fs.existsSync(pyScript)) fs.unlinkSync(pyScript);
-  fs.rmSync(tempZipStaging, { recursive: true, force: true });
 
   if (fs.existsSync(zipTarget)) {
     const stat = fs.statSync(zipTarget);
     const hash = calculateSha256(zipTarget);
     console.log(`✔ To'liq Portativ Paket: ${path.basename(zipTarget)} (${(stat.size / (1024 * 1024)).toFixed(2)} MB)`);
-    manifest.files.push({
+    const existingZipIdx = manifest.files.findIndex(f => f.name === path.basename(zipTarget));
+    const zipEntry = {
       name: path.basename(zipTarget),
       size_bytes: stat.size,
       size_mb: parseFloat((stat.size / (1024 * 1024)).toFixed(2)),
       sha256: hash,
-    });
+    };
+    if (existingZipIdx >= 0) {
+      manifest.files[existingZipIdx] = zipEntry;
+    } else {
+      manifest.files.push(zipEntry);
+    }
   }
 } catch (err) {
   console.warn(`⚠ Portable ZIP yaratishda ogohlantirish: ${err.message}`);
@@ -332,8 +330,7 @@ console.log(`✔ Versiya manifesti: version_manifest.json`);
 const sumsLines = [];
 const primaryFiles = [
   `Misa-AI-${versionName}.exe`,
-  `Misa-AI-Setup-${versionName}.exe`,
-  `Misa-AI-${versionName}.msi`,
+  ...(includeInstallers ? [`Misa-AI-Setup-${versionName}.exe`, `Misa-AI-${versionName}.msi`] : []),
   `Misa-AI-${versionName}-Portable.zip`
 ];
 for (const pf of primaryFiles) {
@@ -356,13 +353,11 @@ if (fs.existsSync(releasesMdPath)) {
 }
 
 const releaseEntry = `### [${versionName}] — ${new Date().toLocaleDateString("uz-UZ")}
-- **Desktop Ilova**: \`${versionName}/Misa-AI-${versionName}.exe\`
-- **Windows MSI**: \`${versionName}/Misa-AI-${versionName}.msi\`
-- **NSIS Setup**: \`${versionName}/Misa-AI-Setup-${versionName}.exe\`
+- **Desktop Ilova (Portativ)**: \`${versionName}/Misa-AI-${versionName}.exe\`
+- **Portativ Arxiv (.zip)**: \`${versionName}/Misa-AI-${versionName}-Portable.zip\`
 - **Manifest**: \`${versionName}/version_manifest.json\`
 - **Backend**: Python API Server (\`http://127.0.0.1:18420\`)
-
-`;
+` + (includeInstallers ? `- **Windows MSI**: \`${versionName}/Misa-AI-${versionName}.msi\`\n- **NSIS Setup**: \`${versionName}/Misa-AI-Setup-${versionName}.exe\`\n` : "") + `\n`;
 
 if (!existingReleases.includes(`### [${versionName}]`)) {
   const newReleasesMd = `# 🚀 Misa AI Versiyalar Arxiv (Releases Archive)\n\n` + releaseEntry + existingReleases.replace(/^# 🚀 (Mikasa|Misa) AI Versiyalar Arxiv \(Releases Archive\)\r?\n\r?\n/, "");

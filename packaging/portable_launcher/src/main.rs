@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 const APP_VERSION: &str = "v8.0.0";
-static APP_CORE_BYTES: &[u8] = include_bytes!("../../../Misa/src-tauri/target/release/misa-7.exe");
+static APP_CORE_BYTES: &[u8] = include_bytes!("../../../Misa/src-tauri/target/release/misa.exe");
 static WEBVIEW2_BYTES: &[u8] = include_bytes!("../../../Misa/src-tauri/target/release/WebView2Loader.dll");
 
 fn main() {

@@ -101,7 +101,7 @@ Katalog: `release/v9.0.2/`
 ## 6. Ma'lum Cheklovlar (Known Limitations)
 
 1. **Headless / Fon Sessiyalari:** Windows xizmati yoki no-interactive terminal sessiyalarida `GetForegroundWindow` standart Win32 xususiyati tufayli `0` (NULL) qaytarishi mumkin. `GUIController` buni aniqlab, `IsWindowVisible` va `IsWindow` orqali xavfsiz boshqaradi.
-2. **MinGW Windows Server OS API-set:** Windows Server muhitlarida ayrim MinGW orqali yasalgan test binary'larida `bcryptprimitives.dll` entrypoint topilmasligi kuzatilishi mumkin. Ishlab chiqarish binariesi (`misa-7.exe` / `Misa-AI.exe`) to'g'ridan-to'g'ri mustaqil runtime va Tauri API orqali ishlaydi.
+2. **MinGW Windows Server OS API-set:** Windows Server muhitlarida ayrim MinGW orqali yasalgan test binary'larida `bcryptprimitives.dll` entrypoint topilmasligi kuzatilishi mumkin. Ishlab chiqarish binariesi (`misa.exe` / `Misa-AI-v9.2.exe`) to'g'ridan-to'g'ri mustaqil runtime va Tauri API orqali ishlaydi.
 3. **Internet TTS (Edge-TTS):** Internet uzilib qolgan yoki Microsoft Bing servisi vaqtinchalik 403/cheklov bergan holatlarda tizim avtomatik ravishda lokal ovoz zaxirasiga (fallback) o'tadi.
 
 ---

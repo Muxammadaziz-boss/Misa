@@ -2078,7 +2078,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "misa-7"
+name = "misa"
 version = "9.2.0"
 dependencies = [
  "serde",
