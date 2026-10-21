@@ -4262,10 +4262,10 @@ class BackendService {
   public async getCurrentAuthUser(): Promise<MikasaAuthUser | null> {
     try {
       const acc = await this.getAccount();
-      if (acc && acc.ok && (acc.user_id || acc.name)) {
+      if (acc && acc.ok && acc.name) {
         return {
-          id: acc.user_id || "local_user",
-          username: acc.name || acc.user_id || "Muhammadaziz",
+          id: "local_user",
+          username: acc.name,
           email: acc.email || "",
           is_active: true,
           is_verified: true,
