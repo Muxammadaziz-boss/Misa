@@ -17,6 +17,7 @@ import { CommandPalette } from "./components/CommandPalette";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { UpdateModal } from "./components/UpdateModal";
 import { ContextMenu } from "./components/ContextMenu";
+import { MisaIntroSplash } from "./components/MisaIntroSplash";
 import { backendService, MikasaAuthUser } from "./services/backendService";
 import { UpdateService, UpdateCheckResponse } from "./services/updateService";
 import { supabase, isSupabaseConfigured } from "./services/supabaseClient";
@@ -108,7 +109,8 @@ function App() {
     setUpdateModalOpen(true);
   }, []);
 
-  // Auth & Profile State
+  // Intro Splash & Auth State
+  const [introActive, setIntroActive] = useState<boolean>(true);
   const [authChecking, setAuthChecking] = useState<boolean>(true);
   const [currentUser, setCurrentUser] = useState<MisaAuthUser | null>(null);
   const [userName, setUserName] = useState<string>(() => {
@@ -409,6 +411,10 @@ function App() {
         );
     }
   };
+
+  if (introActive) {
+    return <MisaIntroSplash onFinish={() => setIntroActive(false)} />;
+  }
 
   if (authChecking) {
     return (

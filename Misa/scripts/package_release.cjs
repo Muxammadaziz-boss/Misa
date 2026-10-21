@@ -280,6 +280,12 @@ if (webview2Source) {
   fs.copyFileSync(webview2Source, path.join(portableDir, "MicrosoftEdgeWebview2Setup.exe"));
 }
 
+const introMp4Source = path.join(releaseVersionDir, "misa_intro.mp4");
+if (fs.existsSync(introMp4Source)) {
+  fs.copyFileSync(introMp4Source, path.join(portableDir, "misa_intro.mp4"));
+  console.log(`✔ Intro Splash Video (misa_intro.mp4) portativ papkaga nusxalandi`);
+}
+
 // 7.2.1 Setup Custom Windows Folder Icon via desktop.ini and app.ico
 const iconSource = path.resolve(__dirname, "../src-tauri/icons/icon.ico");
 const desktopIniContent = `[.ShellClassInfo]
