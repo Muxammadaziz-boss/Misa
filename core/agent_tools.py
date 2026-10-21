@@ -12,7 +12,7 @@ import webbrowser
 import subprocess
 import base64
 from urllib.parse import quote_plus
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Any, Callable, Dict, List, Optional, Tuple, Set
 
 from core.intelligence.types import RiskLevel
@@ -41,7 +41,16 @@ class Tool(ToolContract2):
     def __init__(self, *args, **kwargs):
         if "func" in kwargs and "function" not in kwargs:
             kwargs["function"] = kwargs.pop("func")
-        super().__init__(*args, **kwargs)
+        if "timeout_seconds" in kwargs and "timeout" not in kwargs:
+            kwargs["timeout"] = float(kwargs.pop("timeout_seconds", 10.0))
+        if "is_risky" in kwargs:
+            is_r = kwargs.pop("is_risky")
+            if "risk_level" not in kwargs and is_r:
+                kwargs["risk_level"] = RiskLevel.HIGH
+        # Faqat ToolContract2 maydonlarini qabul qilish
+        known_fields = {f.name for f in fields(ToolContract2)}
+        filtered_kwargs = {k: v for k, v in kwargs.items() if k in known_fields}
+        super().__init__(*args, **filtered_kwargs)
 
 
 # ========================================================
@@ -2905,6 +2914,38 @@ TOOL_VECTOR_SEARCH = Tool(
 
 
 # ========================================================
+# STITCH UI/UX DESIGNER & TEMPLATE GENERATOR TOOL
+# ========================================================
+
+def _stitch_designer_tool(prompt: str, project_title: str = "", save_to_desktop: bool = True) -> str:
+    """Stitch UI/UX andozalar yaratish vositasi"""
+    try:
+        from core.tools.stitch_tool import stitch_ui_designer
+        return stitch_ui_designer(prompt, project_title=project_title or None, save_to_desktop=save_to_desktop)
+    except Exception as e:
+        logger.error(f"stitch_ui_designer xatolik: {e}")
+        return f"❌ Stitch vositasi xatoligi: {e}"
+
+TOOL_STITCH_DESIGNER = Tool(
+    name="stitch_ui_designer",
+    description="Google Stitch orqali matnli tavsifdan to'liq andozalar, frontend UI dizayn va Tailwind CSS veb-sahifalar yaratish",
+    parameters={
+        "prompt": {"type": "string", "description": "Yaratilishi kerak bo'lgan andoza tavsifi (masalan: 'Kiyim do'koni mobil ilovasi dashboard')", "required": True},
+        "project_title": {"type": "string", "description": "Loyiha sarlavhasi (ixtiyoriy)", "required": False},
+        "save_to_desktop": {"type": "boolean", "description": "HTML faylni Ish stoliga saqlash", "required": False},
+    },
+    function=_stitch_designer_tool,
+    category="ui_design",
+    capabilities=['ui_design', 'stitch', 'template_generator', 'frontend_design'],
+    aliases=['stitch', 'andoza', 'dizayn', 'stitch_designer'],
+    risk_level=RiskLevel.LOW,
+    timeout=120.0,
+    idempotent=False,
+    destructive=False,
+)
+
+
+# ========================================================
 # GLOBAL REGISTRY — Barcha tool'lar
 # ========================================================
 
@@ -2948,6 +2989,17 @@ def create_default_registry() -> ToolRegistry:
     # Yangi utility tool'lar (v3.5 — Sandbox + SecureVault)
     registry.register(TOOL_SANDBOX)
     registry.register(TOOL_SECRET_VAULT)
+    # Stitch UI/UX Designer & Andozalar vositasi
+    registry.register(TOOL_STITCH_DESIGNER)
+
+    # Universal Model Context Protocol (MCP) integratsiyasi — barcha MCP serverlarni avtomatik ulash
+    try:
+        from core.mcp.bridge import mount_mcp_tools_to_registry
+        mcp_count = mount_mcp_tools_to_registry(registry)
+        logger.info(f"MCP integratsiyasi: {mcp_count} ta tashqi MCP vositasi ulandi")
+    except Exception as e:
+        logger.warning(f"MCP vositalarini ro'yxatga olishda ogohlantirish: {e}")
+
     logger.info(f"Tool Registry: {registry.count} ta tool ro'yxatdan o'tdi")
     return registry
 

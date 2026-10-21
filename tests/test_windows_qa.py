@@ -93,7 +93,7 @@ class TestWindowsQA(unittest.TestCase):
         self.assertIn("box-sizing: border-box", css_content, "DPI o'lchamlari to'g'ri hisoblanishi uchun border-box talab qilinadi")
 
     def test_tauri_config_window_bounds(self):
-        """tauri.conf.json dagi oyna chegaralari (1024x700 min) Windows talablariga mos"""
+        """Tauri oyna chegaralari (1024x700 min) va frameless bezaklari Windows talablariga mos"""
         tauri_conf_path = os.path.join(BASE_DIR, "Misa", "src-tauri", "tauri.conf.json")
         self.assertTrue(os.path.exists(tauri_conf_path))
 
@@ -101,11 +101,18 @@ class TestWindowsQA(unittest.TestCase):
             t_conf = json.load(f)
 
         windows = t_conf.get("app", {}).get("windows", [])
-        self.assertGreaterEqual(len(windows), 1)
-        win = windows[0]
-        self.assertGreaterEqual(win.get("minWidth", 0), 1024)
-        self.assertGreaterEqual(win.get("minHeight", 0), 700)
-        self.assertEqual(win.get("decorations"), False, "Frameless custom chrome oynasi ishlatilishi kerak")
+        if windows:
+            win = windows[0]
+            self.assertGreaterEqual(win.get("minWidth", 0), 1024)
+            self.assertGreaterEqual(win.get("minHeight", 0), 700)
+            self.assertEqual(win.get("decorations"), False, "Frameless custom chrome oynasi ishlatilishi kerak")
+        else:
+            lib_rs_path = os.path.join(BASE_DIR, "Misa", "src-tauri", "src", "lib.rs")
+            self.assertTrue(os.path.exists(lib_rs_path))
+            with open(lib_rs_path, "r", encoding="utf-8") as f:
+                lib_content = f.read()
+            self.assertIn("min_inner_size(1024.0, 700.0)", lib_content)
+            self.assertIn("decorations(false)", lib_content)
 
 
 if __name__ == "__main__":

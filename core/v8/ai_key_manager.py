@@ -26,6 +26,15 @@ DEFAULT_GEMINI_MODELS = [
 ]
 
 
+DEFAULT_BUILTIN_KEYS: Dict[str, List[str]] = {
+    "gemini": [],
+    "groq": [],
+    "cerebras": [],
+    "openrouter": [],
+    "nvidia": [],
+}
+
+
 class AIKeyManager:
     """Markazlashgan dinamik AI kalitlari boshqaruvchisi.
     Kalitlarni Supabase bazasida, bulut backendda va mahalliy keshda saqlaydi hamda
@@ -44,7 +53,7 @@ class AIKeyManager:
         }
         self._user_keys: Dict[str, Dict[str, str]] = {}  # user_id -> {provider: key}
         self._active_models: Dict[str, str] = {
-            "gemini": "gemini-2.0-flash",
+            "gemini": "gemini-3.8-flash",
             "groq": "llama-3.3-70b-versatile",
             "cerebras": "llama-3.3-70b",
             "openrouter": "meta-llama/llama-3.3-70b-instruct:free",
@@ -69,13 +78,26 @@ class AIKeyManager:
                     for prov in ("gemini", "openrouter", "groq", "cerebras", "nvidia"):
                         keys = data.get(prov, [])
                         if isinstance(keys, list):
-                            self._system_keys[prov] = [str(k).strip() for k in keys if k and str(k).strip()]
-                        elif isinstance(keys, str) and keys.strip():
+                            self._system_keys[prov] = [str(k).strip() for k in keys if k and str(k).strip() and not str(k).startswith("AIzaSyTest")]
+                        elif isinstance(keys, str) and keys.strip() and not keys.startswith("AIzaSyTest"):
                             self._system_keys[prov] = [keys.strip()]
                     if data.get("active_models"):
                         self._active_models.update(data["active_models"])
         except Exception as e:
             logger.warning(f"AI kalitlari keshini yuklashda xatolik: {e}")
+
+        # Har doim standart tayyor kalitlarni ta'minlash (agar bo'sh bo'lsa)
+        for prov, default_keys in DEFAULT_BUILTIN_KEYS.items():
+            if not self._system_keys.get(prov):
+                env_k = (
+                    os.getenv(f"MISA_{prov.upper()}_API_KEY", "").strip()
+                    or os.getenv(f"{prov.upper()}_API_KEY", "").strip()
+                )
+                if env_k and env_k not in self._system_keys[prov]:
+                    self._system_keys[prov].append(env_k)
+                for dk in default_keys:
+                    if dk and dk not in self._system_keys[prov]:
+                        self._system_keys[prov].append(dk)
 
     def _save_cache(self):
         """Kalitlarni xavfsiz mahalliy keshga saqlash"""
@@ -307,6 +329,10 @@ class AIKeyManager:
             }
 
         any_configured = any(p["configured"] for p in providers_status.values())
+        active_keys = {
+            prov: self.get_active_key(prov)
+            for prov in ("gemini", "groq", "cerebras", "openrouter", "nvidia")
+        }
 
         return {
             "gemini_configured": has_gemini,
@@ -320,6 +346,7 @@ class AIKeyManager:
             "supported_models": DEFAULT_GEMINI_MODELS,
             "last_sync": self._last_sync_time,
             "status": "ready" if any_configured else "missing_key",
+            "active_keys": active_keys,
             "providers": providers_status,
         }
 

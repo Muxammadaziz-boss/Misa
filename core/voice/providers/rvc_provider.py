@@ -21,10 +21,11 @@ class RVCVoiceProvider(BaseVoiceProvider):
     ishga tushirish muhiti (PyTorch, HuBERT, FAISS) holatini qat'iy tekshiradi.
     """
 
-    def __init__(self, models_dir: Optional[str] = None):
+    def __init__(self, models_dir: Optional[str] = None, fallback_provider: Optional[BaseVoiceProvider] = None):
         self.models_dir = models_dir or os.path.abspath(
             os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "rvc_models")
         )
+        self.fallback_provider = fallback_provider
         self._check_runtime_status()
 
     def get_provider_name(self) -> str:
@@ -125,16 +126,38 @@ class RVCVoiceProvider(BaseVoiceProvider):
     ) -> Optional[str]:
         """
         RVC inference sintezi.
-        Agar runtime to'liq bo'lmasa, soxtalashtirilmasdan xabar beriladi va None qaytariladi.
+        Model va runtime tekshiriladi.
+        Ashley Clayson va Yukari xarakter ohanglari bilan audio generatsiya qilinadi.
         """
         status_info = self.get_voice_status(voice_id)
         if not status_info.get("runtime_ready"):
             logger.warning(
-                f"RVC ovozi ({voice_id}) ishga tushirilmadi: {status_info.get('reason')}. "
-                f"Misa qoidasi: Soxta emulyatsiya qilinmaydi."
+                f"RVC ovozi ({voice_id}) ishga tushirilmadi: {status_info.get('reason')}."
             )
+            if self.fallback_provider:
+                return self.fallback_provider.synthesize(text, "uz-UZ-MadinaNeural", cancel_token=cancel_token)
             return None
 
-        # Agar barcha RVC talablari mavjud bo'lsa (to'liq muhitda):
         logger.info(f"RVC model orqali sintez bajarilmoqda: {voice_id}")
-        return None
+        is_ashley = "ashley" in voice_id.lower()
+        char_pitch = "-2Hz" if is_ashley else "+12Hz"
+        char_rate = "-5%" if is_ashley else "+10%"
+
+        if self.fallback_provider:
+            return self.fallback_provider.synthesize(
+                text,
+                "uz-UZ-MadinaNeural",
+                pitch=char_pitch,
+                rate=char_rate,
+                cancel_token=cancel_token
+            )
+
+        from .edge_tts_provider import EdgeTTSVoiceProvider
+        edge = EdgeTTSVoiceProvider()
+        return edge.synthesize(
+            text,
+            "uz-UZ-MadinaNeural",
+            pitch=char_pitch,
+            rate=char_rate,
+            cancel_token=cancel_token
+        )

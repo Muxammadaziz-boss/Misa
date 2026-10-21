@@ -429,7 +429,7 @@ function App() {
           }}
         />
         <div style={{ fontSize: "13.5px", color: "var(--text-secondary)", fontWeight: 500 }}>
-          Misa AI v9.0 ishga tushirilmoqda...
+          Misa AI v9.3 ishga tushirilmoqda...
         </div>
       </div>
     );

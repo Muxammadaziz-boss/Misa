@@ -115,15 +115,16 @@ class VoiceManager:
         if provider_name == "rvc":
             rvc_status = self.registry.rvc_provider.get_voice_status(vid)
             if rvc_status.get("runtime_ready"):
-                return self.registry.rvc_provider.synthesize(clean, vid, cancel_token=cancel_token)
-            else:
-                logger.warning(
-                    f"RVC modeli '{vid}' nofaol ({rvc_status.get('reason')}). "
-                    f"Standart Madina ovoziga o'tilmoqda."
-                )
-                return self.registry.edge_provider.synthesize(
-                    clean, "uz-UZ-MadinaNeural", cancel_token=cancel_token
-                )
+                res = self.registry.rvc_provider.synthesize(clean, vid, cancel_token=cancel_token)
+                if res and os.path.exists(res):
+                    return res
+            logger.warning(
+                f"RVC modeli '{vid}' nofaol yoki audio yaratmadi ({rvc_status.get('reason')}). "
+                f"Standart Madina ovoziga o'tilmoqda."
+            )
+            return self.registry.edge_provider.synthesize(
+                clean, "uz-UZ-MadinaNeural", cancel_token=cancel_token
+            )
 
         # Standart fallback
         return self.registry.edge_provider.synthesize(

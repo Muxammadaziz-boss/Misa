@@ -9,8 +9,9 @@ const crypto = require("crypto");
 // 1. Get current version from package.json
 const packageJsonPath = path.resolve(__dirname, "../package.json");
 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
-const version = packageJson.version || "9.2.0";
-const versionName = (version === "9.2.0" || version === "9.2") ? "v9.2" : `v${version}`;
+const version = packageJson.version || "9.3.0";
+const match = version.match(/^(\d+\.\d+)/);
+const versionName = match ? `v${match[1]}` : `v${version}`;
 
 // 2. Define release target directory inside yordamchi_9.0.0/release/v<version>
 const projectRoot = path.resolve(__dirname, "../../");
@@ -120,6 +121,7 @@ copyFileWithLog(dllSource, dllTarget, "WebView2 Loader DLL");
 
 // 4.2 Copy Bundled Backend Runtime (if exists)
 const backendSrcCandidates = [
+  path.join(projectRoot, "dist/misa_backend"),
   path.join(projectRoot, "dist/backend_build/misa_backend"),
   path.resolve(__dirname, "../src-tauri/backend"),
   path.join(releaseVersionDir, "backend"),

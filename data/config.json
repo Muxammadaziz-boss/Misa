@@ -1,6 +1,6 @@
 {
   "app": {
-    "version": "9.2.0",
+    "version": "9.3.0",
     "name": "Misa AI",
     "debug": false
   },
@@ -14,7 +14,7 @@
     "vad_enabled": true,
     "vad_threshold": 0.015,
     "silence_duration": 1.2,
-    "tts_speed": 1.0,
+    "tts_speed": 1.8,
     "tts_engine": "edge_tts",
     "auto_speak": true
   },
@@ -23,7 +23,7 @@
     "color_scheme": "green",
     "compact_mode": true,
     "window_size": "1100x800",
-    "compact_window_size": "1168x700+26+26",
+    "compact_window_size": "1264x700+26+26",
     "font_family": "Segoe UI",
     "font_size": 12,
     "color": "green",
@@ -52,7 +52,7 @@
   },
   "user": {
     "name": "test",
-    "voice_type": "ayol",
+    "voice_type": "erkak",
     "avatar": "emerald",
     "role": "Dasturchi / Muhandis",
     "bio": "Misa AI shaxsiy sun'iy intellekt yordamchisi",
@@ -61,7 +61,7 @@
   "voice": {
     "tts_engine": "edge_tts",
     "silero_model": "uz-UZ-MadinaNeural",
-    "speed": 1.0,
+    "speed": 1.8,
     "sample_rate": 44100,
     "fish_audio_model_anime": "d019b0d01cdb478e8f96df578942a552",
     "fish_audio_model_yigit": "502b927ae6c44543a3b37eea8529b0a5"

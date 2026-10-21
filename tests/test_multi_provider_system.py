@@ -132,11 +132,15 @@ class TestMultiProviderSystem(unittest.TestCase):
     # 2. MISSING API KEY
     def test_missing_api_key(self):
         with patch.dict(os.environ, {}, clear=True):
-            prov = OpenAICompatibleProvider(name="groq", base_url="https://api.groq.com/openai/v1", api_key="", health_monitor=self.health_monitor, registry=self.registry)
-            self.assertFalse(prov.is_available())
-            req = AIRequest(message="Salom")
-            with self.assertRaises(AuthenticationError):
-                prov.generate(req)
+            with patch("core.v8.ai_key_manager.get_ai_key_manager") as mock_mgr:
+                mock_mgr.return_value.get_active_key.return_value = ""
+                mock_mgr.return_value.get_key.return_value = ""
+                mock_mgr.return_value.get_active_openrouter_key.return_value = ""
+                prov = OpenAICompatibleProvider(name="groq", base_url="https://api.groq.com/openai/v1", api_key="", health_monitor=self.health_monitor, registry=self.registry)
+                self.assertFalse(prov.is_available())
+                req = AIRequest(message="Salom")
+                with self.assertRaises(AuthenticationError):
+                    prov.generate(req)
 
     # 3. INVALID API KEY (HTTP 401 / 403)
     @patch("requests.post")

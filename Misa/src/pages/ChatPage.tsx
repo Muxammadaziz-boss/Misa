@@ -1002,7 +1002,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
               </div>
               <div>
                 <div style={{ fontSize: "12px", fontWeight: 600, color: "#FFFFFF" }}>
-                  Misa Neural v9.0
+                  Misa Neural v9.3
                 </div>
                 <div style={{ fontSize: "10.5px", color: "#4EDEA3" }}>
                   {backendStatus.status === "online" ? "Kontekst oynasi faol" : "Ulanilmoqda..."}
@@ -1066,7 +1066,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
               color: "var(--text-secondary)",
             }}
           >
-            Bugun • Misa v9.0 Avtonom Ish Maydoni
+            Bugun • Misa v9.3 Avtonom Ish Maydoni
           </span>
 
           <div style={{ width: "110px" }} />
@@ -1110,7 +1110,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                   Salom, {userName}!
                 </h2>
                 <p style={{ fontSize: "13.5px", color: "var(--text-secondary)", maxWidth: "460px" }}>
-                  Misa v9.0 Neural suhbat oynasi tayyor. Savol bering, kod tahlil qiling yoki tizim buyruqlarini ishga tushiring.
+                  Misa v9.3 Neural suhbat oynasi tayyor. Savol bering, kod tahlil qiling yoki tizim buyruqlarini ishga tushiring.
                 </p>
               </div>
 
@@ -1299,10 +1299,10 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                               msg.text.includes("Google Gemini API kaliti xatoligi");
 
                             const badgeLabel = isWarning
-                              ? "v9.0 Ogohlantirish"
+                              ? "v9.3 Ogohlantirish"
                               : isOffline
-                              ? "v9.0 Mahalliy"
-                              : "v9.0 Neural";
+                              ? "v9.3 Mahalliy"
+                              : "v9.3 Neural";
                             const badgeBg = isWarning
                               ? "rgba(255, 171, 0, 0.18)"
                               : isOffline
@@ -1771,7 +1771,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                 color: "var(--text-muted)",
               }}
             >
-              Misa AI v9.0 xato qilishi mumkin. Muhim ma'lumotlarni tekshirib ko'ring.
+              Misa AI v9.3 xato qilishi mumkin. Muhim ma'lumotlarni tekshirib ko'ring.
             </div>
           </div>
         </div>

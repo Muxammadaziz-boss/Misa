@@ -107,7 +107,7 @@ export const SchedulerPage: React.FC<SchedulerPageProps> = ({ onAskMisa }) => {
     return [
       {
         id: "plan_1",
-        title: "Misa AI v9.0 Ultra Glass tizim arxitekturasini ko'rib chiqish",
+        title: "Misa AI v9.3 Ultra Glass tizim arxitekturasini ko'rib chiqish",
         description: "Asosiy oynalar, suzuvchi navigatsiya va xotira markazi integratsiyasini tekshirish.",
         date: todayStr,
         startTime: "10:00",
@@ -1753,7 +1753,7 @@ export const SchedulerPage: React.FC<SchedulerPageProps> = ({ onAskMisa }) => {
                 required
                 value={formTitle}
                 onChange={(e) => setFormTitle(e.target.value)}
-                placeholder="Masalan: Misa v9.0 reliz taqdimoti"
+                placeholder="Masalan: Misa v9.3 reliz taqdimoti"
                 className="misa-glass-input"
                 style={{ width: "100%", padding: "10px 14px", borderRadius: "12px", fontSize: "13.5px" }}
               />

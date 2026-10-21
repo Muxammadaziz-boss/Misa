@@ -17,7 +17,7 @@ class VoiceRegistry:
     def __init__(self):
         self.edge_provider = EdgeTTSVoiceProvider()
         self.fish_provider = FishAudioVoiceProvider(fallback_provider=self.edge_provider)
-        self.rvc_provider = RVCVoiceProvider()
+        self.rvc_provider = RVCVoiceProvider(fallback_provider=self.edge_provider)
 
     def get_catalog(self) -> List[Dict[str, Any]]:
         """Hozirgi barcha ovozlarning dinamik tekshirilgan katalogini olish"""

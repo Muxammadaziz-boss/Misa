@@ -26,7 +26,7 @@ class AgentConfig:
     reconnect_max_delay: float = 60.0
     reconnect_jitter: bool = True
     protocol_version: str = "1.0"
-    agent_version: str = "9.2.0"
+    agent_version: str = "9.3.0"
     poll_interval: float = 3.0
     vault_dir: Optional[str] = None
     config_path: Optional[str] = None

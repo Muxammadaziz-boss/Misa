@@ -68,7 +68,7 @@ def get_app_version() -> str:
         from core.v8.device import get_current_app_version
         return get_current_app_version()
     except Exception:
-        return "9.2.0"
+        return "9.3.0"
 
 
 def load_runtime_dotenv() -> None:
@@ -279,7 +279,7 @@ async def handle_status(request):
     return web.json_response({
         "status": "online",
         "app": "MISA AI",
-        "version": "9.2.0",
+        "version": get_app_version(),
         "user": user,
         "ai_available": ai_ok,
         "voice_state": _voice_state,
@@ -2827,6 +2827,116 @@ async def handle_tools_catalog(request):
     })
 
 
+# ========================================================
+# UNIVERSAL MODEL CONTEXT PROTOCOL (MCP) HANDLERS
+# ========================================================
+
+async def handle_mcp_servers_list(request):
+    """GET /api/mcp/servers - Barcha sozlangan MCP serverlar va ularning holati"""
+    try:
+        from core.mcp.manager import get_mcp_manager
+        mgr = get_mcp_manager()
+        servers = mgr.get_servers()
+        tools = mgr.get_all_tools()
+        return web.json_response({
+            "ok": True,
+            "servers": servers,
+            "total_servers": len(servers),
+            "tools_count": len(tools),
+            "tools": tools,
+        })
+    except Exception as e:
+        logger.error(f"MCP serverlarini olishda xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_mcp_server_save(request):
+    """POST /api/mcp/servers - Yangi MCP server qo'shish yoki mavjudini yangilash"""
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "Noto'g'ri JSON formati"}, status=400)
+
+    server_id = body.get("id") or body.get("name", "").lower().replace(" ", "_")
+    if not server_id:
+        return web.json_response({"ok": False, "error": "Server 'id' yoki 'name' talab qilinadi"}, status=400)
+
+    try:
+        from core.mcp.manager import get_mcp_manager
+        mgr = get_mcp_manager()
+        saved = mgr.register_server(server_id, body)
+        _, _, _, _, tools, _ = get_modules()
+        if tools:
+            from core.mcp.bridge import mount_mcp_tools_to_registry
+            mount_mcp_tools_to_registry(tools)
+        return web.json_response({"ok": True, "saved": saved, "server_id": server_id})
+    except Exception as e:
+        logger.error(f"MCP server saqlashda xatolik: {e}")
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_mcp_server_toggle(request):
+    """POST /api/mcp/servers/{id}/toggle - MCP serverni yoqish / o'chirish"""
+    server_id = request.match_info.get("id")
+    try:
+        from core.mcp.manager import get_mcp_manager
+        mgr = get_mcp_manager()
+        toggled = mgr.toggle_server(server_id)
+        _, _, _, _, tools, _ = get_modules()
+        if tools:
+            from core.mcp.bridge import mount_mcp_tools_to_registry
+            mount_mcp_tools_to_registry(tools)
+        return web.json_response({"ok": True, "server_id": server_id, "toggled": toggled})
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_mcp_server_delete(request):
+    """DELETE /api/mcp/servers/{id} - MCP serverni o'chirish"""
+    server_id = request.match_info.get("id")
+    try:
+        from core.mcp.manager import get_mcp_manager
+        mgr = get_mcp_manager()
+        removed = mgr.remove_server(server_id)
+        return web.json_response({"ok": True, "server_id": server_id, "removed": removed})
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_mcp_tools_list(request):
+    """GET /api/mcp/tools - Barcha ulangan MCP vositalari ro'yxati"""
+    try:
+        from core.mcp.manager import get_mcp_manager
+        mgr = get_mcp_manager()
+        tools = mgr.get_all_tools(force_refresh=True)
+        return web.json_response({"ok": True, "total": len(tools), "tools": tools})
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def handle_mcp_tool_call(request):
+    """POST /api/mcp/call - Muayyan MCP vositasini chaqirish"""
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "Noto'g'ri JSON"}, status=400)
+
+    server_id = body.get("server_id")
+    tool_name = body.get("tool_name") or body.get("name")
+    arguments = body.get("arguments", {})
+
+    if not server_id or not tool_name:
+        return web.json_response({"ok": False, "error": "'server_id' va 'tool_name' majburiy"}, status=400)
+
+    try:
+        from core.mcp.manager import get_mcp_manager
+        mgr = get_mcp_manager()
+        res = mgr.call_tool(server_id, tool_name, arguments)
+        return web.json_response({"ok": True, "result": res})
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
 # ========== 7. HISOB VA SOZLAMALAR (ACCOUNT) HANDLERS ==========
 CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
 USER_NAME_FILE = os.path.join(DATA_DIR, "foydalanuvchi_ismi.txt")
@@ -2936,10 +3046,21 @@ async def handle_account_get(request):
         active_keys = status_sum.get("active_keys", {}) if isinstance(status_sum, dict) else {}
         for prov in ("gemini", "groq", "cerebras", "openrouter", "nvidia"):
             k = active_keys.get(prov) or ""
+            if not k and ai_mgr:
+                k = ai_mgr.get_active_key(prov, user_id=user_id)
+            if not k:
+                k = (
+                    os.environ.get(f"MISA_{prov.upper()}_API_KEY", "").strip()
+                    or os.environ.get(f"{prov.upper()}_API_KEY", "").strip()
+                    or ai_cfg.get(f"{prov}_api_key", "")
+                )
             has_k = bool(k)
+            m_key = _mask_api_key(k) if has_k else ""
             ai_keys[prov] = {
+                "configured": has_k,
                 "has_key": has_k,
-                "masked_key": _mask_api_key(k) if has_k else "",
+                "masked": m_key,
+                "masked_key": m_key,
             }
         active_key = ai_mgr.get_active_gemini_key(user_id=user_id) if ai_mgr else None
         if active_key:
@@ -2950,26 +3071,31 @@ async def handle_account_get(request):
 
     # Fallback to env or config if Gemini key was not active in ai_mgr
     if not has_gemini:
-        fallback_k = os.environ.get("GEMINI_API_KEY") or ai_cfg.get("gemini_api_key") or ""
+        fallback_k = os.environ.get("MISA_GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY") or ai_cfg.get("gemini_api_key") or ""
         if fallback_k:
             has_gemini = True
             masked_key = _mask_api_key(fallback_k)
             if "gemini" in ai_keys:
+                ai_keys["gemini"]["configured"] = True
                 ai_keys["gemini"]["has_key"] = True
+                ai_keys["gemini"]["masked"] = masked_key
                 ai_keys["gemini"]["masked_key"] = masked_key
 
     # Barcha qo'llab-quvvatlanuvchi provayderlar xavfsiz qiymatga ega bo'lishini ta'minlash
     for prov in ("gemini", "groq", "cerebras", "openrouter", "nvidia"):
         if prov not in ai_keys:
-            k = os.environ.get(f"{prov.upper()}_API_KEY") or ai_cfg.get(f"{prov}_api_key") or ai_cfg.get(f"{prov}_key") or ""
+            k = os.environ.get(f"MISA_{prov.upper()}_API_KEY") or os.environ.get(f"{prov.upper()}_API_KEY") or ai_cfg.get(f"{prov}_api_key") or ai_cfg.get(f"{prov}_key") or ""
             has_k = bool(k)
+            m_key = _mask_api_key(k) if has_k else ""
             ai_keys[prov] = {
+                "configured": has_k,
                 "has_key": has_k,
-                "masked_key": _mask_api_key(k) if has_k else "",
+                "masked": m_key,
+                "masked_key": m_key,
             }
 
     if not masked_key and has_gemini:
-        masked_key = ai_keys.get("gemini", {}).get("masked_key", "")
+        masked_key = ai_keys.get("gemini", {}).get("masked", "") or ai_keys.get("gemini", {}).get("masked_key", "")
     if not masked_key:
         masked_key = ""
 
@@ -3040,7 +3166,7 @@ async def handle_account_get(request):
             "telemetry_disabled": priv_cfg.get("telemetry_disabled", True),
             "save_conversations": priv_cfg.get("save_conversations", True)
         },
-        "voices_available": (lambda: __import__("core.voice_engine", fromlist=["VOICE_CATALOG"]).VOICE_CATALOG)(),
+        "voices_available": (lambda: __import__("core.voice_engine", fromlist=["get_voice_catalog"]).get_voice_catalog())(),
         "ai_models_available": [
             {
                 "id": "gemini",
@@ -3433,7 +3559,7 @@ async def handle_remote_devices(request):
         agent_ver = (
             local_ident.agent_version
             if (is_local and local_ident and local_ident.agent_version)
-            else (d.agent_version or (local_ident.agent_version if local_ident else "9.2.0"))
+            else (d.agent_version or (local_ident.agent_version if local_ident else "9.3.0"))
         )
         if is_local and local_ident and d.agent_version != local_ident.agent_version:
             d.agent_version = local_ident.agent_version
@@ -5088,6 +5214,7 @@ async def handle_health(request):
 import re as _re
 import threading
 _pending_oauth_sessions: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+_completed_oauth_states: Dict[str, float] = {}
 _pending_oauth_lock = threading.Lock()
 OAUTH_SESSION_TTL_SECONDS = 300.0  # 5 daqiqa
 _OAUTH_STATE_RE = _re.compile(r"^[A-Za-z0-9_\-\.:]{1,256}$")
@@ -5114,22 +5241,30 @@ def _redact_oauth_secrets(text: str) -> str:
 
 
 def _oauth_security_headers() -> Dict[str, str]:
-    """OAuth javoblari keshlanmasligi va Referer orqali token sizib chiqmasligi uchun sarlavhalar."""
+    """OAuth javoblari keshlanmasligi, Referer orqali token sizib chiqmasligi va PNA ruxsati uchun sarlavhalar."""
     return {
         "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
         "Pragma": "no-cache",
         "Referrer-Policy": "no-referrer",
         "X-Content-Type-Options": "nosniff",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, X-Requested-With",
+        "Access-Control-Allow-Private-Network": "true",
     }
 
 
+
 def _clean_expired_oauth_sessions():
-    """Muddati o'tgan OAuth sessiyalarini xotiradan tozalash"""
+    """Muddati o'tgan OAuth sessiyalarini va yakunlangan state keshini xotiradan tozalash"""
     now = time.time()
     with _pending_oauth_lock:
         expired_keys = [k for k, (exp, _) in _pending_oauth_sessions.items() if exp <= now]
         for k in expired_keys:
             _pending_oauth_sessions.pop(k, None)
+        expired_completed = [k for k, exp in _completed_oauth_states.items() if exp <= now]
+        for k in expired_completed:
+            _completed_oauth_states.pop(k, None)
 
 
 def focus_misa_desktop_window() -> bool:
@@ -5383,7 +5518,16 @@ async def handle_oauth_callback(request):
         // 1. Mahalliy API orqali Misa oynasini darhol oldinga chiqarish
         fetch('/api/auth/focus_app', { method: 'POST' }).catch(function() {});
         fetch('http://127.0.0.1:18420/api/auth/focus_app', { method: 'POST' }).catch(function() {});
-        try { window.location.href = 'misa://focus'; } catch(e) {}
+        fetch('http://localhost:18420/api/auth/focus_app', { method: 'POST' }).catch(function() {});
+        try {
+          var appFrame = document.createElement('iframe');
+          appFrame.style.display = 'none';
+          appFrame.src = 'misa://focus';
+          document.body.appendChild(appFrame);
+          setTimeout(function() {
+            try { document.body.removeChild(appFrame); } catch(e) {}
+          }, 1000);
+        } catch(e) {}
         
         // 2. Tugma holatini yangilash
         var btn = document.getElementById('returnBtn');
@@ -5396,7 +5540,7 @@ async def handle_oauth_callback(request):
         // 3. Brauzer tabini yopishga urinish
         setTimeout(function() {
           try { window.close(); } catch(e) {}
-        }, 400);
+        }, 500);
       }
       window.returnToApp = returnToApp;
 
@@ -5412,11 +5556,11 @@ async def handle_oauth_callback(request):
       }
 
       function showSuccessUi() {
-        msgEl.innerHTML = "Tizimga muvaffaqiyatli kirdingiz!<br><span style='font-size:13px;color:#34D399;margin-top:6px;display:block;'>Misa ilovasi ochilmoqda. Ushbu sahifani yopishingiz mumkin.</span>";
+        msgEl.innerHTML = "Tizimga muvaffaqiyatli kirdingiz!<br><span style='font-size:13px;color:#34D399;margin-top:6px;display:block;'>Misa ilovasi ochilmoqda. Ushbu brauzer sahifasini bemalol yopishingiz mumkin.</span>";
         badgeEl.textContent = "Tasdiqlandi ✓";
         badgeEl.className = "status";
         if (actEl) {
-          actEl.innerHTML = '<button id="returnBtn" onclick="returnToApp()" class="btn-return" style="background:#10B981;color:#FFFFFF;">Misa ilovasiga qaytish</button>';
+          actEl.innerHTML = '<button id="returnBtn" onclick="returnToApp()" class="btn-return" style="background:#10B981;color:#FFFFFF;">Misa ilovasiga qaytish</button><div style="font-size:12px;color:#94A3B8;margin-top:10px;">Agar oyna avtomatik ochilmasa, Misa ilovasini tanlang.</div>';
         }
         setTimeout(function() {
           returnToApp();
@@ -5490,7 +5634,7 @@ async def handle_oauth_callback(request):
         }).then(function(res) {
           return res.json();
         }).then(function(data) {
-          if (data && data.ok && data.session) {
+          if (data && (data.ok || data.status === 'completed')) {
             showSuccessUi();
           } else {
             showMissingTokenUi();
@@ -5503,13 +5647,20 @@ async def handle_oauth_callback(request):
       }
 
       function showMissingTokenUi() {
-        msgEl.innerHTML = "Avtorizatsiya tokeni qabul qilinmadi.<br><span style='font-size:13px;color:#94A3B8;margin-top:8px;display:block;'>Agar sahifani yangilagan (refresh) bo'lsangiz, xavfsizlik maqsadida tokenlar tozalangan. Misa ilovasi orqali qaytadan urinib ko'ring.</span>";
-        badgeEl.textContent = "Token topilmadi";
-        badgeEl.className = "status error";
+        msgEl.innerHTML = "Misa AI Portal<br><span style='font-size:13px;color:#94A3B8;margin-top:8px;display:block;'>Agar siz Misa AI ilovasida allaqachon tizimga kirgan bo'lsangiz, ushbu sahifani bemalol yopishingiz mumkin.</span>";
+        badgeEl.textContent = "Faol ✓";
+        badgeEl.className = "status";
+        badgeEl.style.background = "rgba(16, 185, 129, 0.12)";
+        badgeEl.style.color = "#34D399";
         if (actEl) {
-          actEl.innerHTML = '<button id="returnBtn" onclick="returnToApp()" class="btn-return">Misa ilovasiga qaytish</button>';
+          actEl.innerHTML = '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">' +
+            '<button id="returnBtn" onclick="returnToApp()" class="btn-return" style="background:#10B981;color:#FFFFFF;">Misa ilovasiga qaytish</button>' +
+            '<a href="/" class="btn-return" style="background:#38BDF8;color:#0F172A;text-decoration:none;">Web ilovani ochish</a>' +
+            '</div>' +
+            '<div style="font-size:12px;color:#94A3B8;margin-top:10px;">Agar oyna avtomatik ochilmasa, Misa ilovasini tanlang.</div>';
         }
       }
+
     })();
   </script>
 </body>
@@ -5648,6 +5799,8 @@ async def handle_oauth_session_save(request):
         _pending_oauth_sessions[state] = (expires_at, sanitized_session)
         if also_save_default:
             _pending_oauth_sessions["default"] = (expires_at, sanitized_session)
+        if not oauth_error and action not in ("init", "link"):
+            _completed_oauth_states[state] = now + 120.0
 
     # Extract name from JWT if available to immediately sync user name
     if access_token and "." in access_token:
@@ -5735,6 +5888,7 @@ async def handle_oauth_session_get(request):
                     _pending_oauth_sessions.pop(req_state, None)
                 elif _is_completed_oauth_session(data):
                     _pending_oauth_sessions.pop(req_state, None)
+                    _completed_oauth_states[req_state] = now + 120.0
                     # Agar state'siz callback "default" ga ham yozilgan bo'lsa uni ham tozalash
                     def_item = _pending_oauth_sessions.get("default")
                     if def_item and def_item[1] is data:
@@ -5754,6 +5908,8 @@ async def handle_oauth_session_get(request):
                     elif _is_completed_oauth_session(def_data):
                         _pending_oauth_sessions.pop("default", None)
                         _pending_oauth_sessions.pop(req_state, None)
+                        if req_state:
+                            _completed_oauth_states[req_state] = now + 120.0
                         sess_data = def_data
         elif _is_production_mode():
             # XAVFSIZLIK: Production rejimda state parametrisiz sessiya so'rovi rad etiladi (hijack oldini olish)
@@ -5803,6 +5959,16 @@ async def handle_oauth_session_get(request):
             "session": None,
             "message": "OAuth sessiyasi kutilmoqda"
         }, status=200, headers=_oauth_security_headers())
+
+    # Agar state allaqachon muvaffaqiyatli yakunlangan bo'lsa (bir martalik replay himoyasi):
+    if req_state and req_state in _completed_oauth_states:
+        return web.json_response({
+            "ok": False,
+            "status": "completed",
+            "already_consumed": True,
+            "session": None,
+            "error": "OAuth sessiyasi allaqachon bir marta qabul qilingan (replay-protected)",
+        }, status=404, headers=_oauth_security_headers())
 
     # State topilmagan, muddati o'tgan yoki allaqachon olingan (one-time replay himoyasi)
     return web.json_response({
@@ -6876,6 +7042,7 @@ _AUTH_EXEMPT_PATHS = frozenset({
     "/api/telegram/status",
     "/api/auth/register", "/api/auth/login",
     "/api/auth/callback", "/api/auth/callback/session",
+    "/api/auth/focus_app", "/api/focus_app", "/api/system/open_url",
     "/api/auth/forgot-password", "/api/auth/verify-email",
     "/api/auth/reset-password",
     "/api/devices/pairing/complete",
@@ -7151,8 +7318,15 @@ def create_app():
     app.router.add_post("/api/plugins/install", handle_plugins_install)
     app.router.add_post("/api/plugins/uninstall", handle_plugins_uninstall)
     app.router.add_post("/api/plugins/update", handle_plugins_update)
-    app.router.add_post("/api/plugins/execute", handle_plugins_execute)
     app.router.add_get("/api/tools/catalog", handle_tools_catalog)
+
+    # Universal Model Context Protocol (MCP) boshqaruvi
+    app.router.add_get("/api/mcp/servers", handle_mcp_servers_list)
+    app.router.add_post("/api/mcp/servers", handle_mcp_server_save)
+    app.router.add_post("/api/mcp/servers/{id}/toggle", handle_mcp_server_toggle)
+    app.router.add_delete("/api/mcp/servers/{id}", handle_mcp_server_delete)
+    app.router.add_get("/api/mcp/tools", handle_mcp_tools_list)
+    app.router.add_post("/api/mcp/call", handle_mcp_tool_call)
 
     # Hisob va Sozlamalar (Account & Settings)
     app.router.add_get("/api/account", handle_account_get)
@@ -7212,8 +7386,15 @@ def create_app():
     app.router.add_get("/api/focus_app", handle_auth_focus_app)
     app.router.add_post("/api/focus_app", handle_auth_focus_app)
     app.router.add_post("/api/system/open_url", handle_system_open_url)
-    # Root route fallback for port 1420 OAuth redirects
-    app.router.add_get("/", handle_oauth_callback)
+
+    # Preflight OPTIONS handlers
+    async def _handle_preflight_options(request: web.Request) -> web.Response:
+        return web.Response(status=204, headers=_oauth_security_headers())
+
+    app.router.add_options("/api/auth/focus_app", _handle_preflight_options)
+    app.router.add_options("/api/focus_app", _handle_preflight_options)
+    app.router.add_options("/api/auth/callback/session", _handle_preflight_options)
+    app.router.add_options("/api/system/open_url", _handle_preflight_options)
 
     # Phase 44: Account Identities & Linking
     app.router.add_get("/api/account/identities", handle_account_identities_get)
@@ -7270,7 +7451,55 @@ def create_app():
     except Exception as e:
         logger.warning(f"Telegram webhook gateway yuklanmadi: {e}")
 
+    # Phase 50: Frontend (React SPA) statik fayllar va marshrutlashni sozlash
+    _setup_frontend_routes(app)
+
     return app
+
+
+def _setup_frontend_routes(app: web.Application) -> None:
+    """Frontend (React SPA) statik fayllarini va marshrutlashini sozlash."""
+    dist_candidates = [
+        os.path.join(BASE_DIR, "Misa", "dist"),
+        os.path.join(BASE_DIR, "dist"),
+        os.path.join(os.getcwd(), "Misa", "dist"),
+        os.path.join(os.getcwd(), "dist"),
+    ]
+    dist_dir = None
+    for cand in dist_candidates:
+        if os.path.isdir(cand) and os.path.exists(os.path.join(cand, "index.html")):
+            dist_dir = cand
+            break
+
+    async def handle_root_index(request: web.Request) -> web.StreamResponse:
+        # Agar OAuth parametrlari (code, state, error) kelsa, handle_oauth_callback ga yo'naltirish
+        if request.query.get("code") or request.query.get("state") or request.query.get("error") or request.query.get("error_description"):
+            return await handle_oauth_callback(request)
+        if dist_dir:
+            idx_file = os.path.join(dist_dir, "index.html")
+            if os.path.exists(idx_file):
+                return web.FileResponse(idx_file)
+        return await handle_oauth_callback(request)
+
+    async def handle_spa_fallback(request: web.Request) -> web.StreamResponse:
+        tail = request.match_info.get("tail", "").lstrip("/")
+        if tail.startswith("api/") or tail.startswith("ws/") or tail.startswith("health"):
+            raise web.HTTPNotFound()
+        if dist_dir:
+            target_file = os.path.join(dist_dir, tail)
+            if os.path.isfile(target_file):
+                return web.FileResponse(target_file)
+            idx_file = os.path.join(dist_dir, "index.html")
+            if os.path.exists(idx_file):
+                return web.FileResponse(idx_file)
+        raise web.HTTPNotFound()
+
+    app.router.add_get("/", handle_root_index)
+    if dist_dir:
+        assets_dir = os.path.join(dist_dir, "assets")
+        if os.path.isdir(assets_dir):
+            app.router.add_static("/assets", assets_dir, follow_symlinks=True)
+        app.router.add_get("/{tail:[^api].*}", handle_spa_fallback)
 
 
 def run_server(host=None, port=None):
@@ -7285,7 +7514,7 @@ def run_server(host=None, port=None):
             resolved_port = 18420
 
     logger.info(
-        f"MISA AI 9.0.0 Background API Server boshlanmoqda: "
+        f"MISA AI 9.3.0 Background API Server boshlanmoqda: "
         f"http://{resolved_host}:{resolved_port}"
     )
 
@@ -7294,7 +7523,7 @@ def run_server(host=None, port=None):
         import urllib.request
         req = urllib.request.Request(
             f"http://{resolved_host}:{resolved_port}/api/health",
-            headers={"User-Agent": "MisaSingleInstanceCheck/9.2.0"}
+            headers={"User-Agent": "MisaSingleInstanceCheck/9.3.0"}
         )
         with urllib.request.urlopen(req, timeout=0.8) as resp:
             if resp.status == 200:
@@ -7349,15 +7578,17 @@ def run_server(host=None, port=None):
         await primary_site.start()
         logger.info(f"Asosiy API server ishga tushdi: http://{resolved_host}:{resolved_port}")
 
-        # Dual-stack IPv6 loopback (::1) qo'llab-quvvatlash: zamonaviy brauzerlar (Edge/Chrome) 'localhost' ni
-        # birinchi navbatda IPv6 ::1 orqali tekshiradi. ::1 tinglovchisi bo'lmasa ERR_CONNECTION_REFUSED yuz beradi.
+        # Dual-stack loopback (127.0.0.1, localhost, ::1) qo'llab-quvvatlash: zamonaviy brauzerlar (Edge/Chrome)
+        # localhost ni birinchi navbatda IPv6 ::1 orqali tekshiradi. Barcha loopback manzillari faollashtiriladi.
         if resolved_host in ("127.0.0.1", "localhost"):
-            try:
-                ipv6_primary_site = web.TCPSite(runner, "::1", resolved_port)
-                await ipv6_primary_site.start()
-                logger.info(f"IPv6 loopback tinglovchisi ishga tushdi: http://[::1]:{resolved_port}")
-            except Exception as e:
-                logger.debug(f"IPv6 loopback ::1 tinglovchisi yoqilmadi: {e}")
+            for bind_host in ("127.0.0.1", "localhost", "::1"):
+                if bind_host != resolved_host:
+                    try:
+                        extra_site = web.TCPSite(runner, bind_host, resolved_port)
+                        await extra_site.start()
+                        logger.info(f"Qo'shimcha loopback tinglovchisi ishga tushdi: http://{bind_host}:{resolved_port}")
+                    except Exception as e:
+                        logger.debug(f"Loopback {bind_host} tinglovchisi yoqilmadi: {e}")
 
         # Desktop rejimida avtonom lokal ovoz xizmatini (Wake-word "Misa") avtomatik ishga tushirish
         if not _is_headless_server_mode():

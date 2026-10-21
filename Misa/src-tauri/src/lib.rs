@@ -88,7 +88,7 @@ impl SingleInstanceGuard {
         if last_err == ERROR_ALREADY_EXISTS {
             startup_log("SINGLE_INSTANCE", "ERROR_ALREADY_EXISTS: existing instance detected!");
             println!("[INSTANCE] Boshqa Misa AI nusxasi allaqachon faol (Single Instance Lock).");
-            let titles = ["MISA AI v9.2", "Misa AI", "MISA AI", "MISA AI v9.0.2"];
+            let titles = ["MISA AI v9.3", "MISA AI v9.2", "Misa AI", "MISA AI", "MISA AI v9.0.2"];
             let mut hwnd = 0;
             for t in &titles {
                 let win_title: Vec<u16> = OsStr::new(t).encode_wide().chain(std::iter::once(0)).collect();
@@ -165,7 +165,7 @@ pub fn check_backend_handshake(addr_str: &str, expected_version: &str) -> Backen
     let _ = stream.set_write_timeout(Some(Duration::from_millis(2000)));
 
     let request = format!(
-        "GET /api/health HTTP/1.1\r\nHost: {}\r\nUser-Agent: MisaDesktopSupervisor/9.2.0\r\nConnection: close\r\n\r\n",
+        "GET /api/health HTTP/1.1\r\nHost: {}\r\nUser-Agent: MisaDesktopSupervisor/9.3.0\r\nConnection: close\r\n\r\n",
         addr_str
     );
     if stream.write_all(request.as_bytes()).is_err() {
@@ -205,10 +205,14 @@ pub fn check_backend_handshake(addr_str: &str, expected_version: &str) -> Backen
                     }
                 }
 
-                // Moslik tekshiruvi: 9.0.x seriyasi yoki aniq moslik
+                // Moslik tekshiruvi: 9.x seriyasi yoki aniq moslik
                 if !expected_version.is_empty() && !result.version.is_empty() {
-                    let exp_prefix = if expected_version.len() >= 3 { &expected_version[..3] } else { expected_version };
-                    if result.version == expected_version || result.version.starts_with(exp_prefix) {
+                    let major_prefix = if let Some(dot_idx) = expected_version.find('.') {
+                        &expected_version[..=dot_idx]
+                    } else {
+                        "9."
+                    };
+                    if result.version == expected_version || result.version.starts_with(major_prefix) {
                         result.is_compatible_version = true;
                     }
                 } else if result.is_healthy {
@@ -223,7 +227,7 @@ pub fn check_backend_handshake(addr_str: &str, expected_version: &str) -> Backen
 
 /// HTTP GET /api/health tekshiruvi (Pure Rust stdlib)
 pub fn check_http_health(addr_str: &str, _path: &str) -> bool {
-    check_backend_handshake(addr_str, "9.2.0").is_healthy
+    check_backend_handshake(addr_str, "9.3.0").is_healthy
 }
 
 pub fn stop_backend(state: &SupervisorState) {
@@ -434,7 +438,7 @@ pub fn ensure_backend_running(state: &SupervisorState) {
     println!("[BACKEND] Backend holati tekshirilmoqda (127.0.0.1:18420)...");
 
     // 1. Agar 127.0.0.1:18420 da backend allaqachon ishlab turgan bo'lsa va versiyasi mos bo'lsa
-    let initial_hs = check_backend_handshake("127.0.0.1:18420", "9.2.0");
+    let initial_hs = check_backend_handshake("127.0.0.1:18420", "9.3.0");
     if initial_hs.is_healthy && initial_hs.is_compatible_version {
         backend_lifecycle_log("HEALTH_OK", &format!("Mavjud backend aniqlandi va mos (127.0.0.1:18420, v{}) — yangi jarayon ochilmaydi ✓", initial_hs.version));
         println!("[BACKEND] Mavjud backend aniqlandi va mos (127.0.0.1:18420, v{}) — yangi jarayon ochilmaydi ✓", initial_hs.version);
@@ -449,8 +453,8 @@ pub fn ensure_backend_running(state: &SupervisorState) {
         }
         return;
     } else if initial_hs.is_healthy && !initial_hs.is_compatible_version {
-        backend_lifecycle_log("VERSION_MISMATCH", &format!("18420-portdagi mavjud backend versiyasi mos emas: '{}' (kutilgan: 9.2.0). Jarayon xavfsiz to'xtatilib, yangilanadi...", initial_hs.version));
-        println!("[BACKEND] 18420-portdagi mavjud backend versiyasi mos emas: '{}' (kutilgan: 9.2.0). Jarayon to'xtatilib yangilanadi...", initial_hs.version);
+        backend_lifecycle_log("VERSION_MISMATCH", &format!("18420-portdagi mavjud backend versiyasi mos emas: '{}' (kutilgan: 9.3.0). Jarayon xavfsiz to'xtatilib, yangilanadi...", initial_hs.version));
+        println!("[BACKEND] 18420-portdagi mavjud backend versiyasi mos emas: '{}' (kutilgan: 9.3.0). Jarayon to'xtatilib yangilanadi...", initial_hs.version);
         cleanup_port_process(18420);
         std::thread::sleep(Duration::from_millis(500));
     }
@@ -486,7 +490,7 @@ pub fn ensure_backend_running(state: &SupervisorState) {
         let mut port_compatible = false;
         for _ in 0..3 {
             std::thread::sleep(Duration::from_millis(400));
-            let hs = check_backend_handshake("127.0.0.1:18420", "9.2.0");
+            let hs = check_backend_handshake("127.0.0.1:18420", "9.3.0");
             if hs.is_healthy {
                 port_healthy = true;
                 port_compatible = hs.is_compatible_version;
@@ -1191,6 +1195,24 @@ pub fn show_native_message_box(title: &str, message: &str, is_error: bool) {
     }
 }
 
+#[cfg(target_os = "windows")]
+fn register_custom_protocol() {
+    if let Ok(current_exe) = std::env::current_exe() {
+        let exe_str = current_exe.to_string_lossy().to_string();
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let cmd = format!(
+            "reg add \"HKCU\\Software\\Classes\\misa\" /ve /d \"URL:Misa Protocol\" /f >nul 2>&1 & reg add \"HKCU\\Software\\Classes\\misa\" /v \"URL Protocol\" /d \"\" /f >nul 2>&1 & reg add \"HKCU\\Software\\Classes\\misa\\shell\\open\\command\" /ve /d \"\\\"{}\\\" \\\"%1\\\"\" /f >nul 2>&1",
+            exe_str
+        );
+        let _ = Command::new("cmd")
+            .args(["/C", &cmd])
+            .creation_flags(CREATE_NO_WINDOW)
+            .status();
+    }
+}
+#[cfg(not(target_os = "windows"))]
+fn register_custom_protocol() {}
+
 #[cfg(not(target_os = "windows"))]
 pub fn show_native_message_box(_title: &str, _message: &str, _is_error: bool) {}
 
@@ -1204,12 +1226,13 @@ pub fn run() {
     startup_log("STARTUP", "Misa AI process started");
     startup_log("STARTUP", &format!("Executable path: {}", exe_path));
     startup_log("STARTUP", &format!("PID: {} TID: {}", current_pid(), current_tid()));
-    println!("[BOOT] MISA AI v9.2.0 Desktop Application ishga tushmoqda...");
+    println!("[BOOT] MISA AI v9.3.0 Desktop Application ishga tushmoqda...");
+    register_custom_protocol();
 
     // 1. Single-Instance Guard tekshiruvi (faqat 1 ta Misa UI instansiyasi ishlaydi)
     startup_log("SINGLE_INSTANCE", "Checking single instance guard...");
     println!("[INSTANCE] Yagona nusxa (Single-Instance) tekshirilmoqda...");
-    let _instance_guard = match SingleInstanceGuard::acquire("Local\\Misa_AI_SingleInstance_Mutex_v9.2") {
+    let _instance_guard = match SingleInstanceGuard::acquire("Local\\Misa_AI_SingleInstance_Mutex_v9.3") {
         Some(g) => {
             startup_log("SINGLE_INSTANCE", "Acquired mutex successfully (Primary instance)");
             println!("[INSTANCE] Yagona nusxa qulfi o'rnatildi (Primary instance) ✓");
@@ -1281,7 +1304,7 @@ pub fn run() {
             // 1. Asosiy oynani yaratish (on_new_window handler bilan — bo'sh qora oyna chiqishini butunlay bloklaydi)
             startup_log("TAURI", "Building main WebviewWindow with on_new_window interceptor...");
             let win = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
-                .title("MISA AI v9.2")
+                .title("MISA AI v9.3")
                 .inner_size(1280.0, 800.0)
                 .min_inner_size(1024.0, 700.0)
                 .resizable(true)
@@ -1330,7 +1353,7 @@ pub fn run() {
 
             let mut tray_builder = TrayIconBuilder::with_id("misa_main_tray")
                 .menu(&tray_menu)
-                .tooltip("Misa AI v9.2")
+                .tooltip("Misa AI v9.3")
                 .show_menu_on_left_click(false);
 
             if let Some(icon) = app.default_window_icon() {

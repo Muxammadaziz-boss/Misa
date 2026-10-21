@@ -70,6 +70,11 @@ CAPABILITY_KEYWORD_PATTERNS: Dict[str, List[str]] = {
     "process_management": [
         "jarayon", "task manager", "process", "kill process"
     ],
+    "ui_design": [
+        "andoza", "andozalar", "andoza yarat", "dizayn", "ui", "ux", "maket", "shablon",
+        "veb dizayn", "landing page", "interfeys", "stitch", "ekran yarat", "frontend",
+        "design", "template", "wireframe", "prototype", "screen", "veb sahifa"
+    ],
 }
 
 

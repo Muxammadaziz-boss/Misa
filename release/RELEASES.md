@@ -1,6 +1,24 @@
 # 🚀 Misa AI Versiyalar Arxivi (Releases Archive)
 
-### [v9.2] — 15/10/2026 (Production Release — Latest)
+### [v9.3] — 21/10/2026 (Production Release — Latest)
+- **Rasmiy GitHub Reliz**: [Misa AI v9.3 Release](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.3)
+- **To'liq Portativ Paket (Backend + Python Runtime + RVC HuBERT bilan)**: `v9.3/Misa-AI-v9.3-Portable.zip` (470.45 MB) — [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3/Misa-AI-v9.3-Portable.zip)  
+  *SHA-256:* `8f198725f92e3d7172cea3a6880adb6f4160e33ec8e31fb2ff604a2e09c5effc`
+- **Desktop Ilova (Portativ Executable)**: `v9.3/Misa-AI-v9.3.exe` (5.24 MB) — [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3/Misa-AI-v9.3.exe)  
+  *SHA-256:* `f481f21f227594add572f97d57e2cf8bc0a2dc7db7de254f9b942b4f741f050d`
+- **Native WebView2 Yuklagich**: `v9.3/WebView2Loader.dll` (0.15 MB)  
+  *SHA-256:* `8427b1fc58ec707813e5c0a51eb5d69397bb333250a7b891be4d3b123f1e0f1c`
+- **Kriptografik SHA-256 Summalar**: `v9.3/SHA256SUMS.txt` — [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3/SHA256SUMS.txt)
+- **Avto-Yangilanish Manifesti**: `v9.3/version_manifest.json` — [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3/version_manifest.json)
+- **Asosiy Yangiliklar**:
+  - Barcha ishlaydigan AI provayderlari (Gemini, Groq, Cerebras, OpenRouter) standart (default) rejimda to'liq ulandi.
+  - Microsoft Edge-TTS Sec-MS-GEC v2 yangi protokoliga yangilandi (edge-tts 7.3.1), Madina va Sardor milliy ovozlari to'liq tiklandi.
+  - RVC vositalari va HuBERT modeli o'rnatildi, barcha 6 ta ovoz modeli (ayol, erkak, fish_yigit, fish_anime, ashley, yukari) barqaror sintezga tayyorlandi.
+  - Barcha UI oynalari, backend xizmatlari va sinovlar to'liq v9.3 ga sinxronlashtirildi.
+
+---
+
+### [v9.2] — 15/10/2026 (Historical Release)
 - **Rasmiy GitHub Reliz**: [Misa AI v9.2 Release](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.2)
 - **Windows NSIS Setup**: `v9.2/Misa-AI-Setup-v9.2.exe` (13.55 MB) — [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.2/Misa-AI-Setup-v9.2.exe)  
   *SHA-256:* `30cca0a57f4140dd2e2effbea83751a6299ac9f03179e516ecb2d8facc031319`

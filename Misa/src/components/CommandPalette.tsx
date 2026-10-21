@@ -66,7 +66,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       {
         id: "nav_home",
         title: "Asosiy sahifa (Ish maydoni)",
-        subtitle: "Misa AI v9.0 asosiy boshqaruv sahifasiga o'tish",
+        subtitle: "Misa AI v9.3 asosiy boshqaruv sahifasiga o'tish",
         category: "Navigatsiya",
         shortcut: "Ctrl+1",
         icon: <HomeIcon size={15} />,
@@ -483,7 +483,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           }}
         >
           <span>↑↓ Tanlash • Enter Bajarish • Esc Yopish</span>
-          <span style={{ color: "#E8B3FF", fontWeight: 600 }}>Misa Command Palette v9.0</span>
+          <span style={{ color: "#E8B3FF", fontWeight: 600 }}>Misa Command Palette v9.3</span>
         </div>
       </div>
     </div>

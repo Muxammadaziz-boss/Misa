@@ -120,7 +120,7 @@ class TestBackendRuntimeAndHealth(unittest.TestCase):
         data = res.json()
         self.assertEqual(data.get("status"), "ok")
         self.assertEqual(data.get("app"), "Misa AI")
-        self.assertIn(data.get("version"), ("8.0.0", "9.0.0", "9.0.1", "9.0.2", "9.2", "9.2.0"))
+        self.assertIn(data.get("version"), ("8.0.0", "9.0.0", "9.0.1", "9.0.2", "9.2", "9.2.0", "9.3.0"))
 
     def test_oauth_callback_html(self):
         """Scenario G: GET /api/auth/callback serves OAuth redirect landing page."""
@@ -200,6 +200,7 @@ class TestPortableZipArchive(unittest.TestCase):
     """Scenario I & K: Portable zip self-contained archive validation."""
 
     def test_portable_zip_contains_all_components(self):
+        v93_zip = REPO_ROOT / "release" / "v9.3" / "Misa-AI-v9.3-Portable.zip"
         v92_zip = REPO_ROOT / "release" / "v9.2" / "Misa-AI-v9.2-Portable.zip"
         v920_zip = REPO_ROOT / "release" / "v9.2.0" / "Misa-AI-v9.2.0-Portable.zip"
         v902_zip = REPO_ROOT / "release" / "v9.0.2" / "Misa-AI-v9.0.2-Portable.zip"
@@ -207,18 +208,20 @@ class TestPortableZipArchive(unittest.TestCase):
         v9_zip = REPO_ROOT / "release" / "v9.0.0" / "Misa-AI-v9.0.0-Portable.zip"
         v8_zip = REPO_ROOT / "release" / "v8.0.0" / "Mikasa-AI-v8.0.0-Portable.zip"
         zip_path = (
-            v92_zip if v92_zip.exists()
+            v93_zip if v93_zip.exists()
+            else (v92_zip if v92_zip.exists()
             else (v920_zip if v920_zip.exists()
             else (v902_zip if v902_zip.exists()
             else (v91_zip if v91_zip.exists()
-            else (v9_zip if v9_zip.exists() else v8_zip))))
+            else (v9_zip if v9_zip.exists() else v8_zip)))))
         )
         self.assertTrue(zip_path.exists(), f"Portable zip missing: {zip_path}")
         with zipfile.ZipFile(zip_path, "r") as zf:
             names = set(zf.namelist())
 
         has_exe = any(
-            n.endswith("Misa-AI-v9.2.exe")
+            n.endswith("Misa-AI-v9.3.exe")
+            or n.endswith("Misa-AI-v9.2.exe")
             or n.endswith("Misa-AI-v9.2.0.exe")
             or n.endswith("Misa-AI-v9.0.2.exe")
             or n.endswith("Misa-AI-v9.0.1.exe")

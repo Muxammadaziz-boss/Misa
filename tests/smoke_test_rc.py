@@ -42,7 +42,7 @@ def test_1_backend_handshake(port: int = 18420) -> bool:
     logger.info("=== STEP 1: Backend Health & Version Handshake ===")
     url = f"http://127.0.0.1:{port}/api/health"
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Misa-SmokeTest/9.2.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "Misa-SmokeTest/9.3.0"})
         with urllib.request.urlopen(req, timeout=3.0) as resp:
             status_code = resp.getcode()
             body_bytes = resp.read()
@@ -53,8 +53,8 @@ def test_1_backend_handshake(port: int = 18420) -> bool:
         app = data.get("app")
         status = data.get("status") or (data.get("ok") and "ok")
 
-        if status_code == 200 and version in ("9.2.0", "9.2") and app == "Misa AI":
-            logger.info("✓ Backend handshake muvaffaqiyatli: Misa AI v9.2.0 (Healthy)")
+        if status_code == 200 and version in ("9.3.0", "9.3", "9.2.0", "9.2") and app == "Misa AI":
+            logger.info("✓ Backend handshake muvaffaqiyatli: Misa AI v9.3.0 (Healthy)")
             TEST_RESULTS["backend_handshake"] = True
             return True
         else:

@@ -196,27 +196,27 @@ class TestV6CommandsPerformance(unittest.TestCase):
         self.page.update_idletasks()
 
         # Check that cards are cached in _tool_cards
-        self.assertIn("system_info", self.page._tool_cards)
-        system_info_card = self.page._tool_cards["system_info"]
-        self.assertTrue(system_info_card.winfo_exists())
+        target_tool = "calculator" if "calculator" in self.page._tool_cards else list(self.page._tool_cards.keys())[0]
+        self.assertIn(target_tool, self.page._tool_cards)
+        target_card = self.page._tool_cards[target_tool]
+        self.assertTrue(target_card.winfo_exists())
 
-        # Step 2: Search for "weather" (should hide system_info, NOT destroy it)
+        # Step 2: Search for "xyznonexistent" (should hide target_tool, NOT destroy it)
         self.page.search_entry.delete(0, "end")
-        self.page.search_entry.insert(0, "weather")
+        self.page.search_entry.insert(0, "xyznonexistentquery")
         self.page._execute_search(immediate=True)
         self.page.update_idletasks()
 
-        # system_info_card must STILL exist in memory (cached)!
-        self.assertTrue(system_info_card.winfo_exists(), "Cached card must NOT be destroyed when filtered out")
-        self.assertIn("system_info", self.page._tool_cards)
+        # target_card must STILL exist in memory (cached)!
+        self.assertTrue(target_card.winfo_exists(), "Cached card must NOT be destroyed when filtered out")
+        self.assertIn(target_tool, self.page._tool_cards)
 
-        # Step 3: Search again for "system" (should reuse the exact same card widget instance!)
+        # Step 3: Search again for all (should reuse the exact same card widget instance!)
         self.page.search_entry.delete(0, "end")
-        self.page.search_entry.insert(0, "system")
         self.page._execute_search(immediate=True)
         self.page.update_idletasks()
 
-        self.assertIs(self.page._tool_cards["system_info"], system_info_card, "Card widget must be reused from cache")
+        self.assertIs(self.page._tool_cards[target_tool], target_card, "Card widget must be reused from cache")
 
     def test_normalized_search_index_speed(self):
         """Verify normalized search index enables sub-millisecond filtering"""

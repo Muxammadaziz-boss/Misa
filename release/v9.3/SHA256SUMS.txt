@@ -1,0 +1,2 @@
+f481f21f227594add572f97d57e2cf8bc0a2dc7db7de254f9b942b4f741f050d  Misa-AI-v9.3.exe
+8f198725f92e3d7172cea3a6880adb6f4160e33ec8e31fb2ff604a2e09c5effc  Misa-AI-v9.3-Portable.zip
