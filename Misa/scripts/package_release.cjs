@@ -111,6 +111,7 @@ function copyFileWithLog(src, dest, friendlyName) {
 
 // 4. Copy Standalone Executable
 copyFileWithLog(exeSource, exeTarget, "Mustaqil (.exe)");
+copyFileWithLog(exeSource, path.join(releaseVersionDir, "Misa.exe"), "Mustaqil (Misa.exe)");
 
 // 4.1 Copy WebView2Loader.dll (required for native Windows execution on MinGW)
 const dllSource = fs.existsSync(path.join(tauriReleaseDir, "WebView2Loader.dll"))
@@ -263,6 +264,7 @@ if (!fs.existsSync(portableDir)) {
 }
 if (fs.existsSync(exeTarget)) {
   fs.copyFileSync(exeTarget, path.join(portableDir, `Misa-AI-${versionName}.exe`));
+  fs.copyFileSync(exeTarget, path.join(portableDir, "Misa.exe"));
 }
 if (fs.existsSync(dllTarget)) {
   fs.copyFileSync(dllTarget, path.join(portableDir, "WebView2Loader.dll"));
