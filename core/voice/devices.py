@@ -318,7 +318,7 @@ class MicrophoneManager:
                 msg = f"Tanlangan mikrofon ({self._selected_device_name or self._selected_device_id}) ulanmagan. Default mikrofon ishlatilmoqda."
                 return default_index, fallback_info, True, msg
 
-            return None, {}, True, "Tanlangan mikrofon ulanmagan va tizim standarti ham mavjud emas."
+            return None, {}, True, "Tanlangan mikrofon ulanmagan va tizim standarti (default) ham mavjud emas."
 
         # 2. Agar "default" tanlangan bo'lsa yoki hali tanlov bo'lmasa:
         if default_index is not None and default_index >= 0:

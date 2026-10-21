@@ -89,20 +89,30 @@ class TestMicrophoneManagerUnit(unittest.TestCase):
 
     def test_fallback_when_device_disconnected(self):
         """Ulanmagan yoki soxta qurilma tanlanganda yashirincha emas, aniq ogohlantirish bilan fallback qilish."""
-        self.mgr.set_selected_device("input_non_existent_999", "Mavjud bo'lmagan mikrofon")
-        idx, dev_info, fallback_used, msg = self.mgr.resolve_selected_device()
-        
-        # Fallback ishlatilgan bo'lishi kerak
-        self.assertTrue(fallback_used)
-        self.assertIn("ulanmagan", msg.lower())
-        self.assertIn("default", msg.lower())
+        mock_dev = {"name": "Default Microphone", "max_input_channels": 2, "max_output_channels": 0, "hostapi": 1}
+        def mock_query(idx=None):
+            return mock_dev if idx is not None else [mock_dev]
+        with patch("sounddevice.default", MagicMock(device=[0, 0])):
+            with patch("sounddevice.query_devices", side_effect=mock_query):
+                self.mgr.set_selected_device("input_non_existent_999", "Mavjud bo'lmagan mikrofon")
+                idx, dev_info, fallback_used, msg = self.mgr.resolve_selected_device()
+                
+                # Fallback ishlatilgan bo'lishi kerak
+                self.assertTrue(fallback_used)
+                self.assertIn("ulanmagan", msg.lower())
+                self.assertIn("default", msg.lower())
 
     def test_select_default_policy(self):
         """Default tanlanganda fallback ishlatilmasligi kerak."""
-        self.mgr.set_selected_device("default", "Tizim standarti (Windows Default)")
-        idx, dev_info, fallback_used, msg = self.mgr.resolve_selected_device()
-        self.assertFalse(fallback_used)
-        self.assertEqual(dev_info.get("id"), "default")
+        mock_dev = {"name": "Default Microphone", "max_input_channels": 2, "max_output_channels": 0, "hostapi": 1}
+        def mock_query(idx=None):
+            return mock_dev if idx is not None else [mock_dev]
+        with patch("sounddevice.default", MagicMock(device=[0, 0])):
+            with patch("sounddevice.query_devices", side_effect=mock_query):
+                self.mgr.set_selected_device("default", "Tizim standarti (Windows Default)")
+                idx, dev_info, fallback_used, msg = self.mgr.resolve_selected_device()
+                self.assertFalse(fallback_used)
+                self.assertEqual(dev_info.get("id"), "default")
 
     def test_real_microphone_test_execution(self):
         """Haqiqiy apparatda yoki mavjud mikrofonda test o'tkazish."""
