@@ -121,8 +121,8 @@ Barcha reliz fayllari mustaqil kriptografik SHA-256 xeshlari bilan tekshirilgan 
 
 | Fayl nomi | Tavsif | Hajmi | SHA-256 Checksum | Yuklab olish |
 | :--- | :--- | :---: | :--- | :---: |
-| **`Misa-AI-v9.3-Portable.zip`** | 📦 **To'liq Portativ Paket (Backend + Python Runtime + RVC HuBERT bilan)** | **470.45 MB** | `8f198725f92e3d7172cea3a6880adb6f4160e33ec8e31fb2ff604a2e09c5effc` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/Misa-AI-v9.3-Portable.zip) |
-| **`Misa-AI-v9.3.exe`** | 🚀 **Mustaqil Standalone Desktop Executable** | **5.24 MB** | `f481f21f227594add572f97d57e2cf8bc0a2dc7db7de254f9b942b4f741f050d` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/Misa-AI-v9.3.exe) |
+| **`Misa-AI-v9.3-Portable.zip`** | 📦 **To'liq Portativ Paket (Backend + Python Runtime + RVC HuBERT bilan)** | **470.45 MB** | `008f1f159dd8357c63b470281086ca479d9d79d7d530c4b7c00841ec8a94cbc9` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/Misa-AI-v9.3-Portable.zip) |
+| **`Misa-AI-v9.3.exe`** | 🚀 **Mustaqil Standalone Desktop Executable** | **5.24 MB** | `9d7d3e8122181176354c35e92854f7b8780926b0ededc649a231c6da5d58982f` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/Misa-AI-v9.3.exe) |
 | **`MicrosoftEdgeWebview2Setup.exe`** | 🌐 **Offline Windows WebView2 Bootstrapper** | **1.77 MB** | `87ad3fe4e3faa1b48bad79de1b9269e5eb30574545bb6f5f7c37d51035748caf` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/MicrosoftEdgeWebview2Setup.exe) |
 | **`run_portable.bat`** | ⚡ **Portativ Ishga Tushirish Skripti** | **360 B** | Bir bosishda ishga tushirish | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/run_portable.bat) |
 | **`SHA256SUMS.txt`** | 🔐 **Kriptografik Nazorat Summalari** | **175 B** | Mustaqil tekshirilgan | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/SHA256SUMS.txt) |
