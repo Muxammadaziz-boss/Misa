@@ -328,7 +328,6 @@ _INTERNAL_API_SESSION_TOKEN: str = secrets.token_urlsafe(32)
 
 def get_internal_api_session_token() -> str:
     """Backend ishga tushganda yaratilgan yagona ichki sessiya tokeni"""
-    global _INTERNAL_API_SESSION_TOKEN
     return _INTERNAL_API_SESSION_TOKEN
 
 
