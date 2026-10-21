@@ -21,7 +21,6 @@ export const MisaLogo: React.FC<MisaLogoProps> = ({
 }) => {
   const isCompact = showText !== undefined ? !showText : compact;
   const displayVersion = showBadge !== undefined ? showBadge : showVersion;
-  const iconSize = Math.round(size * 0.5);
 
   return (
     <div
@@ -43,20 +42,28 @@ export const MisaLogo: React.FC<MisaLogoProps> = ({
           justifyContent: "center",
           width: `${size}px`,
           height: `${size}px`,
-          borderRadius: "50%",
-          background: "linear-gradient(135deg, #C04CFD 0%, #9303C5 55%, #500075 100%)",
-          boxShadow: "0 0 16px rgba(147, 3, 197, 0.65), inset 0 1px 1px rgba(255, 255, 255, 0.4)",
-          border: "1px solid rgba(255, 255, 255, 0.22)",
+          borderRadius: `${Math.round(size * 0.24)}px`,
+          overflow: "hidden",
+          boxShadow: "0 0 18px rgba(147, 3, 197, 0.55), 0 0 4px rgba(192, 76, 253, 0.3)",
+          border: "1px solid rgba(192, 76, 253, 0.35)",
+          background: "rgba(18, 10, 28, 0.8)",
           flexShrink: 0,
         }}
       >
-        {/* Equalizer / Core AI Pulse Icon */}
-        <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.4" strokeLinecap="round">
-          <line x1="6" y1="9" x2="6" y2="15" />
-          <line x1="10" y1="5" x2="10" y2="19" />
-          <line x1="14" y1="8" x2="14" y2="16" />
-          <line x1="18" y1="10" x2="18" y2="14" />
-        </svg>
+        <img
+          src="/logo.png"
+          alt="Misa AI"
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
+          onError={(e) => {
+            // Fallback to SVG if image fails to load
+            e.currentTarget.style.display = "none";
+          }}
+        />
       </div>
 
       {!isCompact && (
