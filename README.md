@@ -1,17 +1,17 @@
 # 🔷 MISA AI (sobiq Mikasa AI) — Autonomous Desktop Assistant & Intelligence Hub
 
-> **📢 MUHIM E'LON (v9.0.0 Rebranding): 9-versiyadan boshlab "Mikasa AI" loyihasi rasmiy ravishda "Misa" (`Misa AI`) deb yuritiladi!**  
+> **📢 MUHIM E'LON (v9.0.0 Rebranding & v9.3.0 Release): 9-versiyadan boshlab "Mikasa AI" loyihasi rasmiy ravishda "Misa" (`Misa AI`) deb yuritiladi!**  
 > *1.0.0 dan 8.0.0 gacha bo'lgan barcha barqaror versiyalarda loyiha **Mikasa AI** nomi bilan ishlab chiqilgan va arxivlangan (`main` / `dev-v8.0.0`). **9.0.0 versiyadan (`dev-v9.0.0`) boshlab** loyiha yadrosi, desktop interfeysi (`Misa/`), ovozli chaqiruv tizimi ("Salom Misa"), Windows PC agenti va barcha hujjatlar **Misa AI** nomi ostida davom ettiriladi.*
 
-> **O'zbek tilidagi birinchi professional avtonom AI desktop yordamchisi va aqlli orkestratori**  
-> React 19 + Tauri 2.0 zamonaviy interfeysi, Supabase Auth ko'p foydalanuvchili (multi-tenant) xavfsiz autentifikatsiyasi, Google OAuth 2.0, Ed25519 kriptografik PC Agent Enrollment & Pairing, Universal Telegram Bot (`@Mikasa_ai_agent_bot`) orqali masofaviy boshqaruv, Wake-on-LAN, ko'p bosqichli intellektual boshqaruv (Agent Loop 2.0), Authoritative Tool Security, Session-Aware Windows GUI Controller va Ed25519 imzolangan xavfsiz auto-update tizimi.
+> **O'zbek tilidagi birinchi professional avtonom AI desktop yordamchisi va aqlli orkestratori (v9.3.0 Barqaror Reliz)**  
+> React 19 + Tauri 2.0 zamonaviy aero-shisha interfeysi, Model Context Protocol (MCP) ko'prigi, Stitch UI generatori, Multi-Provider AI (Gemini 3.8 Flash, Groq Llama 3.3, Cerebras, OpenRouter), Neural RVC (Retrieval-based Voice Conversion) va Edge-TTS ovoz dvigatellari, Supabase Auth ko'p foydalanuvchili (multi-tenant) xavfsiz autentifikatsiyasi, Google OAuth 2.0, Ed25519 kriptografik PC Agent Enrollment & Pairing, Universal Telegram Bot (`@Mikasa_ai_agent_bot`) orqali masofaviy boshqaruv, Wake-on-LAN, ko'p bosqichli intellektual boshqaruv (Agent Loop 2.0), Authoritative Tool Security, Session-Aware Windows GUI Controller va Ed25519 imzolangan xavfsiz auto-update tizimi.
 
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![UI](https://img.shields.io/badge/UI-Tauri%202.0%20%7C%20React%2019-61DAFB?style=flat&logo=react&logoColor=black)](Misa/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D6?logo=windows)](https://microsoft.com/windows)
-[![Stable Release](https://img.shields.io/badge/Stable%20Release-v9.2-success)](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.2)
+[![Stable Release](https://img.shields.io/badge/Stable%20Release-v9.3.0-success)](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.3.0)
 [![Active Branch](https://img.shields.io/badge/Active%20Branch-dev--v9.0.0-blueviolet)](https://github.com/Muxammadaziz-boss/Misa/tree/dev-v9.0.0)
-[![Tests](https://img.shields.io/badge/Tests-345%2F345%20Backend%20%7C%2033%2F33%20Frontend%20%7C%208%2F8%20Smoke-brightgreen)](tests/)
+[![CI Checks](https://img.shields.io/badge/CI%20Checks-9%2F9%20Passing%20%7C%20100%25%20Green-brightgreen)](https://github.com/Muxammadaziz-boss/Misa/actions)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ---
@@ -22,66 +22,81 @@
 | :--- | :--- | :--- | :--- | :--- |
 | **v1.0.0 – v8.0.0** | **Mikasa AI** | `main`, `dev-v8.0.0` | `mikasa-7/` | 8-versiyagacha bo'lgan barcha relizlar va tarixiy arxitektura o'z holicha saqlanadi. |
 | **v9.0.0 – v9.0.2** | **Misa AI** | `dev-v9.0.0` | `Misa/` | Yangi Tauri 2.0 + React 19 interfeysi, ovozli boshqaruv ("Salom Misa") va PC Agent. |
-| **v9.2 (Hozirgi)** | **Misa AI** | `dev-v9.0.0` | `Misa/` | **Rasmiy Barqaror Reliz (Latest)**: 9.2 Versiya sinxronizatsiyasi, yangi relizlar paketi va to'liq platforma barqarorligi. |
+| **v9.2** | **Misa AI** | `dev-v9.0.0` | `Misa/` | 9.2 Versiya sinxronizatsiyasi, yangi relizlar paketi va to'liq platforma barqarorligi. |
+| **v9.3.0 (Eng so'nggi barqaror reliz)** | **Misa AI** | `dev-v9.0.0` | `Misa/` | **Model Context Protocol (MCP)** arxitekturasi, **Stitch UI Generator**, **Multi-Provider AI Key Manager** (Gemini, Groq, Cerebras, OpenRouter), **Neural RVC & Edge-TTS** ovozli dvigateli, 56 ta tizim vositalari, 100% Portativ binar relizlar va to'liq yashil CI (GitHub Actions 9/9). |
 
 ---
 
 ## 📸 Ilovaning Haqiqiy Interfeysi (Visual Showcase)
 
 ### 🪐 1. Bosh Sahifa va Interaktiv Misa Orb
-*Haqiqiy vaqt rejimida yordamchi holatini (10 xil jonli holat: idle, listening, thinking, speaking, executing va h.k.) ko'rsatuvchi vizual yadro, jonli telemetriya, tezkor AI harakatlari va ovozli boshqaruv.*
+*Haqiqiy vaqt rejimida yordamchi holatini (10 xil jonli holat: idle, listening, thinking, speaking, executing va h.k.) ko'rsatuvchi vizual yadro, jonli apparat telemetriyasi (CPU/RAM), tezkor AI harakatlari va to'liq ovozli boshqaruv.*
 ![Bosh sahifa va AI Orb](docs/assets/landing_preview.png)
 
 ---
 
-### ⚡ 2. Buyruqlar Markazi — 29+ Tizim Vositalari (Tool System 2.0)
-*Klaviatura orqali tezkor boshqaruv (`Ctrl+K`), tizim asboblarini toifalash, interaktiv parametrlar va xavfsiz ijro.*
+### ⚡ 2. Buyruqlar Markazi — 56 ta Tizim Vositalari (Tool System 2.0)
+*Klaviatura orqali tezkor boshqaruv (`Ctrl+K`), tizim asboblarini toifalash (Tizim, Ilovalar, Utilitlar, Dasturlash, Multimedia, Xotira, Rejalashtirish), interaktiv parametrlar va xavfsiz ijro.*
 ![Buyruqlar markazi](docs/assets/commands_preview.png)
 
 ---
 
 ### 💬 3. Intellektual AI Suhbat va Zamonaviy Glassmorphism
-*Fikrlovchi Gemini va OpenRouter modellari, ko'p qatorli yozish maydoni, kontekstni to'liq saqlash, rasm generatsiyasi va silliq aero-shisha vizual effektlari.*
+*Fikrlovchi Gemini, Groq, Cerebras va OpenRouter modellari, kontekstni to'liq saqlash, avtonom agent rejalari, rasm va kod tahlili hamda silliq aero-shisha vizual effektlari.*
 ![AI Suhbat](docs/assets/chat_preview.png)
 
 ---
 
-### 🎨 4. Quiet Intelligence — Maxsus Vektor Ikonkalar Tizimi
-*Matnli emojilardan butunlay xoli, 26 ta kanonik SVG piktogrammalar va premium qora dizayn karkasi.*
-![Vektor Ikonkalar Tizimi](docs/assets/icon_showcase.png)
+### ⚙️ 4. Shaxsiy Profil, Ovoz va AI Dvigatellari (Quiet Intelligence Hub)
+*Ovozli dvigatellar (Neural RVC HuBERT & Microsoft Edge-TTS), jonli apparat audio monitori (Loopback), ko'p modelli AI kalitlari boshqaruvi va profil sozlamalari.*
+![Sozlamalar va Ovoz Dvigatellari](docs/assets/settings_preview.png)
 
 ---
 
-## 🌟 9-Versiyadagi Asosiy Imkoniyatlar (v9.0.0 – v9.0.2 Latest)
+### 🎨 5. Quiet Intelligence — Maxsus Vektor Ikonkalar Tizimi
+*Matnli emojilardan butunlay xoli, 26 ta kanonik SVG piktogrammalar va premium qora dizayn karkasi.*
+![Misa AI Vektor Ikonkalar Tizimi](docs/assets/icon_showcase.png)
 
-1. **🎙️ Ovozli Intellekt va Wake-Word Dvigateli ("Salom Misa")**:
-   - Haqiqiy vaqt rejimida Voice Activity Detection (VAD) va fon shovqinlarini filtrlash.
-   - Mikrofon monitoringi va PortAudio barqarorligi (xotira buzilishlari va halqalanishlar to'liq bartaraf etilgan).
-   - Ovozli javob qaytarish va Misa Orb jonli reaksiyalari.
+---
 
-2. **🔐 Vakolatli Asboblar Xavfsizlik Siyosati (Authoritative Security Policy)**:
-   - Barcha destruktiv va yuqori xavfli asboblar (`system_shutdown`, `system_restart`, `delete_file`, `keyboard_type`, `mouse_click`) uchun markaziy xavfsizlik dvigateli.
-   - Kriptografik bir martalik `_confirmation_token`: parametrlar SHA-256 xeshi bilan qat'iy bog'langan, 60s yashash muddatli (TTL) va takroriy ishlatishdan himoyalangan (`TOKEN_ALREADY_USED`, `PARAMS_MISMATCH`).
+## 🌟 9.3-Versiyadagi Asosiy Imkoniyatlar (v9.3.0 — Eng So'nggi Barqaror Reliz)
+
+1. **🤖 Multi-Provider AI va Standart API Kalitlari**:
+   - **Gemini 3.8 Flash**, **Groq (Llama 3.3 70B Versatile)**, **Cerebras (Llama 3.3 70B Ultra-fast)** va **OpenRouter** tizimga standart integratsiya qilingan va dastur ishga tushishi bilanoq darhol AI bilan ishlashga tayyor.
+   - Dynamic Key Manager: Foydalanuvchi Sozlamalar sahifasida o'zining shaxsiy API kalitini kiritishi mumkin va shaxsiy kalit standart tizim kalitidan ustun turadi (priority override).
+
+2. **🎙️ Neural RVC & Yangilangan Edge-TTS Ovoz Tizimi**:
+   - Microsoft Edge-TTS yangi `Sec-MS-GEC v2` token protokoli bilan to'liq yangilandi (`edge-tts 7.3.1`). Madina (Ayol) va Sardor (Erkak) milliy ovozlari to'liq tiklandi.
+   - Lokal RVC (Retrieval-based Voice Conversion) tizimi: `torch`, `torchaudio`, `faiss-cpu` va `hubert_base.pt` modeli (189.5 MB) integratsiyasi.
+   - 6 xil ovoz modeli (`ayol`, `erkak`, `fish_yigit`, `fish_anime`, `ashley`, `yukari`) va ovoz to'xtab qolmasligi uchun Madinaga avtomatik xavfsiz fallback.
+
+3. **🔌 Model Context Protocol (MCP) ko'prigi & Stitch UI Generator**:
+   - Anthropic Model Context Protocol (MCP) standartiga mos asboblar va tashqi servislar integratsiyasi ko'prigi.
+   - Stitch UI generatori: foydalanuvchi so'rovi asosida dinamik, chiroyli va interaktiv vizual vidjetlar generatsiya qilish.
+
+4. **🔐 Vakolatli Asboblar Xavfsizlik Siyosati (Authoritative Security Policy)**:
+   - 56 ta tizim va lokal vositalar (`system_shutdown`, `system_restart`, `delete_file`, `keyboard_type`, `mouse_click`, `file_manager` va h.k.) uchun markaziy xavfsizlik nazorati.
+   - Kriptografik bir martalik `_confirmation_token`: parametrlar SHA-256 xeshi bilan qat'iy bog'langan, 60s TTL va takroriy ishlatishdan himoyalangan (`TOKEN_ALREADY_USED`, `PARAMS_MISMATCH`).
    - Lokal API izolyatsiyasi: `127.0.0.1:18420/api/plugins/execute` endpointi begona Origin/Referer yoki tasdiqlanmagan sessiyalarni 403 `UNAUTHORIZED_LOCAL_CALLER` bilan bloklaydi.
 
-3. **🪟 Sessiyadan Xabardor Windows GUI Controller**:
+5. **🪟 Sessiyadan Xabardor Windows GUI Controller**:
    - `core/gui/controller.py` orqali DPI-aware oyna boshqaruvi va sarlavha/sinf bo'yicha oynalarni aniqlash (`find_window`).
    - Win32 `AttachThreadInput` va `BringWindowToTop` orqali Windowsning "focus stealing prevention" cheklovini yengib, oynani ishonchli faollashtirish.
    - Qat'iy precondition (nishon oyna fokusdaligi) va postcondition (matn kiritilgach oyna mavjudligi) tekshiruvlari.
-   - Har qanday favqulodda vaziyatda harakatlarni bir zumda to'xtatuvchi `abort()` nazorati.
+   - Favqulodda vaziyatlarda harakatlarni bir zumda to'xtatuvchi `abort()` nazorati.
 
-4. **🤖 Remote Agent Lifecycle & Poller/Executor**:
-   - `agent/executor.py` dagi `RemoteCommandExecutor` va `CommandPoller` bevosita `agent/lifecycle.py` boshqaruviga to'liq ulandi.
+6. **🤖 Remote Agent Lifecycle & Poller/Executor**:
+   - `agent/executor.py` dagi `RemoteCommandExecutor` va `CommandPoller` bevosita `agent/lifecycle.py` boshqaruviga to'liq ulangan.
    - Idempotent polling, takroriy startlardan himoya va 32-bayt nonce yordamida replay-hujumlardan to'liq himoyalangan xizmat.
    - Shutdown/restart va uzilishlarda barcha fon jarayonlari va soketlarni xavfsiz tozalash mexanizmi.
 
-5. **🧠 Agent Loop Verifikatsiyasi & Lokal Vision Maxfiyligi**:
+7. **🧠 Agent Loop 2.0 & Lokal Vision Maxfiyligi**:
    - Agent rejasini bajarish jarayonida cheksiz sikllardan (infinite loop) himoya.
    - Rejalarga bevosita GUI amallari (click, type, screenshot) integratsiya qilingan.
    - Foydalanuvchi ekrani tasvirlari hech qanday tashqi AI bulutlariga yuborilmaydi (to'liq lokal tahlil qilinadi).
 
-6. **⚙️ Desktop Supervisor Handshake & Platform Hardening**:
-   - Rust Tauri supervisor va Python backend o'rtasida `GET /api/health` orqali qat'iy versiya mosligi (`version: 9.0.2`, `app: Misa AI`).
+8. **⚙️ Desktop Supervisor Handshake & Platform Hardening**:
+   - Rust Tauri supervisor va Python backend o'rtasida `GET /api/health` orqali qat'iy versiya mosligi (`version: 9.3.0`, `app: MISA AI`).
    - Telemetriya va loglarda foydalanuvchi parollari va API kalitlari avtomatik `[REDACTED]` holatiga keltiriladi.
 
 ---
@@ -100,20 +115,22 @@
 
 ---
 
-## 📦 Rasmiy Windows Relizlar (v9.0.2 — Rasmiy Barqaror Reliz / Latest)
+## 📦 Rasmiy Windows Relizlar (v9.3.0 — Eng So'nggi Barqaror Reliz / Latest)
 
-Barcha reliz fayllari mustaqil kriptografik SHA-256 xeshlari bilan tekshirilgan va rasmiy [GitHub Releases Sahifasida](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.0.2) joylashtirilgan:
+Barcha reliz fayllari mustaqil kriptografik SHA-256 xeshlari bilan tekshirilgan va rasmiy [GitHub Releases Sahifasida](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.3.0) joylashtirilgan:
 
 | Fayl nomi | Tavsif | Hajmi | SHA-256 Checksum | Yuklab olish |
 | :--- | :--- | :---: | :--- | :---: |
-| **`Misa-AI-Setup-v9.0.2.exe`** | ⭐ **Windows NSIS O'rnatuvchisi (Tavsiya etiladi)** | **13.55 MB** | `30cca0a57f4140dd2e2effbea83751a6299ac9f03179e516ecb2d8facc031319` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.0.2/Misa-AI-Setup-v9.0.2.exe) |
-| **`Misa-AI-v9.0.2-Portable.zip`** | 📦 **To'liq Portativ Paket (Backend + DLL bilan)** | **236.55 MB** | `fb8eb81cf2ad3f039621d8d872a6bb7307f4bd2fb074d2e71466e7e4b4a9b218` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.0.2/Misa-AI-v9.0.2-Portable.zip) |
-| **`Misa-AI-v9.0.2.exe`** | 🚀 **Mustaqil Desktop Ilova (Self-Contained Executable)** | **5.20 MB** | `fb8a74752175a9d401cced1d5af3783ef20d2397c74f7e9042de476e5a809a5c` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.0.2/Misa-AI-v9.0.2.exe) |
-| **`Misa-AI-v9.0.2.msi`** | 🏢 **Standart Windows MSI O'rnatuvchisi** | **14.37 MB** | `d07688b384327c978320335eba9eae539d5da5e99f3bb1aefd4ec77bdb0576d8` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.0.2/Misa-AI-v9.0.2.msi) |
-| **`SHA256SUMS.txt`** | 🔐 **Kriptografik Nazorat Summalari** | **358 B** | Mustaqil tekshirilgan | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.0.2/SHA256SUMS.txt) |
-| **`version_manifest.json`** | ⚙️ **Avto-Yangilanish Rasmiy Manifesti** | **2.56 KB** | Ed25519 imzolangan | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.0.2/version_manifest.json) |
+| **`Misa-AI-v9.3-Portable.zip`** | 📦 **To'liq Portativ Paket (Backend + Python Runtime + RVC HuBERT bilan)** | **470.45 MB** | `8f198725f92e3d7172cea3a6880adb6f4160e33ec8e31fb2ff604a2e09c5effc` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/Misa-AI-v9.3-Portable.zip) |
+| **`Misa-AI-v9.3.exe`** | 🚀 **Mustaqil Standalone Desktop Executable** | **5.24 MB** | `f481f21f227594add572f97d57e2cf8bc0a2dc7db7de254f9b942b4f741f050d` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/Misa-AI-v9.3.exe) |
+| **`MicrosoftEdgeWebview2Setup.exe`** | 🌐 **Offline Windows WebView2 Bootstrapper** | **1.77 MB** | `87ad3fe4e3faa1b48bad79de1b9269e5eb30574545bb6f5f7c37d51035748caf` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/MicrosoftEdgeWebview2Setup.exe) |
+| **`run_portable.bat`** | ⚡ **Portativ Ishga Tushirish Skripti** | **360 B** | Bir bosishda ishga tushirish | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/run_portable.bat) |
+| **`SHA256SUMS.txt`** | 🔐 **Kriptografik Nazorat Summalari** | **175 B** | Mustaqil tekshirilgan | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/SHA256SUMS.txt) |
+| **`version_manifest.json`** | ⚙️ **Avto-Yangilanish Rasmiy Manifesti** | **1.00 KB** | Ed25519 imzolangan | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/version_manifest.json) |
 
 ### 🏛️ Tarixiy Relizlar Arxivi
+- [Misa AI v9.2 Release](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.2) — Platform stability & version synchronization
+- [Misa AI v9.0.2 Release](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.0.2) — Production hardening & installer packages
 - [Misa AI v9.0.1 Release](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.0.1) — Audio loop & anti-leak hardening
 - [Misa AI v9.0.0 Release](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.0.0) — Misa AI Rebranding & Tauri 2.0 UI
 - [Mikasa AI v8.0.0 Release](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v8.0.0) — Sobiq Mikasa AI arxivi
@@ -122,11 +139,10 @@ Barcha reliz fayllari mustaqil kriptografik SHA-256 xeshlari bilan tekshirilgan 
 
 ## 🚀 O'rnatish va Ishga Tushirish
 
-### 1-usul: Tayyor Desktop Ilovani Ishlatish (Foydalanuvchilar uchun)
-1. **O'rnatuvchi orqali (Eng oson va tavsiya etilgan)**:  
-   [Misa-AI-Setup-v9.0.2.exe](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.0.2/Misa-AI-Setup-v9.0.2.exe) ni yuklab oling va ishga tushiring. O'rnatuvchi barcha kerakli kutubxonalarni avtomatik sozlaydi va ish stoli yorlig'ini yaratadi.
-2. **Portativ rejimda (O'rnatmasdan)**:  
-   [Misa-AI-v9.0.2-Portable.zip](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.0.2/Misa-AI-v9.0.2-Portable.zip) yoki mustaqil [Misa-AI-v9.0.2.exe](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.0.2/Misa-AI-v9.0.2.exe) ni yuklab olib, to'g'ridan-to'g'ri ishga tushiring.
+### 1-usul: Tayyor Portativ Desktop Ilovani Ishlatish (Foydalanuvchilar uchun — Tavsiya etiladi)
+1. [Misa-AI-v9.3-Portable.zip](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/Misa-AI-v9.3-Portable.zip) arxivini yuklab oling va istalgan papkaga chiqaring.
+2. `run_portable.bat` faylini ikki marta bosing. Dastur backend serverini va Tauri interfeysini avtomatik sozlaydi va ishga tushiradi.
+3. Standalone foydalanish uchun to'g'ridan-to'g'ri [Misa-AI-v9.3.exe](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/Misa-AI-v9.3.exe) ni ochishingiz mumkin.
 
 ### 2-usul: Dasturchilar uchun (Manba kodi orqali)
 ```bash
@@ -135,7 +151,7 @@ git clone https://github.com/Muxammadaziz-boss/Misa.git
 cd Misa
 git checkout dev-v9.0.0
 
-# 2. Python 3.11+ virtual muhiti
+# 2. Python 3.11+ virtual muhiti va bog'liqliklar
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
@@ -152,7 +168,7 @@ python main.py
 
 ---
 
-## 📁 Loyiha Kataloglar Tuzilmasi (v9.2 — Misa AI)
+## 📁 Loyiha Kataloglar Tuzilmasi (v9.3 — Misa AI)
 
 ```
 Misa/ (yordamchi_9.0.0)
@@ -167,20 +183,23 @@ Misa/ (yordamchi_9.0.0)
 ├── core/                       # Intellektual yadro va backend xizmatlari
 │   ├── v8/                     # Supabase Auth, UpdateService, Telegram Gateway, OAuth
 │   ├── intelligence/           # Agent Loop 2.0, Planner DAG, Verifier, PermissionEngine
-│   ├── tools/                  # Tool System 2.0 (29+ lokal va tizim asboblari, Confirmation Tokens)
+│   ├── tools/                  # Tool System 2.0 (56 ta lokal va tizim asboblari, Confirmation Tokens)
+│   ├── mcp/                    # Model Context Protocol (MCP) integratsiya ko'prigi
+│   ├── stitch/                 # Stitch UI dinamik vizual komponentlar generatori
+│   ├── voice/                  # Ovozli dvigatellar: RVC (HuBERT), Edge-TTS va qurilmalar boshqaruvi
 │   ├── gui/                    # Session-Aware Windows GUI Controller (controller.py)
 │   ├── api_server.py           # Asinxron REST & WebSocket server (18420-port)
 │   └── audio_service.py        # VAD, ovozli monitor va audio oqimlar boshqaruvi
 ├── docs/                       # Loyiha arxitekturasi, qo'llanmalar va rasmlar
-│   └── assets/                 # README uchun yuqori sifatli UI skrinshotlar
+│   └── assets/                 # README uchun yuqori sifatli yangi UI skrinshotlar
 ├── Misa/                       # Tauri 2.0 + React 19 Desktop UI
-│   ├── src/                    # Zamonaviy React komponentlari (Orb, Dashboard, Chat, Auth)
+│   ├── src/                    # Zamonaviy React komponentlari (Orb, Dashboard, Chat, Auth, Settings)
 │   ├── src-tauri/              # Rust Tauri 2.0 desktop qobig'i va Backend Supervisor
 │   └── dist/                   # Ishlab chiqarish uchun yig'ilgan statik fayllar
 ├── packaging/                  # PyInstaller backend/agent bundler va Ed25519 reliz imzolash
-├── release/                    # Yig'ilgan desktop ilovalar arxivi (v9.2 Latest)
+├── release/                    # Yig'ilgan desktop ilovalar arxivi (v9.3 Latest)
 ├── supabase/                   # Supabase PostgreSQL migratsiyalari va RLS siyosatlari
-├── tests/                      # 345+ dan ortiq avtomatlashtirilgan backend va xavfsizlik testlari
+├── tests/                      # Avtomatlashtirilgan backend, xavfsizlik va mikrofon testlari
 ├── main.py                     # Asosiy Misa AI tizim boshqaruvchisi
 ├── requirements.txt            # Python bog'liqliklari
 ├── SETUP.md                    # To'liq sozlash qo'llanmasi
@@ -190,24 +209,20 @@ Misa/ (yordamchi_9.0.0)
 
 ---
 
-## 🧪 Sifat Kafolati va Sinov Ko'rsatkichlari (100% PASS)
+## 🧪 Sifat Kafolati va Sinov Ko'rsatkichlari (100% Yashil CI)
 
-Loyiha to'liq integratsion, kriptografik, multi-tenant RLS va Windows sandbox testlari bilan qamrab olingan:
-```bash
-# 1. Backend testlari (345 ta test)
-python -m unittest discover tests/ "test_*.py"
+Loyiha to'liq integratsion, kriptografik, multi-tenant RLS, mikrofon va Windows sandbox testlari bilan qamrab olingan hamda GitHub Actions CI tekshiruvlaridan 100% muvaffaqiyatli o'tgan:
 
-# 2. Frontend testlari (33 ta test)
-cd Misa && npm test
-
-# 3. Real Windows Smoke testlari (8 ta test)
-python tests/smoke_test_rc.py
-```
-* **Python Backend**: `345 / 345 PASS` (100% barqaror)
-* **Frontend (React 19)**: `33 / 33 PASS` (100% barqaror, build 2.07s)
-* **Desktop Qobig'i (Rust)**: `cargo check --lib` (0 xatolik)
-* **Real Windows Smoke**: `8 / 8 PASS` (Notepad sandbox, GUI blocks, token security)
-* **Kriptografiya**: Ed25519, ES256/RS256 JWKS, SHA-256, Windows DPAPI, Constant-time verification
+* **GitHub Actions CI**: `9 / 9 Passing (100% Green)`
+  - `Misa AI CI / Backend Tests (Python 3.11)`: ✅ Success
+  - `Misa AI CI / Backend Tests (Python 3.12)`: ✅ Success
+  - `Python Package using Conda`: ✅ Success
+  - `Django CI / Framework Check (Python 3.11 & 3.12)`: ✅ Success
+  - `Misa AI CI / Frontend Test & Build (Node 20)`: ✅ Success
+  - `Pylint / Code Analysis`: ✅ Success
+  - `Python application / App Lint & Test`: ✅ Success
+  - `Railway deployment health`: ✅ Success
+* **Kriptografiya & Xavfsizlik**: Ed25519, ES256/RS256 JWKS, SHA-256 confirmation token, Windows DPAPI, Constant-time verification
 
 ---
 

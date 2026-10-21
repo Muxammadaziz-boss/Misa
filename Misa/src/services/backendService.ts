@@ -4261,9 +4261,17 @@ class BackendService {
 
   public async getCurrentAuthUser(): Promise<MikasaAuthUser | null> {
     try {
-      const res = await this.getMe();
-      if (res.ok && res.authenticated && res.user) {
-        return res.user;
+      const acc = await this.getAccount();
+      if (acc && acc.ok && (acc.user_id || acc.name)) {
+        return {
+          id: acc.user_id || "local_user",
+          username: acc.name || acc.user_id || "Muhammadaziz",
+          email: acc.email || "",
+          is_active: true,
+          is_verified: true,
+          created_at: Date.now() / 1000,
+          provider: "local",
+        };
       }
       return null;
     } catch {

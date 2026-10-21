@@ -324,6 +324,13 @@ function App() {
     setActivePath(path);
   };
 
+  useEffect(() => {
+    (window as any).__misaNavigate = handleNavigate;
+    return () => {
+      delete (window as any).__misaNavigate;
+    };
+  }, []);
+
   const handleStartChatWithQuery = (query?: string) => {
     setInitialChatQuery(query);
     setActivePath("/chat");
