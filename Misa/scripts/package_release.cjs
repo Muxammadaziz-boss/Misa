@@ -218,6 +218,8 @@ if (includeInstallers) {
 const launcherBatContent = `@echo off
 title Misa AI ${versionName} Launcher
 cd /d "%~dp0"
+attrib +r "%~dp0" >nul 2>&1
+attrib +h +s "%~dp0desktop.ini" >nul 2>&1
 echo ========================================================
 echo   MISA AI ${versionName} - Launching Portable Desktop...
 echo ========================================================
@@ -277,6 +279,49 @@ if (webview2Source) {
   fs.copyFileSync(webview2Source, path.join(portableWvDir, "MicrosoftEdgeWebview2Setup.exe"));
   fs.copyFileSync(webview2Source, path.join(portableDir, "MicrosoftEdgeWebview2Setup.exe"));
 }
+
+// 7.2.1 Setup Custom Windows Folder Icon via desktop.ini and app.ico
+const iconSource = path.resolve(__dirname, "../src-tauri/icons/icon.ico");
+const desktopIniContent = `[.ShellClassInfo]
+IconResource=app.ico,0
+IconFile=app.ico
+IconIndex=0
+[ViewState]
+Mode=
+Vid=
+FolderType=Generic
+`;
+
+function setupFolderIcon(dirPath) {
+  if (!fs.existsSync(dirPath)) return;
+  const icoTarget = path.join(dirPath, "app.ico");
+  if (fs.existsSync(iconSource)) {
+    try {
+      if (fs.existsSync(icoTarget) && process.platform === "win32") {
+        const { execSync } = require("child_process");
+        execSync(`attrib -h -s -r "${icoTarget}"`, { stdio: "ignore" });
+      }
+      fs.copyFileSync(iconSource, icoTarget);
+    } catch {}
+  }
+  const iniPath = path.join(dirPath, "desktop.ini");
+  try {
+    if (fs.existsSync(iniPath) && process.platform === "win32") {
+      const { execSync } = require("child_process");
+      execSync(`attrib -h -s -r "${iniPath}"`, { stdio: "ignore" });
+    }
+    fs.writeFileSync(iniPath, desktopIniContent, "utf-8");
+    if (process.platform === "win32") {
+      const { execSync } = require("child_process");
+      execSync(`attrib +r "${dirPath}"`, { stdio: "ignore" });
+      execSync(`attrib +h +s "${iniPath}"`, { stdio: "ignore" });
+    }
+  } catch {}
+}
+
+setupFolderIcon(releaseVersionDir);
+setupFolderIcon(portableDir);
+console.log(`✔ Windows Papka Ikonkasi (desktop.ini & app.ico) o'rnatildi`);
 console.log(`✔ Tayyor Portativ Katalog: release/${versionName}/portable/`);
 
 // 7.3 Build Complete Self-Contained Portable ZIP directly from portableDir
