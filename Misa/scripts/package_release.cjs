@@ -282,10 +282,13 @@ if (webview2Source) {
   fs.copyFileSync(webview2Source, path.join(portableDir, "MicrosoftEdgeWebview2Setup.exe"));
 }
 
-const introMp4Source = path.join(releaseVersionDir, "misa_intro.mp4");
-if (fs.existsSync(introMp4Source)) {
-  fs.copyFileSync(introMp4Source, path.join(portableDir, "misa_intro.mp4"));
-  console.log(`✔ Intro Splash Video (misa_intro.mp4) portativ papkaga nusxalandi`);
+const introMp4Candidates = ["Misa.mp4", "misa_intro.mp4"];
+for (const vid of introMp4Candidates) {
+  const vidSrc = path.join(releaseVersionDir, vid);
+  if (fs.existsSync(vidSrc)) {
+    fs.copyFileSync(vidSrc, path.join(portableDir, vid));
+    console.log(`✔ Intro Splash Video (${vid}) portativ papkaga nusxalandi`);
+  }
 }
 
 // 7.2.1 Setup Custom Windows Folder Icon via desktop.ini and app.ico

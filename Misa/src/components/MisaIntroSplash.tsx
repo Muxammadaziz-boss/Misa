@@ -133,7 +133,6 @@ export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
       >
         <video
           ref={videoRef}
-          src="/misa_intro.mp4"
           playsInline
           autoPlay
           style={{
@@ -145,7 +144,10 @@ export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
             border: "1px solid rgba(168, 85, 247, 0.2)",
             backgroundColor: "#000000",
           }}
-        />
+        >
+          <source src="/Misa.mp4" type="video/mp4" />
+          <source src="/misa_intro.mp4" type="video/mp4" />
+        </video>
 
         {/* Subtle Video Progress Bar */}
         <div
