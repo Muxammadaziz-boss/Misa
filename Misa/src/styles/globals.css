@@ -23,8 +23,32 @@ body,
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  user-select: none;
 }
+
+/* ── Modern Violet Text Selection & Interactive Typography ── */
+p, span, h1, h2, h3, h4, h5, h6, pre, code, blockquote, li, td, th,
+input, textarea, [data-selectable="true"], .selectable-text, .markdown-content,
+.chat-message, .message-bubble, .response-content, label, dd, dt, em, strong, b, i {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+::selection {
+  background-color: rgba(192, 76, 253, 0.42) !important;
+  color: #FFFFFF !important;
+}
+
+::-moz-selection {
+  background-color: rgba(192, 76, 253, 0.42) !important;
+  color: #FFFFFF !important;
+}
+
+/* Chrome UI elements remain non-selectable for a native desktop feel */
+button, nav, .window-drag-region, .window-controls, .misa-tab, .sidebar-item, svg {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 
 h1, h2, h3, h4, .font-headline {
   font-family: var(--font-display);
@@ -387,4 +411,26 @@ button {
 .misa-orb-wrapper,
 .mikasa-orb-wrapper {
   will-change: transform;
+}
+
+@keyframes misaScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes misaFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

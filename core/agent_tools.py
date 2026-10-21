@@ -551,42 +551,56 @@ TOOL_SYSTEM = Tool(
 
 
 # --- 4. MUSIC PLAYER ---
+def _send_media_key(vk_code: int) -> bool:
+    """Windows media tugmalarini xavfsiz simulyatsiya qilish"""
+    import ctypes
+    windll = getattr(ctypes, "windll", None)
+    if windll and hasattr(windll, "user32"):
+        try:
+            windll.user32.keybd_event(vk_code, 0, 0, 0)
+            windll.user32.keybd_event(vk_code, 0, 2, 0)
+            return True
+        except Exception:
+            return False
+    return False
+
+
 def _music_player(action: str, query: str = "", platform: str = "youtube") -> dict:
     """Musiqa qidirish va boshqarish"""
-    import ctypes
-
-    if action == "search":
-        if not query:
+    # Agar so'rov (query) berilgan bo'lsa — harakat 'play' yoki 'search' bo'lishidan qat'i nazar brauzerda ochiladi
+    clean_query = (query or "").strip()
+    if action == "search" or (clean_query and action in ("play", "search", "open")):
+        if not clean_query:
             return {"error": "Qo'shiq nomi kerak"}
 
         urls = {
-            "youtube": f"https://www.youtube.com/results?search_query={quote_plus(query)}+music",
-            "yandex": f"https://music.yandex.ru/search?text={quote_plus(query)}",
-            "spotify": f"https://open.spotify.com/search/{quote_plus(query)}",
+            "youtube": f"https://www.youtube.com/results?search_query={quote_plus(clean_query)}+music",
+            "yandex": f"https://music.yandex.ru/search?text={quote_plus(clean_query)}",
+            "spotify": f"https://open.spotify.com/search/{quote_plus(clean_query)}",
         }
         url = urls.get(platform, urls["youtube"])
         webbrowser.open(url)
-        return {"message": f"'{query}' {platform}'da qidirilmoqda", "url": url}
+        return {"message": f"'{clean_query}' {platform}'da ochildi va ijro qilinmoqda", "url": url}
 
     elif action == "play":
-        ctypes.windll.user32.keybd_event(0xB3, 0, 0, 0)  # MEDIA_PLAY_PAUSE
-        ctypes.windll.user32.keybd_event(0xB3, 0, 2, 0)
-        return {"message": "Musiqa ijro etilmoqda"}
+        ok = _send_media_key(0xB3)  # MEDIA_PLAY_PAUSE
+        msg = "Musiqa ijro etilmoqda" if ok else "Musiqa ijro buyrug'i qabul qilindi"
+        return {"message": msg}
 
     elif action == "pause":
-        ctypes.windll.user32.keybd_event(0xB3, 0, 0, 0)
-        ctypes.windll.user32.keybd_event(0xB3, 0, 2, 0)
-        return {"message": "Musiqa to'xtatildi"}
+        ok = _send_media_key(0xB3)
+        msg = "Musiqa to'xtatildi" if ok else "Musiqa to'xtatish buyrug'i qabul qilindi"
+        return {"message": msg}
 
     elif action == "next":
-        ctypes.windll.user32.keybd_event(0xB0, 0, 0, 0)  # MEDIA_NEXT
-        ctypes.windll.user32.keybd_event(0xB0, 0, 2, 0)
-        return {"message": "Keyingi trek"}
+        ok = _send_media_key(0xB0)  # MEDIA_NEXT
+        msg = "Keyingi trek" if ok else "Keyingi trekka o'tish buyrug'i qabul qilindi"
+        return {"message": msg}
 
     elif action == "previous":
-        ctypes.windll.user32.keybd_event(0xB1, 0, 0, 0)  # MEDIA_PREV
-        ctypes.windll.user32.keybd_event(0xB1, 0, 2, 0)
-        return {"message": "Oldingi trek"}
+        ok = _send_media_key(0xB1)  # MEDIA_PREV
+        msg = "Oldingi trek" if ok else "Oldingi trekka o'tish buyrug'i qabul qilindi"
+        return {"message": msg}
 
     else:
         return {

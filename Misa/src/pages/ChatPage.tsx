@@ -1217,7 +1217,11 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                         fontSize: "14px",
                         lineHeight: 1.6,
                         whiteSpace: "pre-wrap",
+                        userSelect: "text",
+                        WebkitUserSelect: "text",
+                        cursor: "text",
                       }}
+                      className="message-bubble selectable-text"
                     >
                       {msg.text}
                     </div>
@@ -1435,13 +1439,16 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 
                       {/* Main Ultra Glass Message Body */}
                       <div
-                        className="misa-ultra-glass"
+                        className="misa-ultra-glass message-bubble response-content selectable-text"
                         style={{
                           padding: "20px 24px",
                           borderRadius: "6px 24px 24px 24px",
                           color: "#F5F0FF",
                           fontSize: "14px",
                           lineHeight: 1.65,
+                          userSelect: "text",
+                          WebkitUserSelect: "text",
+                          cursor: "text",
                         }}
                       >
                         {msg.agentPlan && msg.agentPlan.steps && msg.agentPlan.steps.length > 0 && (

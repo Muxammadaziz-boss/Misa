@@ -16,6 +16,7 @@ const AuthPage = lazy(() => import("./pages/AuthPage").then(m => ({ default: m.A
 import { CommandPalette } from "./components/CommandPalette";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { UpdateModal } from "./components/UpdateModal";
+import { ContextMenu } from "./components/ContextMenu";
 import { backendService, MikasaAuthUser } from "./services/backendService";
 import { UpdateService, UpdateCheckResponse } from "./services/updateService";
 import { supabase, isSupabaseConfigured } from "./services/supabaseClient";
@@ -473,6 +474,7 @@ function App() {
             }}
           />
         </Suspense>
+        <ContextMenu />
       </ErrorBoundary>
     );
   }
@@ -518,6 +520,10 @@ function App() {
         isOpen={updateModalOpen}
         onClose={() => setUpdateModalOpen(false)}
         updateInfo={updateInfo}
+      />
+      <ContextMenu
+        onNavigate={handleNavigate}
+        onAskMisa={handleStartChatWithQuery}
       />
     </AppShell>
   );

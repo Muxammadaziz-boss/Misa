@@ -115,7 +115,19 @@ export const MarkdownView: React.FC<MarkdownViewProps> = ({ content }) => {
     );
   }
 
-  return <div style={{ wordBreak: "break-word" }}>{parts}</div>;
+  return (
+    <div
+      className="markdown-content selectable-text"
+      style={{
+        wordBreak: "break-word",
+        userSelect: "text",
+        WebkitUserSelect: "text",
+        cursor: "text",
+      }}
+    >
+      {parts}
+    </div>
+  );
 };
 
 interface CodeBlockProps {
@@ -182,6 +194,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, code }) => {
       </div>
 
       <pre
+        className="selectable-text"
         style={{
           margin: 0,
           padding: "12px",
@@ -190,9 +203,12 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, code }) => {
           fontFamily: 'Consolas, Monaco, "Courier New", monospace',
           color: "#E2E8F0",
           lineHeight: 1.5,
+          userSelect: "text",
+          WebkitUserSelect: "text",
+          cursor: "text",
         }}
       >
-        <code>{code.trimEnd()}</code>
+        <code style={{ userSelect: "text", WebkitUserSelect: "text" }}>{code.trimEnd()}</code>
       </pre>
     </div>
   );

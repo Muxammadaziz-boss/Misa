@@ -1385,10 +1385,20 @@ async def handle_voice_preview(request):
         loop = asyncio.get_running_loop()
         audio_path = await loop.run_in_executor(None, vm.synthesize, text, voice_id)
 
+        # Agar tanlangan ovoz audiosi yaratilmasa — zaxira ovoz (Madina) bilan sinab ko'rish
+        if not audio_path or not os.path.exists(audio_path):
+            try:
+                audio_path = await loop.run_in_executor(None, vm.synthesize, text, "uz-UZ-MadinaNeural")
+                if audio_path and os.path.exists(audio_path):
+                    is_fallback = True
+                    fallback_reason = fallback_reason or "Lokal ovoz modeli mavjud emas, vaqtincha zaxira ovoz ishlatildi."
+            except Exception:
+                pass
+
         if not audio_path or not os.path.exists(audio_path):
             return web.json_response({
                 "ok": False,
-                "error": "Ovoz faylini yaratib bo'lmadi",
+                "error": "Ovoz faylini yaratib bo'lmadi. Internet ulanishini yoki model fayllarini tekshiring.",
                 "voice_id": voice_id,
                 "provider": provider,
             }, status=500)
