@@ -282,7 +282,7 @@ if (webview2Source) {
   fs.copyFileSync(webview2Source, path.join(portableDir, "MicrosoftEdgeWebview2Setup.exe"));
 }
 
-const introMp4Candidates = ["Misa.mp4", "misa_intro.mp4"];
+const introMp4Candidates = ["Misa.mp4", "Misa1.mp4", "misa_intro.mp4"];
 for (const vid of introMp4Candidates) {
   const vidSrc = path.join(releaseVersionDir, vid);
   if (fs.existsSync(vidSrc)) {

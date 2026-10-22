@@ -118,57 +118,50 @@ export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
         }}
       />
 
-      {/* Main Video Presentation */}
-      <div
+      {/* Fullscreen Video Presentation with Zero Margin */}
+      <video
+        ref={videoRef}
+        playsInline
+        autoPlay
         style={{
-          position: "relative",
-          maxWidth: "880px",
-          maxHeight: "85vh",
-          width: "92vw",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          backgroundColor: "#000000",
+          border: "none",
+          margin: 0,
+          padding: 0,
+          display: "block",
         }}
       >
-        <video
-          ref={videoRef}
-          playsInline
-          autoPlay
-          style={{
-            width: "100%",
-            maxHeight: "75vh",
-            objectFit: "contain",
-            borderRadius: "16px",
-            boxShadow: "0 20px 60px -15px rgba(0, 0, 0, 0.8), 0 0 40px -10px rgba(168, 85, 247, 0.25)",
-            border: "1px solid rgba(168, 85, 247, 0.2)",
-            backgroundColor: "#000000",
-          }}
-        >
-          <source src="/Misa.mp4" type="video/mp4" />
-          <source src="/misa_intro.mp4" type="video/mp4" />
-        </video>
+        <source src="/Misa.mp4" type="video/mp4" />
+        <source src="/Misa1.mp4" type="video/mp4" />
+        <source src="/misa_intro.mp4" type="video/mp4" />
+      </video>
 
-        {/* Subtle Video Progress Bar */}
+      {/* Bottom Edge Progress Bar */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          width: "100%",
+          height: "3px",
+          backgroundColor: "rgba(255, 255, 255, 0.12)",
+          zIndex: 20,
+        }}
+      >
         <div
           style={{
-            width: "100%",
-            height: "3px",
-            backgroundColor: "rgba(255, 255, 255, 0.08)",
-            borderRadius: "2px",
-            marginTop: "12px",
-            overflow: "hidden",
+            width: `${progress}%`,
+            height: "100%",
+            background: "linear-gradient(90deg, #A855F7, #EC4899)",
+            transition: "width 0.1s linear",
           }}
-        >
-          <div
-            style={{
-              width: `${progress}%`,
-              height: "100%",
-              background: "linear-gradient(90deg, #A855F7, #EC4899)",
-              transition: "width 0.1s linear",
-            }}
-          />
-        </div>
+        />
       </div>
 
       {/* Skip Button */}
@@ -179,6 +172,7 @@ export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
             position: "absolute",
             top: "24px",
             right: "28px",
+            zIndex: 30,
             background: "rgba(18, 12, 28, 0.7)",
             backdropFilter: "blur(12px)",
             border: "1px solid rgba(168, 85, 247, 0.3)",
