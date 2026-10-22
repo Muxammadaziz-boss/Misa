@@ -1,6 +1,6 @@
 // ========== AuthPage.tsx ==========
-// Misa AI v9.0.0 — Account Registration & Authentication System
-// Ultra Glass Auth Gate for Login, Registration, Password Reset and Email Verification
+// Misa AI v9.3 — Multi-Provider Authentication & Ultra Glass Portal
+// Support for Google, GitHub, Telegram & Direct Email Auth with Fluid Micro-Animations
 
 import React, { useState, useEffect } from "react";
 import {
@@ -14,11 +14,16 @@ import {
 import {
   SparklesIcon,
   ShieldIcon,
-  KeyIcon,
-  UserIcon,
   CheckIcon,
   AlertTriangleIcon,
   GoogleIcon,
+  GithubIcon,
+  TelegramColorIcon,
+  MailIcon,
+  LockIcon,
+  EyeIcon,
+  EyeOffIcon,
+  GlobeIcon,
 } from "../components/icons/Icons";
 import { MisaLogo } from "../components/MisaLogo";
 import { WindowControls } from "../components/WindowControls";
@@ -36,21 +41,30 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
   // Form fields
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [token, setToken] = useState("");
 
+  // Password visibility
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   // Status & Feedback
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState(false);
   const [oauthWaiting, setOauthWaiting] = useState(false);
+  const [oauthProvider, setOauthProvider] = useState<"google" | "github">("google");
   const [oauthUrl, setOauthUrl] = useState<string | null>(null);
   const [oauthState, setOauthState] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [diagModalOpen, setDiagModalOpen] = useState(false);
+
+  // Telegram modal state
+  const [telegramModalOpen, setTelegramModalOpen] = useState(false);
+  const [telegramInput, setTelegramInput] = useState("");
+  const [telegramLoading, setTelegramLoading] = useState(false);
 
   // Clear messages on tab change
   const handleTabChange = (tab: AuthTab) => {
@@ -59,6 +73,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
     setSuccessMsg(null);
     setOauthWaiting(false);
     setOauthState(null);
+    setTelegramModalOpen(false);
   };
 
   // Listen for OAuth redirect sessions
@@ -80,7 +95,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
           is_verified: Boolean(session.user.email_confirmed_at),
           created_at: Date.now() / 1000,
           avatar_url: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || undefined,
-          provider: session.user.app_metadata?.provider || "google",
+          provider: session.user.app_metadata?.provider || "oauth",
         };
         onAuthSuccess(user);
       }
@@ -99,7 +114,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
     let inFlight = false;
     let shouldContinue = true;
     const startedAt = Date.now();
-    const MAX_WAIT_MS = 5 * 60 * 1000; // 5 daqiqa
+    const MAX_WAIT_MS = 5 * 60 * 1000; // 5 minutes
+
+    const providerName = oauthProvider === "google" ? "Google" : "GitHub";
 
     const poll = async () => {
       if (isCancelled || inFlight) return;
@@ -108,7 +125,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
         setOauthWaiting(false);
         setOauthState(null);
         setSuccessMsg(null);
-        setErrorMsg("Google sessiyasi kutish vaqti tugadi. Iltimos, qaytadan urinib ko'ring.");
+        setErrorMsg(`${providerName} sessiyasi kutish vaqti tugadi. Iltimos, qaytadan urinib ko'ring.`);
         return;
       }
 
@@ -122,7 +139,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
           setOauthWaiting(false);
           setOauthState(null);
           setSuccessMsg(null);
-          setErrorMsg(res.error || "Google orqali kirishda xatolik yuz berdi.");
+          setErrorMsg(res.error || `${providerName} orqali kirishda xatolik yuz berdi.`);
           return;
         }
 
@@ -142,7 +159,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               setOauthWaiting(false);
               setOauthState(null);
               setSuccessMsg(null);
-              setErrorMsg("Google sessiyasi muddati tugagan yoki yaroqsiz. Qaytadan urinib ko'ring.");
+              setErrorMsg(`${providerName} sessiyasi muddati tugagan yoki yaroqsiz. Qaytadan urinib ko'ring.`);
               return;
             }
             sessionUser = data?.user;
@@ -155,7 +172,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               setOauthWaiting(false);
               setOauthState(null);
               setSuccessMsg(null);
-              setErrorMsg("Google avtorizatsiya kodini almashishda xatolik yuz berdi. Qaytadan urinib ko'ring.");
+              setErrorMsg(`${providerName} avtorizatsiya kodini almashishda xatolik yuz berdi. Qaytadan urinib ko'ring.`);
               return;
             }
             sessionUser = data?.user;
@@ -180,7 +197,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               is_verified: true,
               created_at: Date.now() / 1000,
               avatar_url: sessionUser.user_metadata?.avatar_url || sessionUser.user_metadata?.picture || undefined,
-              provider: sessionUser.app_metadata?.provider || "google",
+              provider: sessionUser.app_metadata?.provider || oauthProvider,
             };
             setOauthWaiting(false);
             setOauthState(null);
@@ -206,41 +223,83 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
       isCancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [oauthWaiting, oauthState, onAuthSuccess]);
+  }, [oauthWaiting, oauthState, oauthProvider, onAuthSuccess]);
 
-  // Google OAuth handler
-  const handleGoogleSignIn = async (forceRestartOrEvent?: boolean | React.MouseEvent<HTMLButtonElement>) => {
-    const forceRestart = forceRestartOrEvent === true;
+  // Unified OAuth handler (Google & GitHub)
+  const handleOAuthSignIn = async (provider: "google" | "github", forceRestart?: boolean) => {
     if (loading || oauthLoading || (oauthWaiting && !forceRestart)) return;
     if (forceRestart) {
       setOauthWaiting(false);
     }
     setOauthLoading(true);
+    setOauthProvider(provider);
     setErrorMsg(null);
     setSuccessMsg(null);
 
+    const providerName = provider === "google" ? "Google" : "GitHub";
+
     try {
-      const res = await backendService.signInWithGoogle();
+      const res = await backendService.signInWithOAuthProvider(provider);
       if (!res.ok) {
-        setErrorMsg(res.error || "Google orqali kirishda xatolik yuz berdi");
+        setErrorMsg(res.error || `${providerName} orqali kirishda xatolik yuz berdi`);
         setOauthLoading(false);
       } else if (res.url) {
         setOauthState(res.state || null);
         setOauthUrl(res.url);
         setOauthWaiting(true);
         setOauthLoading(false);
-        setSuccessMsg("Brauzeringizda Google orqali tizimga kirishni tasdiqlang...");
+        setSuccessMsg(`Brauzeringizda ${providerName} orqali tizimga kirishni tasdiqlang...`);
         await backendService.openExternalUrl(res.url);
       } else {
-        setErrorMsg("Google avtorizatsiya manzili olinmadi");
+        setErrorMsg(`${providerName} avtorizatsiya manzili olinmadi`);
         setOauthLoading(false);
       }
     } catch (err: any) {
-      setErrorMsg(err.message || "Google tizimiga ulanishda xatolik");
+      setErrorMsg(err.message || `${providerName} tizimiga ulanishda xatolik`);
       setOauthLoading(false);
     }
   };
 
+  // Telegram Quick Link / Bot Open
+  const handleOpenTelegramBot = async () => {
+    try {
+      await backendService.openExternalUrl("https://t.me/Misa_ai_agent_bot?start=auth");
+      setSuccessMsg("Telegram bot (@Misa_ai_agent_bot) ochildi. Bot orqali tasdiqlang.");
+    } catch {
+      window.open("https://t.me/Misa_ai_agent_bot?start=auth", "_blank");
+    }
+  };
+
+  // Telegram Quick Sign-In by Username or ID
+  const handleTelegramSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!telegramInput.trim()) {
+      setErrorMsg("Telegram @username yoki telefon raqamingizni kiriting");
+      return;
+    }
+    setTelegramLoading(true);
+    setErrorMsg(null);
+
+    try {
+      const res = await backendService.loginWithTelegram({
+        username: telegramInput.trim(),
+        first_name: firstName.trim() || undefined,
+      });
+
+      if (res.ok && res.user) {
+        setSuccessMsg("Telegram orqali muvaffaqiyatli kirildi!");
+        setTimeout(() => {
+          onAuthSuccess(res.user!);
+        }, 400);
+      } else {
+        setErrorMsg(res.error || "Telegram orqali kirishda xatolik");
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || "Telegram bilan bog'lanishda xatolik");
+    } finally {
+      setTelegramLoading(false);
+    }
+  };
 
   // Password validation helper
   const isPasswordStrong = (pwd: string) => {
@@ -251,8 +310,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading || oauthLoading || oauthWaiting) return;
-    if (!username.trim() || !password) {
-      setErrorMsg("Foydalanuvchi nomi yoki email va parolni kiriting");
+    if (!email.trim() || !password) {
+      setErrorMsg("Email manzil va parolni kiriting");
       return;
     }
 
@@ -262,7 +321,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
 
     try {
       const res = await backendService.login({
-        username_or_email: username.trim(),
+        username_or_email: email.trim(),
         password,
       });
 
@@ -281,12 +340,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
     }
   };
 
-  // 2. REGISTER HANDLER
+  // 2. REGISTER HANDLER (No username asked, derived seamlessly)
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading || oauthLoading || oauthWaiting) return;
-    if (!username.trim() || !password) {
-      setErrorMsg("Foydalanuvchi nomi va parolni kiriting");
+    if (!email.trim() || !password) {
+      setErrorMsg("Email manzil va parolni kiriting");
       return;
     }
     if (!isPasswordStrong(password)) {
@@ -302,12 +361,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
     setErrorMsg(null);
     setSuccessMsg(null);
 
+    const derivedUsername =
+      email.trim().split("@")[0].replace(/[^a-zA-Z0-9_-]/g, "") ||
+      (firstName.trim() ? firstName.trim().toLowerCase().replace(/[^a-zA-Z0-9_-]/g, "") : `user_${Date.now().toString().slice(-4)}`);
+
     try {
       const res = await backendService.register({
-        username: username.trim(),
+        username: derivedUsername,
         first_name: firstName.trim() || undefined,
         last_name: lastName.trim() || undefined,
-        email: email.trim() || undefined,
+        email: email.trim(),
         password,
         confirm_password: confirmPassword,
       });
@@ -331,9 +394,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading || oauthLoading || oauthWaiting) return;
-    const target = email.trim() || username.trim();
+    const target = email.trim();
     if (!target) {
-      setErrorMsg("Email yoki foydalanuvchi nomingizni kiriting");
+      setErrorMsg("Email manzilingizni kiriting");
       return;
     }
 
@@ -388,16 +451,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
       const res = await backendService.resetPassword({
         token: token.trim(),
         new_password: password,
-        confirm_password: confirmPassword,
       });
 
       if (res.ok) {
-        setSuccessMsg(res.message || "Parol muvaffaqiyatli yangilandi! Endi kirishingiz mumkin.");
-        setPassword("");
-        setConfirmPassword("");
+        setSuccessMsg("Parol muvaffaqiyatli yangilandi! Tizimga kirishingiz mumkin.");
         setTimeout(() => {
+          setPassword("");
+          setConfirmPassword("");
+          setToken("");
           setActiveTab("login");
-        }, 1200);
+        }, 1500);
       } else {
         setErrorMsg(res.error || "Parolni yangilashda xatolik");
       }
@@ -424,8 +487,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
     try {
       const res = await backendService.verifyEmail(token.trim());
       if (res.ok) {
-        setSuccessMsg(res.message || "Email manzilingiz muvaffaqiyatli tasdiqlandi!");
+        setSuccessMsg("Email muvaffaqiyatli tasdiqlandi! Endi tizimga kirishingiz mumkin.");
         setTimeout(() => {
+          setToken("");
           setActiveTab("login");
         }, 1200);
       } else {
@@ -457,11 +521,102 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
         boxSizing: "border-box",
       }}
     >
-      {/* Misa v9.0 Ultra Glass Background & Micro-Grid */}
+      {/* Dynamic Keyframe Animations */}
+      <style>{`
+        @keyframes authEntrance {
+          0% {
+            opacity: 0;
+            transform: translateY(22px) scale(0.975);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        @keyframes nebulaPulseA {
+          0%, 100% {
+            transform: translate(0, 0) scale(1);
+            opacity: 0.22;
+          }
+          50% {
+            transform: translate(30px, -20px) scale(1.12);
+            opacity: 0.35;
+          }
+        }
+        @keyframes nebulaPulseB {
+          0%, 100% {
+            transform: translate(0, 0) scale(1);
+            opacity: 0.20;
+          }
+          50% {
+            transform: translate(-30px, 25px) scale(1.1);
+            opacity: 0.32;
+          }
+        }
+        @keyframes authBtnGlow {
+          0%, 100% {
+            box-shadow: 0 4px 20px rgba(147, 3, 197, 0.45);
+          }
+          50% {
+            box-shadow: 0 6px 28px rgba(192, 76, 253, 0.65);
+          }
+        }
+        @keyframes authSpin {
+          to { transform: rotate(360deg); }
+        }
+        .misa-auth-input {
+          width: 100%;
+          background: rgba(8, 14, 28, 0.72);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 12px;
+          color: #FFFFFF;
+          font-size: 13.5px;
+          outline: none;
+          box-sizing: border-box;
+          transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .misa-auth-input:focus {
+          border-color: #C04CFD !important;
+          background: rgba(14, 20, 38, 0.85) !important;
+          box-shadow: 0 0 0 3px rgba(192, 76, 253, 0.25), 0 0 16px rgba(147, 3, 197, 0.2) !important;
+        }
+        .misa-social-btn {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justifyContent: center;
+          gap: 8px;
+          padding: 11px 12px;
+          background: rgba(255, 255, 255, 0.05);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 12px;
+          color: #F8FAFC;
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+        }
+        .misa-social-btn:hover {
+          background: rgba(255, 255, 255, 0.12);
+          border-color: rgba(192, 76, 253, 0.45);
+          transform: translateY(-2px);
+          box-shadow: 0 6px 20px rgba(147, 3, 197, 0.28);
+        }
+        .misa-social-btn:active {
+          transform: translateY(0);
+        }
+      `}</style>
+
+      {/* Misa v9.3 Canvas & Grid Backdrop */}
       <div className="misa-canvas-bg" />
       <div className="misa-grid-overlay" />
 
-      {/* ═══ TOP CHROME HEADER (Native Window Drag & Controls) ═══ */}
+      {/* ═══ TOP CHROME HEADER ═══ */}
       <header
         data-tauri-drag-region
         style={{
@@ -496,56 +651,59 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
       <div
         style={{
           position: "absolute",
-          top: "10%",
-          left: "15%",
-          width: "480px",
-          height: "480px",
+          top: "8%",
+          left: "12%",
+          width: "500px",
+          height: "500px",
           borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(147, 3, 197, 0.24) 0%, rgba(192, 76, 253, 0.1) 50%, transparent 70%)",
+          background: "radial-gradient(circle, rgba(147, 3, 197, 0.3) 0%, rgba(192, 76, 253, 0.12) 50%, transparent 70%)",
           filter: "blur(90px)",
           pointerEvents: "none",
           zIndex: 1,
+          animation: "nebulaPulseA 12s ease-in-out infinite",
         }}
       />
       <div
         style={{
           position: "absolute",
-          bottom: "10%",
-          right: "15%",
-          width: "520px",
-          height: "520px",
+          bottom: "8%",
+          right: "12%",
+          width: "540px",
+          height: "540px",
           borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(192, 76, 253, 0.2) 0%, rgba(78, 222, 163, 0.08) 50%, transparent 70%)",
+          background: "radial-gradient(circle, rgba(192, 76, 253, 0.24) 0%, rgba(36, 161, 222, 0.12) 50%, transparent 70%)",
           filter: "blur(95px)",
           pointerEvents: "none",
           zIndex: 1,
+          animation: "nebulaPulseB 14s ease-in-out infinite",
         }}
       />
 
-      {/* Main Ultra Glass Card */}
+      {/* Main Ultra Glass Portal Card */}
       <div
         className="misa-ultra-glass"
         style={{
           width: "100%",
-          maxWidth: "460px",
-          background: "rgba(18, 22, 34, 0.62)",
-          backdropFilter: "blur(32px) saturate(180%)",
-          WebkitBackdropFilter: "blur(32px) saturate(180%)",
-          border: "1px solid rgba(192, 76, 253, 0.24)",
-          borderRadius: "24px",
-          boxShadow: "0 24px 64px rgba(0, 0, 0, 0.65), 0 0 40px rgba(147, 3, 197, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.14)",
+          maxWidth: "470px",
+          background: "rgba(16, 20, 32, 0.68)",
+          backdropFilter: "blur(36px) saturate(190%)",
+          WebkitBackdropFilter: "blur(36px) saturate(190%)",
+          border: "1px solid rgba(192, 76, 253, 0.28)",
+          borderRadius: "26px",
+          boxShadow: "0 28px 72px rgba(0, 0, 0, 0.72), 0 0 45px rgba(147, 3, 197, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.15)",
           padding: "36px 32px",
           position: "relative",
           zIndex: 10,
           margin: "auto",
+          animation: "authEntrance 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards",
         }}
       >
         {/* Header Branding */}
-        <div style={{ textAlign: "center", marginBottom: "26px", display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <div style={{ marginBottom: "12px" }}>
-            <MisaLogo size={42} showText={true} showBadge={true} />
+        <div style={{ textAlign: "center", marginBottom: "24px", display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <div style={{ marginBottom: "12px", filter: "drop-shadow(0 0 16px rgba(192, 76, 253, 0.35))" }}>
+            <MisaLogo size={46} showText={true} showBadge={true} />
           </div>
-          <p style={{ margin: 0, fontSize: "13px", color: "#94A3B8" }}>
+          <p style={{ margin: 0, fontSize: "13px", color: "#94A3B8", letterSpacing: "0.01em" }}>
             Avtonom Intellektual Ish Maydoni & Masofaviy Boshqaruv
           </p>
         </div>
@@ -554,12 +712,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
         <div
           style={{
             display: "flex",
-            background: "rgba(6, 10, 22, 0.6)",
+            background: "rgba(6, 10, 22, 0.65)",
             backdropFilter: "blur(16px)",
             WebkitBackdropFilter: "blur(16px)",
-            borderRadius: "12px",
+            borderRadius: "14px",
             padding: "4px",
-            marginBottom: "24px",
+            marginBottom: "22px",
             border: "1px solid rgba(255, 255, 255, 0.08)",
           }}
         >
@@ -570,14 +728,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               flex: 1,
               padding: "10px 0",
               border: activeTab === "login" ? "1px solid rgba(192, 76, 253, 0.45)" : "1px solid transparent",
-              borderRadius: "9px",
-              background: activeTab === "login" ? "linear-gradient(135deg, rgba(147, 3, 197, 0.35) 0%, rgba(192, 76, 253, 0.22) 100%)" : "transparent",
+              borderRadius: "11px",
+              background: activeTab === "login" ? "linear-gradient(135deg, rgba(147, 3, 197, 0.4) 0%, rgba(192, 76, 253, 0.25) 100%)" : "transparent",
               color: activeTab === "login" ? "#FFFFFF" : "#94A3B8",
               fontSize: "13.5px",
               fontWeight: activeTab === "login" ? 700 : 500,
               cursor: "pointer",
-              transition: "all 0.2s ease",
-              boxShadow: activeTab === "login" ? "0 2px 12px rgba(147, 3, 197, 0.28)" : "none",
+              transition: "all 0.22s ease",
+              boxShadow: activeTab === "login" ? "0 2px 14px rgba(147, 3, 197, 0.32)" : "none",
             }}
           >
             Kirish
@@ -589,14 +747,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               flex: 1,
               padding: "10px 0",
               border: activeTab === "register" ? "1px solid rgba(192, 76, 253, 0.45)" : "1px solid transparent",
-              borderRadius: "9px",
-              background: activeTab === "register" ? "linear-gradient(135deg, rgba(147, 3, 197, 0.35) 0%, rgba(192, 76, 253, 0.22) 100%)" : "transparent",
+              borderRadius: "11px",
+              background: activeTab === "register" ? "linear-gradient(135deg, rgba(147, 3, 197, 0.4) 0%, rgba(192, 76, 253, 0.25) 100%)" : "transparent",
               color: activeTab === "register" ? "#FFFFFF" : "#94A3B8",
               fontSize: "13.5px",
               fontWeight: activeTab === "register" ? 700 : 500,
               cursor: "pointer",
-              transition: "all 0.2s ease",
-              boxShadow: activeTab === "register" ? "0 2px 12px rgba(147, 3, 197, 0.28)" : "none",
+              transition: "all 0.22s ease",
+              boxShadow: activeTab === "register" ? "0 2px 14px rgba(147, 3, 197, 0.32)" : "none",
             }}
           >
             Ro'yxatdan o'tish
@@ -611,7 +769,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               alignItems: "flex-start",
               gap: "10px",
               padding: "12px 14px",
-              borderRadius: "10px",
+              borderRadius: "12px",
               background: "rgba(245, 158, 11, 0.12)",
               border: "1px solid rgba(245, 158, 11, 0.3)",
               color: "#FDE68A",
@@ -624,7 +782,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 600, marginBottom: "2px" }}>Supabase sozlanmagan</div>
               <div>
-                Tizimga kirish yoki ro'yxatdan o'tish uchun <code style={{ background: "rgba(0,0,0,0.3)", padding: "1px 4px", borderRadius: "4px" }}>Misa/.env</code> faylida <code style={{ background: "rgba(0,0,0,0.3)", padding: "1px 4px", borderRadius: "4px" }}>VITE_SUPABASE_URL</code> va <code style={{ background: "rgba(0,0,0,0.3)", padding: "1px 4px", borderRadius: "4px" }}>VITE_SUPABASE_PUBLISHABLE_KEY</code> sozlamalarini kiriting.
+                Tizimga kirish uchun <code style={{ background: "rgba(0,0,0,0.3)", padding: "1px 4px", borderRadius: "4px" }}>Misa/.env</code> faylida <code style={{ background: "rgba(0,0,0,0.3)", padding: "1px 4px", borderRadius: "4px" }}>VITE_SUPABASE_URL</code> sozlamasini kiriting.
               </div>
             </div>
           </div>
@@ -638,13 +796,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               flexDirection: "column",
               gap: "10px",
               padding: "12px 14px",
-              borderRadius: "10px",
-              background: "rgba(239, 68, 68, 0.12)",
-              border: "1px solid rgba(239, 68, 68, 0.3)",
+              borderRadius: "12px",
+              background: "rgba(239, 68, 68, 0.14)",
+              border: "1px solid rgba(239, 68, 68, 0.32)",
               color: "#FCA5A5",
               fontSize: "13px",
               marginBottom: "18px",
               lineHeight: 1.4,
+              animation: "authEntrance 0.3s ease",
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -687,13 +846,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               alignItems: "center",
               gap: "10px",
               padding: "12px 14px",
-              borderRadius: "10px",
-              background: "rgba(16, 185, 129, 0.12)",
-              border: "1px solid rgba(16, 185, 129, 0.3)",
+              borderRadius: "12px",
+              background: "rgba(16, 185, 129, 0.14)",
+              border: "1px solid rgba(16, 185, 129, 0.32)",
               color: "#6EE7B7",
               fontSize: "13px",
               marginBottom: "18px",
               lineHeight: 1.4,
+              animation: "authEntrance 0.3s ease",
             }}
           >
             <CheckIcon size={18} color="#10B981" />
@@ -701,42 +861,59 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
           </div>
         )}
 
-        {/* OAUTH WAITING CARD */}
+        {/* ═══ OAUTH WAITING VIEW ═══ */}
         {oauthWaiting ? (
           <div
             style={{
               textAlign: "center",
-              padding: "10px 4px 8px",
+              padding: "12px 4px 8px",
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
-              gap: "16px",
+              gap: "18px",
+              animation: "authEntrance 0.3s ease",
             }}
           >
             <div
               style={{
-                width: "64px",
-                height: "64px",
-                borderRadius: "18px",
-                background: "linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%)",
-                border: "1px solid rgba(255, 255, 255, 0.18)",
+                width: "68px",
+                height: "68px",
+                borderRadius: "20px",
+                background: "linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.03) 100%)",
+                border: "1px solid rgba(255, 255, 255, 0.2)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                boxShadow: "0 0 30px rgba(16, 185, 129, 0.25)",
+                boxShadow: "0 0 35px rgba(192, 76, 253, 0.35)",
+                position: "relative",
               }}
             >
-              <GoogleIcon size={32} />
+              {oauthProvider === "google" ? (
+                <GoogleIcon size={34} />
+              ) : (
+                <GithubIcon size={34} color="#FFFFFF" />
+              )}
+              <div
+                style={{
+                  position: "absolute",
+                  inset: -4,
+                  borderRadius: "24px",
+                  border: "2px solid transparent",
+                  borderTopColor: "#C04CFD",
+                  borderRightColor: "#38BDF8",
+                  animation: "authSpin 1.2s linear infinite",
+                }}
+              />
             </div>
 
             <div>
               <h3 style={{ margin: "0 0 6px", fontSize: "17px", fontWeight: 700, color: "#FFFFFF" }}>
-                Google orqali kirish kutilmoqda...
+                {oauthProvider === "google" ? "Google" : "GitHub"} orqali kirish kutilmoqda...
               </h3>
               <p style={{ margin: 0, fontSize: "13px", color: "#94A3B8", lineHeight: 1.5 }}>
-                Tizimga kirish sahifasi tashqi brauzeringizda ochildi.
+                Tashqi brauzeringizda avtorizatsiya oynasi ochildi.
                 <br />
-                Google hisobingizni tanlang va ruxsat bering.
+                Hisobingizni tasdiqlang va ruxsat bering.
               </p>
             </div>
 
@@ -744,20 +921,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               {oauthUrl && (
                 <button
                   type="button"
-                  onClick={() => handleGoogleSignIn(true)}
+                  onClick={() => handleOAuthSignIn(oauthProvider, true)}
                   style={{
                     width: "100%",
                     padding: "11px 16px",
                     background: "rgba(255, 255, 255, 0.09)",
                     border: "1px solid rgba(255, 255, 255, 0.2)",
-                    borderRadius: "10px",
+                    borderRadius: "11px",
                     color: "#F1F5F9",
                     fontSize: "13.5px",
                     fontWeight: 600,
                     cursor: "pointer",
                     transition: "all 0.15s ease",
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255, 255, 255, 0.15)")}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255, 255, 255, 0.16)")}
                   onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255, 255, 255, 0.09)")}
                 >
                   Brauzerda qayta ochish
@@ -772,10 +949,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                 }}
                 style={{
                   width: "100%",
-                  padding: "9px 16px",
+                  padding: "10px 16px",
                   background: "transparent",
                   border: "1px solid rgba(255, 255, 255, 0.1)",
-                  borderRadius: "10px",
+                  borderRadius: "11px",
                   color: "#94A3B8",
                   fontSize: "12.5px",
                   cursor: "pointer",
@@ -794,904 +971,764 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               </button>
             </div>
           </div>
-        ) : (
-          <>
-            {/* TAB 1: LOGIN FORM */}
-            {activeTab === "login" && (
-          <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            {/* Google OAuth Button */}
-            <button
-              type="button"
-              role="button"
-              aria-label="Google orqali tizimga kirish"
-              onClick={handleGoogleSignIn}
-              disabled={loading || oauthLoading || oauthWaiting}
-              style={{
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "11px",
-                padding: "12px 18px",
-                background: "rgba(255, 255, 255, 0.08)",
-                backdropFilter: "blur(14px)",
-                WebkitBackdropFilter: "blur(14px)",
-                border: "1px solid rgba(255, 255, 255, 0.18)",
-                borderRadius: "12px",
-                color: "#F8FAFC",
-                fontSize: "13.5px",
-                fontWeight: 600,
-                cursor: loading || oauthLoading || oauthWaiting ? "not-allowed" : "pointer",
-                transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
-                opacity: loading || oauthLoading || oauthWaiting ? 0.65 : 1,
-                boxShadow: "0 4px 16px rgba(0, 0, 0, 0.3)",
-              }}
-              onMouseEnter={(e) => {
-                if (!loading && !oauthLoading && !oauthWaiting) {
-                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.14)";
-                  e.currentTarget.style.borderColor = "rgba(192, 76, 253, 0.45)";
-                  e.currentTarget.style.transform = "translateY(-1.5px)";
-                  e.currentTarget.style.boxShadow = "0 6px 20px rgba(147, 3, 197, 0.28)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
-                e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.18)";
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "0 4px 16px rgba(0, 0, 0, 0.3)";
-              }}
-            >
-              <GoogleIcon size={19} />
-              <span>{oauthLoading ? "Google orqali ulanilmoqda..." : "Google bilan davom etish"}</span>
-            </button>
-
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "12px",
-                margin: "4px 0",
-                color: "#64748B",
-                fontSize: "12px",
-              }}
-            >
-              <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.1)" }} />
-              <span>yoki login va parol</span>
-              <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.1)" }} />
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
-                Foydalanuvchi nomi yoki Email
-              </label>
-              <div style={{ position: "relative" }}>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="admin yoki user@example.com"
-                  autoComplete="username"
-                  required
-                  style={{
-                    width: "100%",
-                    padding: "12px 14px 12px 42px",
-                    background: "rgba(8, 14, 28, 0.65)",
-                    backdropFilter: "blur(12px)",
-                    WebkitBackdropFilter: "blur(12px)",
-                    border: "1px solid rgba(255, 255, 255, 0.12)",
-                    borderRadius: "12px",
-                    color: "#FFFFFF",
-                    fontSize: "14px",
-                    outline: "none",
-                    boxSizing: "border-box",
-                    transition: "border-color 0.2s ease, box-shadow 0.2s ease",
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = "#C04CFD";
-                    e.target.style.boxShadow = "0 0 0 3px rgba(192, 76, 253, 0.22)";
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = "rgba(255, 255, 255, 0.12)";
-                    e.target.style.boxShadow = "none";
-                  }}
-                />
-                <div style={{ position: "absolute", left: "14px", top: "13px", opacity: 0.55, pointerEvents: "none" }}>
-                  <UserIcon size={16} />
-                </div>
+        ) : telegramModalOpen ? (
+          /* ═══ TELEGRAM QUICK LOGIN DRAWER ═══ */
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px", animation: "authEntrance 0.3s ease" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", paddingBottom: "10px", borderBottom: "1px solid rgba(255, 255, 255, 0.1)" }}>
+              <TelegramColorIcon size={24} />
+              <div style={{ flex: 1 }}>
+                <h4 style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "#FFFFFF" }}>Telegram orqali kirish</h4>
+                <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#94A3B8" }}>Bot yoki Telegram @username orqali tezkor kirish</p>
               </div>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
-                  Parol
-                </label>
+            <button
+              type="button"
+              onClick={handleOpenTelegramBot}
+              style={{
+                width: "100%",
+                padding: "12px 16px",
+                background: "linear-gradient(135deg, #24A1DE 0%, #1D88BE 100%)",
+                border: "none",
+                borderRadius: "12px",
+                color: "#FFFFFF",
+                fontSize: "13.5px",
+                fontWeight: 600,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                boxShadow: "0 4px 18px rgba(36, 161, 222, 0.4)",
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-1.5px)")}
+              onMouseLeave={(e) => (e.currentTarget.style.transform = "translateY(0)")}
+            >
+              <span>🤖 @Misa_ai_agent_bot orqali ochish</span>
+            </button>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#64748B", fontSize: "12px" }}>
+              <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.08)" }} />
+              <span>yoki Telegram @username kiriting</span>
+              <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.08)" }} />
+            </div>
+
+            <form onSubmit={handleTelegramSubmit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div style={{ position: "relative" }}>
+                <div style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", color: "#38BDF8", pointerEvents: "none" }}>
+                  <TelegramColorIcon size={18} />
+                </div>
+                <input
+                  type="text"
+                  value={telegramInput}
+                  onChange={(e) => setTelegramInput(e.target.value)}
+                  placeholder="@sherzod_dev yoki ID"
+                  className="misa-auth-input"
+                  style={{ padding: "12px 14px 12px 42px" }}
+                  required
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: "10px" }}>
                 <button
                   type="button"
-                  onClick={() => handleTabChange("forgot")}
+                  onClick={() => setTelegramModalOpen(false)}
+                  style={{
+                    flex: 1,
+                    padding: "11px 16px",
+                    background: "rgba(255, 255, 255, 0.08)",
+                    border: "1px solid rgba(255, 255, 255, 0.14)",
+                    borderRadius: "11px",
+                    color: "#94A3B8",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    transition: "all 0.15s ease",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255, 255, 255, 0.14)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)")}
+                >
+                  Ortga
+                </button>
+                <button
+                  type="submit"
+                  disabled={telegramLoading}
+                  style={{
+                    flex: 2,
+                    padding: "11px 16px",
+                    background: "linear-gradient(135deg, #24A1DE 0%, #1D88BE 100%)",
+                    border: "none",
+                    borderRadius: "11px",
+                    color: "#FFFFFF",
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    cursor: telegramLoading ? "default" : "pointer",
+                    boxShadow: "0 4px 16px rgba(36, 161, 222, 0.35)",
+                    transition: "all 0.15s ease",
+                    opacity: telegramLoading ? 0.7 : 1,
+                  }}
+                >
+                  {telegramLoading ? "Tekshirilmoqda..." : "Kirish"}
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : (
+          <>
+            {/* ═══ SOCIAL LOGINS (Google, GitHub, Telegram) ═══ */}
+            <div style={{ marginBottom: "18px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+                {/* Google */}
+                <button
+                  type="button"
+                  role="button"
+                  aria-label="Google orqali kirish"
+                  onClick={() => handleOAuthSignIn("google")}
+                  disabled={loading || oauthLoading || oauthWaiting}
+                  className="misa-social-btn"
+                  title="Google orqali kirish"
+                >
+                  <GoogleIcon size={18} />
+                  <span>Google</span>
+                </button>
+
+                {/* GitHub */}
+                <button
+                  type="button"
+                  role="button"
+                  aria-label="GitHub orqali kirish"
+                  onClick={() => handleOAuthSignIn("github")}
+                  disabled={loading || oauthLoading || oauthWaiting}
+                  className="misa-social-btn"
+                  title="GitHub orqali kirish"
+                >
+                  <GithubIcon size={18} color="#FFFFFF" />
+                  <span>GitHub</span>
+                </button>
+
+                {/* Telegram */}
+                <button
+                  type="button"
+                  role="button"
+                  aria-label="Telegram orqali kirish"
+                  onClick={() => setTelegramModalOpen(true)}
+                  disabled={loading || oauthLoading || oauthWaiting}
+                  className="misa-social-btn"
+                  title="Telegram orqali kirish"
+                >
+                  <TelegramColorIcon size={18} />
+                  <span>Telegram</span>
+                </button>
+              </div>
+
+              {/* Glowing Divider */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                  margin: "18px 0 14px",
+                  color: "#64748B",
+                  fontSize: "12px",
+                }}
+              >
+                <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.1)" }} />
+                <span>{activeTab === "login" ? "yoki email orqali" : "yoki yangi akkaunt"}</span>
+                <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.1)" }} />
+              </div>
+            </div>
+
+            {/* ═══ TAB 1: LOGIN FORM ═══ */}
+            {activeTab === "login" && (
+              <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+                {/* Email Address (Pure Email, No Username) */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
+                    Email manzil
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <div style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", color: "#94A3B8", pointerEvents: "none" }}>
+                      <MailIcon size={16} />
+                    </div>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="user@example.com"
+                      autoComplete="email"
+                      required
+                      className="misa-auth-input"
+                      style={{ padding: "12px 14px 12px 42px" }}
+                    />
+                  </div>
+                </div>
+
+                {/* Password with Eye Visibility Toggle */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
+                      Parol
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => handleTabChange("forgot")}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        color: "#E8B3FF",
+                        fontSize: "12px",
+                        fontWeight: 500,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Parolni unutdingizmi?
+                    </button>
+                  </div>
+                  <div style={{ position: "relative" }}>
+                    <div style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", color: "#94A3B8", pointerEvents: "none" }}>
+                      <LockIcon size={16} />
+                    </div>
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      autoComplete="current-password"
+                      required
+                      className="misa-auth-input"
+                      style={{ padding: "12px 42px 12px 42px" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: "absolute",
+                        right: "12px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "none",
+                        border: "none",
+                        color: showPassword ? "#C04CFD" : "#64748B",
+                        cursor: "pointer",
+                        padding: "4px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                      title={showPassword ? "Parolni yashirish" : "Parolni ko'rsatish"}
+                    >
+                      {showPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Submit Button */}
+                <button
+                  type="submit"
+                  disabled={loading || oauthLoading}
+                  style={{
+                    marginTop: "8px",
+                    padding: "13px 20px",
+                    background: "linear-gradient(135deg, #9303C5 0%, #C04CFD 60%, #7C3AED 100%)",
+                    border: "none",
+                    borderRadius: "12px",
+                    color: "#FFFFFF",
+                    fontSize: "14.5px",
+                    fontWeight: 700,
+                    cursor: loading || oauthLoading ? "default" : "pointer",
+                    boxShadow: "0 4px 22px rgba(147, 3, 197, 0.45)",
+                    transition: "all 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
+                    opacity: loading || oauthLoading ? 0.7 : 1,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!loading && !oauthLoading) {
+                      e.currentTarget.style.transform = "translateY(-1.5px)";
+                      e.currentTarget.style.boxShadow = "0 6px 26px rgba(192, 76, 253, 0.58)";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "translateY(0)";
+                    e.currentTarget.style.boxShadow = "0 4px 22px rgba(147, 3, 197, 0.45)";
+                  }}
+                >
+                  {loading ? "Kirilmoqda..." : "Tizimga kirish"}
+                </button>
+              </form>
+            )}
+
+            {/* ═══ TAB 2: REGISTER FORM (NO USERNAME) ═══ */}
+            {activeTab === "register" && (
+              <form onSubmit={handleRegister} style={{ display: "flex", flexDirection: "column", gap: "13px" }}>
+                {/* Ism va Familiya */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                    <label style={{ fontSize: "12px", color: "#94A3B8", fontWeight: 500 }}>
+                      Ism
+                    </label>
+                    <input
+                      type="text"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      placeholder="Ismingiz"
+                      autoComplete="given-name"
+                      className="misa-auth-input"
+                      style={{ padding: "10px 14px" }}
+                    />
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                    <label style={{ fontSize: "12px", color: "#94A3B8", fontWeight: 500 }}>
+                      Familiya
+                    </label>
+                    <input
+                      type="text"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      placeholder="Familiyangiz"
+                      autoComplete="family-name"
+                      className="misa-auth-input"
+                      style={{ padding: "10px 14px" }}
+                    />
+                  </div>
+                </div>
+
+                {/* Email Address */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                  <label style={{ fontSize: "12px", color: "#94A3B8", fontWeight: 500 }}>
+                    Email manzil
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <div style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", color: "#94A3B8", pointerEvents: "none" }}>
+                      <MailIcon size={16} />
+                    </div>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="user@example.com"
+                      autoComplete="email"
+                      required
+                      className="misa-auth-input"
+                      style={{ padding: "11px 14px 11px 40px" }}
+                    />
+                  </div>
+                </div>
+
+                {/* Password */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                  <label style={{ fontSize: "12px", color: "#94A3B8", fontWeight: 500 }}>
+                    Parol (kamida 8 belgi, harf va raqam)
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <div style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", color: "#94A3B8", pointerEvents: "none" }}>
+                      <LockIcon size={16} />
+                    </div>
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      autoComplete="new-password"
+                      required
+                      className="misa-auth-input"
+                      style={{ padding: "11px 40px 11px 40px" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: "absolute",
+                        right: "12px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "none",
+                        border: "none",
+                        color: showPassword ? "#C04CFD" : "#64748B",
+                        cursor: "pointer",
+                        padding: "4px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                      title={showPassword ? "Parolni yashirish" : "Parolni ko'rsatish"}
+                    >
+                      {showPassword ? <EyeOffIcon size={15} /> : <EyeIcon size={15} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Confirm Password */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                  <label style={{ fontSize: "12px", color: "#94A3B8", fontWeight: 500 }}>
+                    Parolni tasdiqlang
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <div style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", color: "#94A3B8", pointerEvents: "none" }}>
+                      <LockIcon size={16} />
+                    </div>
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="••••••••"
+                      autoComplete="new-password"
+                      required
+                      className="misa-auth-input"
+                      style={{ padding: "11px 40px 11px 40px" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      style={{
+                        position: "absolute",
+                        right: "12px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "none",
+                        border: "none",
+                        color: showConfirmPassword ? "#C04CFD" : "#64748B",
+                        cursor: "pointer",
+                        padding: "4px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                      title={showConfirmPassword ? "Parolni yashirish" : "Parolni ko'rsatish"}
+                    >
+                      {showConfirmPassword ? <EyeOffIcon size={15} /> : <EyeIcon size={15} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Submit Button */}
+                <button
+                  type="submit"
+                  disabled={loading || oauthLoading}
+                  style={{
+                    marginTop: "8px",
+                    padding: "13px 20px",
+                    background: "linear-gradient(135deg, #9303C5 0%, #C04CFD 60%, #7C3AED 100%)",
+                    border: "none",
+                    borderRadius: "12px",
+                    color: "#FFFFFF",
+                    fontSize: "14.5px",
+                    fontWeight: 700,
+                    cursor: loading || oauthLoading ? "default" : "pointer",
+                    boxShadow: "0 4px 22px rgba(147, 3, 197, 0.45)",
+                    transition: "all 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
+                    opacity: loading || oauthLoading ? 0.7 : 1,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!loading && !oauthLoading) {
+                      e.currentTarget.style.transform = "translateY(-1.5px)";
+                      e.currentTarget.style.boxShadow = "0 6px 26px rgba(192, 76, 253, 0.58)";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "translateY(0)";
+                    e.currentTarget.style.boxShadow = "0 4px 22px rgba(147, 3, 197, 0.45)";
+                  }}
+                >
+                  {loading ? "Yaratilmoqda..." : "Hisob yaratish"}
+                </button>
+              </form>
+            )}
+
+            {/* ═══ TAB 3: FORGOT PASSWORD FORM ═══ */}
+            {activeTab === "forgot" && (
+              <form onSubmit={handleForgotPassword} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div style={{ fontSize: "13px", color: "#94A3B8", lineHeight: 1.5 }}>
+                  Hisobingizga bog'langan email manzilni kiriting. Biz parolni tiklash kodini yuboramiz.
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
+                    Email manzil
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <div style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", color: "#94A3B8", pointerEvents: "none" }}>
+                      <MailIcon size={16} />
+                    </div>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="user@example.com"
+                      required
+                      className="misa-auth-input"
+                      style={{ padding: "12px 14px 12px 42px" }}
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    marginTop: "4px",
+                    padding: "13px 20px",
+                    background: "linear-gradient(135deg, #059669 0%, #10B981 100%)",
+                    border: "none",
+                    borderRadius: "12px",
+                    color: "#FFFFFF",
+                    fontSize: "14px",
+                    fontWeight: 700,
+                    cursor: loading ? "default" : "pointer",
+                    boxShadow: "0 4px 20px rgba(16, 185, 129, 0.35)",
+                    transition: "all 0.2s ease",
+                    opacity: loading ? 0.7 : 1,
+                  }}
+                >
+                  {loading ? "Yuborilmoqda..." : "Tiklash kodini yuborish"}
+                </button>
+
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px" }}>
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange("login")}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#94A3B8",
+                      fontSize: "12.5px",
+                      cursor: "pointer",
+                      transition: "color 0.15s ease",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = "#F1F5F9")}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = "#94A3B8")}
+                  >
+                    ← Kirishga qaytish
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange("reset")}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#34D399",
+                      fontSize: "12.5px",
+                      cursor: "pointer",
+                      fontWeight: 600,
+                      transition: "color 0.15s ease",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = "#6EE7B7")}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = "#34D399")}
+                  >
+                    Kodingiz bormi? Tiklash →
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* ═══ TAB 4: RESET PASSWORD FORM ═══ */}
+            {activeTab === "reset" && (
+              <form onSubmit={handleResetPassword} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                <div style={{ fontSize: "13px", color: "#94A3B8", lineHeight: 1.5 }}>
+                  Yuborilgan bir martalik tiklash tokeni va yangi parolingizni kiriting.
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
+                    Tiklash tokeni
+                  </label>
+                  <input
+                    type="text"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    placeholder="masalan: 1a2b3c4d..."
+                    required
+                    className="misa-auth-input"
+                    style={{ padding: "11px 14px" }}
+                  />
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
+                    Yangi parol
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <div style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", color: "#94A3B8", pointerEvents: "none" }}>
+                      <LockIcon size={16} />
+                    </div>
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      required
+                      className="misa-auth-input"
+                      style={{ padding: "11px 40px 11px 40px" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: "absolute",
+                        right: "12px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "none",
+                        border: "none",
+                        color: showPassword ? "#C04CFD" : "#64748B",
+                        cursor: "pointer",
+                        padding: "4px",
+                      }}
+                    >
+                      {showPassword ? <EyeOffIcon size={15} /> : <EyeIcon size={15} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
+                    Yangi parolni tasdiqlang
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <div style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", color: "#94A3B8", pointerEvents: "none" }}>
+                      <LockIcon size={16} />
+                    </div>
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="••••••••"
+                      required
+                      className="misa-auth-input"
+                      style={{ padding: "11px 40px 11px 40px" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      style={{
+                        position: "absolute",
+                        right: "12px",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "none",
+                        border: "none",
+                        color: showConfirmPassword ? "#C04CFD" : "#64748B",
+                        cursor: "pointer",
+                        padding: "4px",
+                      }}
+                    >
+                      {showConfirmPassword ? <EyeOffIcon size={15} /> : <EyeIcon size={15} />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    marginTop: "6px",
+                    padding: "13px 20px",
+                    background: "linear-gradient(135deg, #059669 0%, #10B981 100%)",
+                    border: "none",
+                    borderRadius: "12px",
+                    color: "#FFFFFF",
+                    fontSize: "14px",
+                    fontWeight: 700,
+                    cursor: loading ? "default" : "pointer",
+                    boxShadow: "0 4px 20px rgba(16, 185, 129, 0.35)",
+                    transition: "all 0.2s ease",
+                    opacity: loading ? 0.7 : 1,
+                  }}
+                >
+                  {loading ? "Yangilanmoqda..." : "Parolni yangilash"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleTabChange("login")}
                   style={{
                     background: "none",
                     border: "none",
-                    padding: 0,
-                    color: "#E8B3FF",
-                    fontSize: "12px",
-                    fontWeight: 500,
+                    color: "#94A3B8",
+                    fontSize: "12.5px",
                     cursor: "pointer",
+                    marginTop: "4px",
+                    transition: "color 0.15s ease",
                   }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#F1F5F9")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#94A3B8")}
                 >
-                  Parolni unutdingizmi?
+                  ← Kirishga qaytish
                 </button>
-              </div>
-              <div style={{ position: "relative" }}>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                  required
+              </form>
+            )}
+
+            {/* ═══ TAB 5: VERIFY EMAIL FORM ═══ */}
+            {activeTab === "verify" && (
+              <form onSubmit={handleVerifyEmail} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div style={{ fontSize: "13px", color: "#94A3B8", lineHeight: 1.5 }}>
+                  Email manzilingizga yuborilgan tasdiqlash tokenini kiriting.
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
+                    Tasdiqlash tokeni
+                  </label>
+                  <input
+                    type="text"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    placeholder="masalan: 1a2b3c4d..."
+                    required
+                    className="misa-auth-input"
+                    style={{ padding: "11px 14px" }}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
                   style={{
-                    width: "100%",
-                    padding: "12px 14px 12px 42px",
-                    background: "rgba(8, 14, 28, 0.65)",
-                    backdropFilter: "blur(12px)",
-                    WebkitBackdropFilter: "blur(12px)",
-                    border: "1px solid rgba(255, 255, 255, 0.12)",
+                    marginTop: "4px",
+                    padding: "13px 20px",
+                    background: "linear-gradient(135deg, #059669 0%, #10B981 100%)",
+                    border: "none",
                     borderRadius: "12px",
                     color: "#FFFFFF",
                     fontSize: "14px",
-                    outline: "none",
-                    boxSizing: "border-box",
-                    transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+                    fontWeight: 700,
+                    cursor: loading ? "default" : "pointer",
+                    boxShadow: "0 4px 20px rgba(16, 185, 129, 0.35)",
+                    transition: "all 0.2s ease",
+                    opacity: loading ? 0.7 : 1,
                   }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = "#C04CFD";
-                    e.target.style.boxShadow = "0 0 0 3px rgba(192, 76, 253, 0.22)";
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = "rgba(255, 255, 255, 0.12)";
-                    e.target.style.boxShadow = "none";
-                  }}
-                />
-                <div style={{ position: "absolute", left: "14px", top: "13px", opacity: 0.55, pointerEvents: "none" }}>
-                  <KeyIcon size={16} />
-                </div>
-              </div>
-            </div>
+                >
+                  {loading ? "Tasdiqlanmoqda..." : "Emailni tasdiqlash"}
+                </button>
 
-            <button
-              type="submit"
-              disabled={loading || oauthLoading}
-              style={{
-                marginTop: "8px",
-                padding: "13px 20px",
-                background: "linear-gradient(135deg, #9303C5 0%, #C04CFD 60%, #7C3AED 100%)",
-                border: "none",
-                borderRadius: "12px",
-                color: "#FFFFFF",
-                fontSize: "14.5px",
-                fontWeight: 700,
-                cursor: loading || oauthLoading ? "default" : "pointer",
-                boxShadow: "0 4px 20px rgba(147, 3, 197, 0.4)",
-                transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
-                opacity: loading || oauthLoading ? 0.7 : 1,
-              }}
-              onMouseEnter={(e) => {
-                if (!loading && !oauthLoading) {
-                  e.currentTarget.style.transform = "translateY(-1px)";
-                  e.currentTarget.style.boxShadow = "0 6px 24px rgba(192, 76, 253, 0.5)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "0 4px 20px rgba(147, 3, 197, 0.4)";
-              }}
-            >
-              {loading ? "Kirilmoqda..." : "Tizimga kirish"}
-            </button>
-          </form>
-        )}
-
-        {/* TAB 2: REGISTER FORM */}
-        {activeTab === "register" && (
-          <form onSubmit={handleRegister} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-            {/* Google OAuth Button */}
-            <button
-              type="button"
-              role="button"
-              aria-label="Google orqali ro'yxatdan o'tish"
-              onClick={handleGoogleSignIn}
-              disabled={loading || oauthLoading || oauthWaiting}
-              style={{
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "11px",
-                padding: "12px 18px",
-                background: "rgba(255, 255, 255, 0.08)",
-                backdropFilter: "blur(14px)",
-                WebkitBackdropFilter: "blur(14px)",
-                border: "1px solid rgba(255, 255, 255, 0.18)",
-                borderRadius: "12px",
-                color: "#F8FAFC",
-                fontSize: "13.5px",
-                fontWeight: 600,
-                cursor: loading || oauthLoading || oauthWaiting ? "not-allowed" : "pointer",
-                transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
-                opacity: loading || oauthLoading || oauthWaiting ? 0.65 : 1,
-                boxShadow: "0 4px 16px rgba(0, 0, 0, 0.3)",
-              }}
-              onMouseEnter={(e) => {
-                if (!loading && !oauthLoading && !oauthWaiting) {
-                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.14)";
-                  e.currentTarget.style.borderColor = "rgba(192, 76, 253, 0.45)";
-                  e.currentTarget.style.transform = "translateY(-1.5px)";
-                  e.currentTarget.style.boxShadow = "0 6px 20px rgba(147, 3, 197, 0.28)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
-                e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.18)";
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "0 4px 16px rgba(0, 0, 0, 0.3)";
-              }}
-            >
-              <GoogleIcon size={19} />
-              <span>{oauthLoading ? "Google orqali ulanilmoqda..." : "Google bilan davom etish"}</span>
-            </button>
-
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "12px",
-                margin: "2px 0",
-                color: "#64748B",
-                fontSize: "12px",
-              }}
-            >
-              <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.1)" }} />
-              <span>yoki yangi akkaunt ochish</span>
-              <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.1)" }} />
-            </div>
-
-            {/* Ism va Familiya */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
-                  Ism
-                </label>
-                <input
-                  type="text"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  placeholder="Ismingiz"
-                  autoComplete="given-name"
+                <button
+                  type="button"
+                  onClick={() => handleTabChange("login")}
                   style={{
-                    width: "100%",
-                    padding: "11px 14px",
-                    background: "rgba(8, 14, 28, 0.65)",
-                    backdropFilter: "blur(12px)",
-                    WebkitBackdropFilter: "blur(12px)",
-                    border: "1px solid rgba(255, 255, 255, 0.12)",
-                    borderRadius: "12px",
-                    color: "#FFFFFF",
-                    fontSize: "13.5px",
-                    outline: "none",
-                    boxSizing: "border-box",
-                    transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+                    background: "none",
+                    border: "none",
+                    color: "#94A3B8",
+                    fontSize: "12.5px",
+                    cursor: "pointer",
+                    marginTop: "4px",
+                    transition: "color 0.15s ease",
                   }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = "#C04CFD";
-                    e.target.style.boxShadow = "0 0 0 3px rgba(192, 76, 253, 0.22)";
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = "rgba(255, 255, 255, 0.12)";
-                    e.target.style.boxShadow = "none";
-                  }}
-                />
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
-                  Familiya
-                </label>
-                <input
-                  type="text"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  placeholder="Familiyangiz"
-                  autoComplete="family-name"
-                  style={{
-                    width: "100%",
-                    padding: "11px 14px",
-                    background: "rgba(8, 14, 28, 0.65)",
-                    backdropFilter: "blur(12px)",
-                    WebkitBackdropFilter: "blur(12px)",
-                    border: "1px solid rgba(255, 255, 255, 0.12)",
-                    borderRadius: "12px",
-                    color: "#FFFFFF",
-                    fontSize: "13.5px",
-                    outline: "none",
-                    boxSizing: "border-box",
-                    transition: "border-color 0.2s ease, box-shadow 0.2s ease",
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = "#C04CFD";
-                    e.target.style.boxShadow = "0 0 0 3px rgba(192, 76, 253, 0.22)";
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = "rgba(255, 255, 255, 0.12)";
-                    e.target.style.boxShadow = "none";
-                  }}
-                />
-              </div>
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
-                Foydalanuvchi nomi
-              </label>
-              <div style={{ position: "relative" }}>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="masalan: sherzod_dev"
-                  autoComplete="username"
-                  required
-                  style={{
-                    width: "100%",
-                    padding: "11px 14px 11px 40px",
-                    background: "rgba(8, 14, 28, 0.65)",
-                    backdropFilter: "blur(12px)",
-                    WebkitBackdropFilter: "blur(12px)",
-                    border: "1px solid rgba(255, 255, 255, 0.12)",
-                    borderRadius: "12px",
-                    color: "#FFFFFF",
-                    fontSize: "13.5px",
-                    outline: "none",
-                    boxSizing: "border-box",
-                    transition: "border-color 0.2s ease, box-shadow 0.2s ease",
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = "#C04CFD";
-                    e.target.style.boxShadow = "0 0 0 3px rgba(192, 76, 253, 0.22)";
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = "rgba(255, 255, 255, 0.12)";
-                    e.target.style.boxShadow = "none";
-                  }}
-                />
-                <div style={{ position: "absolute", left: "13px", top: "12px", opacity: 0.55, pointerEvents: "none" }}>
-                  <UserIcon size={16} />
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
-                Email manzil (ixtiyoriy)
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="user@example.com"
-                autoComplete="email"
-                style={{
-                  width: "100%",
-                  padding: "11px 14px",
-                  background: "rgba(8, 14, 28, 0.65)",
-                  backdropFilter: "blur(12px)",
-                  WebkitBackdropFilter: "blur(12px)",
-                  border: "1px solid rgba(255, 255, 255, 0.12)",
-                  borderRadius: "12px",
-                  color: "#FFFFFF",
-                  fontSize: "13.5px",
-                  outline: "none",
-                  boxSizing: "border-box",
-                  transition: "border-color 0.2s ease, box-shadow 0.2s ease",
-                }}
-                onFocus={(e) => {
-                  e.target.style.borderColor = "#C04CFD";
-                  e.target.style.boxShadow = "0 0 0 3px rgba(192, 76, 253, 0.22)";
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = "rgba(255, 255, 255, 0.12)";
-                  e.target.style.boxShadow = "none";
-                }}
-              />
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
-                Parol (kamida 8 belgi, harf va raqam)
-              </label>
-              <div style={{ position: "relative" }}>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  autoComplete="new-password"
-                  required
-                  style={{
-                    width: "100%",
-                    padding: "11px 14px 11px 40px",
-                    background: "rgba(8, 14, 28, 0.65)",
-                    backdropFilter: "blur(12px)",
-                    WebkitBackdropFilter: "blur(12px)",
-                    border: "1px solid rgba(255, 255, 255, 0.12)",
-                    borderRadius: "12px",
-                    color: "#FFFFFF",
-                    fontSize: "13.5px",
-                    outline: "none",
-                    boxSizing: "border-box",
-                    transition: "border-color 0.2s ease, box-shadow 0.2s ease",
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = "#C04CFD";
-                    e.target.style.boxShadow = "0 0 0 3px rgba(192, 76, 253, 0.22)";
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = "rgba(255, 255, 255, 0.12)";
-                    e.target.style.boxShadow = "none";
-                  }}
-                />
-                <div style={{ position: "absolute", left: "13px", top: "12px", opacity: 0.55, pointerEvents: "none" }}>
-                  <KeyIcon size={16} />
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
-                Parolni tasdiqlang
-              </label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••••"
-                autoComplete="new-password"
-                required
-                style={{
-                  width: "100%",
-                  padding: "11px 14px",
-                  background: "rgba(8, 14, 28, 0.65)",
-                  backdropFilter: "blur(12px)",
-                  WebkitBackdropFilter: "blur(12px)",
-                  border: "1px solid rgba(255, 255, 255, 0.12)",
-                  borderRadius: "12px",
-                  color: "#FFFFFF",
-                  fontSize: "13.5px",
-                  outline: "none",
-                  boxSizing: "border-box",
-                  transition: "border-color 0.2s ease, box-shadow 0.2s ease",
-                }}
-                onFocus={(e) => {
-                  e.target.style.borderColor = "#C04CFD";
-                  e.target.style.boxShadow = "0 0 0 3px rgba(192, 76, 253, 0.22)";
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = "rgba(255, 255, 255, 0.12)";
-                  e.target.style.boxShadow = "none";
-                }}
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading || oauthLoading}
-              style={{
-                marginTop: "8px",
-                padding: "13px 20px",
-                background: "linear-gradient(135deg, #9303C5 0%, #C04CFD 60%, #7C3AED 100%)",
-                border: "none",
-                borderRadius: "12px",
-                color: "#FFFFFF",
-                fontSize: "14.5px",
-                fontWeight: 700,
-                cursor: loading || oauthLoading ? "default" : "pointer",
-                boxShadow: "0 4px 20px rgba(147, 3, 197, 0.4)",
-                transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
-                opacity: loading || oauthLoading ? 0.7 : 1,
-              }}
-              onMouseEnter={(e) => {
-                if (!loading && !oauthLoading) {
-                  e.currentTarget.style.transform = "translateY(-1px)";
-                  e.currentTarget.style.boxShadow = "0 6px 24px rgba(192, 76, 253, 0.5)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "0 4px 20px rgba(147, 3, 197, 0.4)";
-              }}
-            >
-              {loading ? "Yaratilmoqda..." : "Hisob yaratish"}
-            </button>
-          </form>
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#F1F5F9")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#94A3B8")}
+                >
+                  ← Kirishga qaytish
+                </button>
+              </form>
+            )}
+          </>
         )}
 
-        {/* TAB 3: FORGOT PASSWORD FORM */}
-        {activeTab === "forgot" && (
-          <form onSubmit={handleForgotPassword} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            <div style={{ fontSize: "13px", color: "#94A3B8", lineHeight: 1.5 }}>
-              Hisobingizga tegishli email manzil yoki foydalanuvchi nomini kiriting. Biz parolni tiklash kodini jo'natamiz.
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
-                Email yoki Foydalanuvchi nomi
-              </label>
-              <input
-                type="text"
-                value={email || username}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  setUsername(e.target.value);
-                }}
-                placeholder="user@example.com"
-                required
-                style={{
-                  width: "100%",
-                  padding: "11px 14px",
-                  background: "rgba(8, 14, 28, 0.65)",
-                  backdropFilter: "blur(12px)",
-                  WebkitBackdropFilter: "blur(12px)",
-                  border: "1px solid rgba(255, 255, 255, 0.12)",
-                  borderRadius: "12px",
-                  color: "#FFFFFF",
-                  fontSize: "13.5px",
-                  outline: "none",
-                  boxSizing: "border-box",
-                  transition: "border-color 0.2s ease, box-shadow 0.2s ease",
-                }}
-                onFocus={(e) => {
-                  e.target.style.borderColor = "#10B981";
-                  e.target.style.boxShadow = "0 0 0 3px rgba(16, 185, 129, 0.22)";
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = "rgba(255, 255, 255, 0.12)";
-                  e.target.style.boxShadow = "none";
-                }}
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                marginTop: "4px",
-                padding: "13px 20px",
-                background: "linear-gradient(135deg, #059669 0%, #10B981 100%)",
-                border: "none",
-                borderRadius: "12px",
-                color: "#FFFFFF",
-                fontSize: "14.5px",
-                fontWeight: 700,
-                cursor: loading ? "default" : "pointer",
-                boxShadow: "0 4px 20px rgba(16, 185, 129, 0.35)",
-                transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
-                opacity: loading ? 0.7 : 1,
-              }}
-              onMouseEnter={(e) => {
-                if (!loading) {
-                  e.currentTarget.style.transform = "translateY(-1px)";
-                  e.currentTarget.style.boxShadow = "0 6px 24px rgba(16, 185, 129, 0.45)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "0 4px 20px rgba(16, 185, 129, 0.35)";
-              }}
-            >
-              {loading ? "Yuborilmoqda..." : "Tiklash kodini yuborish"}
-            </button>
-
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px" }}>
-              <button
-                type="button"
-                onClick={() => handleTabChange("login")}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "#94A3B8",
-                  fontSize: "12.5px",
-                  cursor: "pointer",
-                  transition: "color 0.15s ease",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "#F1F5F9")}
-                onMouseLeave={(e) => (e.currentTarget.style.color = "#94A3B8")}
-              >
-                ← Kirishga qaytish
-              </button>
-              <button
-                type="button"
-                onClick={() => handleTabChange("reset")}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "#34D399",
-                  fontSize: "12.5px",
-                  cursor: "pointer",
-                  fontWeight: 600,
-                  transition: "color 0.15s ease",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "#6EE7B7")}
-                onMouseLeave={(e) => (e.currentTarget.style.color = "#34D399")}
-              >
-                Kodingiz bormi? Tiklash →
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* TAB 4: RESET PASSWORD FORM */}
-        {activeTab === "reset" && (
-          <form onSubmit={handleResetPassword} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-            <div style={{ fontSize: "13px", color: "#94A3B8", lineHeight: 1.5 }}>
-              Yuborilgan bir martalik tiklash tokeni va yangi parolingizni kiriting.
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
-                Tiklash tokeni
-              </label>
-              <input
-                type="text"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder="masalan: 1a2b3c4d..."
-                required
-                style={{
-                  width: "100%",
-                  padding: "11px 14px",
-                  background: "rgba(8, 14, 28, 0.65)",
-                  backdropFilter: "blur(12px)",
-                  WebkitBackdropFilter: "blur(12px)",
-                  border: "1px solid rgba(255, 255, 255, 0.12)",
-                  borderRadius: "12px",
-                  color: "#FFFFFF",
-                  fontSize: "13.5px",
-                  outline: "none",
-                  boxSizing: "border-box",
-                  transition: "border-color 0.2s ease, box-shadow 0.2s ease",
-                }}
-                onFocus={(e) => {
-                  e.target.style.borderColor = "#10B981";
-                  e.target.style.boxShadow = "0 0 0 3px rgba(16, 185, 129, 0.22)";
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = "rgba(255, 255, 255, 0.12)";
-                  e.target.style.boxShadow = "none";
-                }}
-              />
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
-                Yangi parol
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                style={{
-                  width: "100%",
-                  padding: "11px 14px",
-                  background: "rgba(8, 14, 28, 0.65)",
-                  backdropFilter: "blur(12px)",
-                  WebkitBackdropFilter: "blur(12px)",
-                  border: "1px solid rgba(255, 255, 255, 0.12)",
-                  borderRadius: "12px",
-                  color: "#FFFFFF",
-                  fontSize: "13.5px",
-                  outline: "none",
-                  boxSizing: "border-box",
-                  transition: "border-color 0.2s ease, box-shadow 0.2s ease",
-                }}
-                onFocus={(e) => {
-                  e.target.style.borderColor = "#10B981";
-                  e.target.style.boxShadow = "0 0 0 3px rgba(16, 185, 129, 0.22)";
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = "rgba(255, 255, 255, 0.12)";
-                  e.target.style.boxShadow = "none";
-                }}
-              />
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
-                Yangi parolni tasdiqlang
-              </label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                style={{
-                  width: "100%",
-                  padding: "11px 14px",
-                  background: "rgba(8, 14, 28, 0.65)",
-                  backdropFilter: "blur(12px)",
-                  WebkitBackdropFilter: "blur(12px)",
-                  border: "1px solid rgba(255, 255, 255, 0.12)",
-                  borderRadius: "12px",
-                  color: "#FFFFFF",
-                  fontSize: "13.5px",
-                  outline: "none",
-                  boxSizing: "border-box",
-                  transition: "border-color 0.2s ease, box-shadow 0.2s ease",
-                }}
-                onFocus={(e) => {
-                  e.target.style.borderColor = "#10B981";
-                  e.target.style.boxShadow = "0 0 0 3px rgba(16, 185, 129, 0.22)";
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = "rgba(255, 255, 255, 0.12)";
-                  e.target.style.boxShadow = "none";
-                }}
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                marginTop: "6px",
-                padding: "13px 20px",
-                background: "linear-gradient(135deg, #059669 0%, #10B981 100%)",
-                border: "none",
-                borderRadius: "12px",
-                color: "#FFFFFF",
-                fontSize: "14.5px",
-                fontWeight: 700,
-                cursor: loading ? "default" : "pointer",
-                boxShadow: "0 4px 20px rgba(16, 185, 129, 0.35)",
-                transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
-                opacity: loading ? 0.7 : 1,
-              }}
-              onMouseEnter={(e) => {
-                if (!loading) {
-                  e.currentTarget.style.transform = "translateY(-1px)";
-                  e.currentTarget.style.boxShadow = "0 6px 24px rgba(16, 185, 129, 0.45)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "0 4px 20px rgba(16, 185, 129, 0.35)";
-              }}
-            >
-              {loading ? "Yangilanmoqda..." : "Parolni yangilash"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleTabChange("login")}
-              style={{
-                background: "none",
-                border: "none",
-                color: "#94A3B8",
-                fontSize: "12.5px",
-                cursor: "pointer",
-                marginTop: "4px",
-                transition: "color 0.15s ease",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "#F1F5F9")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "#94A3B8")}
-            >
-              ← Kirishga qaytish
-            </button>
-          </form>
-        )}
-
-        {/* TAB 5: VERIFY EMAIL FORM */}
-        {activeTab === "verify" && (
-          <form onSubmit={handleVerifyEmail} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            <div style={{ fontSize: "13px", color: "#94A3B8", lineHeight: 1.5 }}>
-              Email manzilingizga yuborilgan tasdiqlash tokenini kiriting.
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
-                Tasdiqlash tokeni
-              </label>
-              <input
-                type="text"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder="masalan: 1a2b3c4d..."
-                required
-                style={{
-                  width: "100%",
-                  padding: "11px 14px",
-                  background: "rgba(8, 14, 28, 0.65)",
-                  backdropFilter: "blur(12px)",
-                  WebkitBackdropFilter: "blur(12px)",
-                  border: "1px solid rgba(255, 255, 255, 0.12)",
-                  borderRadius: "12px",
-                  color: "#FFFFFF",
-                  fontSize: "13.5px",
-                  outline: "none",
-                  boxSizing: "border-box",
-                  transition: "border-color 0.2s ease, box-shadow 0.2s ease",
-                }}
-                onFocus={(e) => {
-                  e.target.style.borderColor = "#10B981";
-                  e.target.style.boxShadow = "0 0 0 3px rgba(16, 185, 129, 0.22)";
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = "rgba(255, 255, 255, 0.12)";
-                  e.target.style.boxShadow = "none";
-                }}
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                marginTop: "4px",
-                padding: "13px 20px",
-                background: "linear-gradient(135deg, #059669 0%, #10B981 100%)",
-                border: "none",
-                borderRadius: "12px",
-                color: "#FFFFFF",
-                fontSize: "14.5px",
-                fontWeight: 700,
-                cursor: loading ? "default" : "pointer",
-                boxShadow: "0 4px 20px rgba(16, 185, 129, 0.35)",
-                transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
-                opacity: loading ? 0.7 : 1,
-              }}
-              onMouseEnter={(e) => {
-                if (!loading) {
-                  e.currentTarget.style.transform = "translateY(-1px)";
-                  e.currentTarget.style.boxShadow = "0 6px 24px rgba(16, 185, 129, 0.45)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "0 4px 20px rgba(16, 185, 129, 0.35)";
-              }}
-            >
-              {loading ? "Tasdiqlanmoqda..." : "Emailni tasdiqlash"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleTabChange("login")}
-              style={{
-                background: "none",
-                border: "none",
-                color: "#94A3B8",
-                fontSize: "12.5px",
-                cursor: "pointer",
-                marginTop: "4px",
-                transition: "color 0.15s ease",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "#F1F5F9")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "#94A3B8")}
-            >
-              ← Kirishga qaytish
-            </button>
-          </form>
-        )}
-        </>
-        )}
-
-        {/* Footer info */}
+        {/* ═══ FOOTER INFO ═══ */}
         <div
           style={{
-            marginTop: "26px",
-            paddingTop: "18px",
+            marginTop: "24px",
+            paddingTop: "16px",
             borderTop: "1px solid rgba(255, 255, 255, 0.08)",
             display: "flex",
             alignItems: "center",
@@ -1702,7 +1739,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
         >
           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <ShieldIcon size={14} color="#4EDEA3" />
-            <span style={{ color: "#4EDEA3", fontWeight: 500 }}>Secured by Supabase Auth</span>
+            <span style={{ color: "#4EDEA3", fontWeight: 500 }}>Secured by Supabase & OAuth</span>
           </div>
           <button
             type="button"
@@ -1714,14 +1751,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               color: "#A78BFA",
               cursor: "pointer",
               fontSize: "11.5px",
-              padding: "2px 6px",
-              borderRadius: "4px",
+              padding: "3px 6px",
+              borderRadius: "6px",
               display: "inline-flex",
               alignItems: "center",
-              gap: "4px",
+              gap: "5px",
+              transition: "all 0.15s ease",
             }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(167, 139, 250, 0.12)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
           >
-            <span>🌐 Server sozlamalari</span>
+            <GlobeIcon size={13} color="#A78BFA" />
+            <span>Server sozlamalari</span>
           </button>
         </div>
       </div>

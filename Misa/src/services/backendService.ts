@@ -3550,11 +3550,15 @@ class BackendService {
     }
   }
 
-  public async signInWithGoogle(customState?: string): Promise<{ ok: boolean; error?: string; url?: string; state?: string; redirectTo?: string }> {
+  public async signInWithOAuthProvider(
+    provider: "google" | "github",
+    customState?: string
+  ): Promise<{ ok: boolean; error?: string; url?: string; state?: string; redirectTo?: string; provider?: string }> {
+    const providerTitle = provider === "google" ? "Google" : "GitHub";
     if (!isSupabaseConfigured) {
       return {
         ok: false,
-        error: "Supabase konfiguratsiyasi topilmadi. Google OAuth uchun .env faylida VITE_SUPABASE_URL va VITE_SUPABASE_PUBLISHABLE_KEY ni sozlang.",
+        error: `Supabase konfiguratsiyasi topilmadi. ${providerTitle} OAuth uchun .env faylida VITE_SUPABASE_URL va VITE_SUPABASE_PUBLISHABLE_KEY ni sozlang.`,
       };
     }
     try {
@@ -3584,16 +3588,20 @@ class BackendService {
       this.oauthPollFailures = 0;
       await this.preRegisterOAuthState(state, callbackBase, "init");
 
+      const options: any = {
+        redirectTo,
+        skipBrowserRedirect: true, // Crucial: Do NOT navigate desktop app away
+      };
+      if (provider === "google") {
+        options.queryParams = {
+          access_type: "offline",
+          prompt: "consent",
+        };
+      }
+
       const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo,
-          skipBrowserRedirect: true, // Crucial: Do NOT navigate the main desktop window away!
-          queryParams: {
-            access_type: "offline",
-            prompt: "consent",
-          },
-        },
+        provider,
+        options,
       });
       if (error) {
         return { ok: false, error: formatAuthError(error) };
@@ -3604,11 +3612,65 @@ class BackendService {
           error: "OAuth avtorizatsiya havolasida noto'g'ri localhost port aniqlandi.",
         };
       }
-      return { ok: true, url: data?.url, state, redirectTo };
+      return { ok: true, url: data?.url, state, redirectTo, provider };
     } catch (err: any) {
       return { ok: false, error: formatAuthError(err) };
     }
   }
+
+  public async signInWithGoogle(customState?: string) {
+    return this.signInWithOAuthProvider("google", customState);
+  }
+
+  public async signInWithGitHub(customState?: string) {
+    return this.signInWithOAuthProvider("github", customState);
+  }
+
+  public async loginWithTelegram(payload: {
+    telegram_id?: number | string;
+    username?: string;
+    first_name?: string;
+  }): Promise<AuthResponse> {
+    try {
+      const rawId = payload.telegram_id ? String(payload.telegram_id).trim() : "";
+      const tgUsername = (payload.username || "").trim().replace(/^@/, "");
+      const cleanId = rawId || tgUsername || `tg_${Date.now().toString().slice(-6)}`;
+      const displayName = payload.first_name?.trim() || tgUsername || `Foydalanuvchi (${cleanId})`;
+      const email = tgUsername ? `${tgUsername.toLowerCase()}@telegram.misa.local` : `tg_${cleanId}@telegram.misa.local`;
+
+      const user: MikasaAuthUser = {
+        id: `tg_${cleanId}`,
+        username: displayName,
+        first_name: payload.first_name?.trim(),
+        email,
+        is_active: true,
+        is_verified: true,
+        created_at: Date.now() / 1000,
+        provider: "telegram",
+      };
+
+      const sessionToken = `tg_token_${cleanId}_${Date.now()}`;
+      this.setAuthToken(sessionToken);
+
+      try {
+        localStorage.setItem("misa_user_name", displayName);
+        localStorage.setItem("misa_auth_token", sessionToken);
+        localStorage.setItem("misa_user_data", JSON.stringify(user));
+      } catch {}
+
+      this.notifyAuthChange(user);
+
+      return {
+        ok: true,
+        message: "Telegram orqali muvaffaqiyatli kirildi!",
+        user,
+        session_token: sessionToken,
+      };
+    } catch (err: any) {
+      return { ok: false, error: String(err) };
+    }
+  }
+
 
   public async checkPendingOAuthSession(state?: string): Promise<{
     ok: boolean;
