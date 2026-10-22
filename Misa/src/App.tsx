@@ -125,8 +125,24 @@ function App() {
     let mounted = true;
 
     const handleOAuthRedirectIfAny = async () => {
-      const hash = window.location.hash;
-      const search = window.location.search;
+      const hash = window.location.hash || "";
+      const search = window.location.search || "";
+      const isRecovery =
+        hash.includes("type=recovery") ||
+        search.includes("type=recovery") ||
+        hash.includes("recovery_token=");
+
+      if (isRecovery) {
+        // Recovery link clicked: Do NOT auto-login to dashboard! AuthPage will handle resetting password
+        try {
+          const { data } = await supabase.auth.getSession();
+          if (data?.session?.access_token) {
+            backendService.setAuthToken(data.session.access_token);
+          }
+        } catch {}
+        return;
+      }
+
       if (
         (hash && (hash.includes("access_token=") || hash.includes("error="))) ||
         (search && (search.includes("code=") || search.includes("error=")))
@@ -158,7 +174,6 @@ function App() {
             if (u.username) {
               setUserName(u.username);
               localStorage.setItem("misa_user_name", u.username);
-              localStorage.setItem("misa_user_name", u.username);
             }
             window.history.replaceState({}, document.title, window.location.pathname);
           }
@@ -181,13 +196,25 @@ function App() {
           }
         }
 
+        const hash = window.location.hash || "";
+        const search = window.location.search || "";
+        const isRecovery =
+          hash.includes("type=recovery") ||
+          search.includes("type=recovery") ||
+          hash.includes("recovery_token=");
+
+        if (isRecovery) {
+          // Keep currentUser null so AuthPage renders and handles password reset
+          setCurrentUser(null);
+          return;
+        }
+
         const user = await backendService.getCurrentAuthUser();
         if (!mounted) return;
         if (user) {
           setCurrentUser(user);
           if (user.username) {
             setUserName(user.username);
-            localStorage.setItem("misa_user_name", user.username);
             localStorage.setItem("misa_user_name", user.username);
           }
         } else {

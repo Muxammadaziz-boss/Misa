@@ -5409,90 +5409,211 @@ async def handle_oauth_callback(request):
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="referrer" content="no-referrer">
-  <title>Misa AI — Kirish muvaffaqiyatli</title>
+  <title>Misa AI — Autentifikatsiya</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background: #0B0F19;
+      background: #02060E;
       color: #F8FAFC;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       display: flex;
       align-items: center;
       justify-content: center;
       min-height: 100vh;
-      padding: 20px;
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
     }
+    /* Cosmic Background & Nebula Orbs */
+    .bg-nebula-1 {
+      position: absolute;
+      top: 10%;
+      left: 15%;
+      width: 480px;
+      height: 480px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(147, 3, 197, 0.3) 0%, rgba(192, 76, 253, 0.1) 50%, transparent 70%);
+      filter: blur(90px);
+      pointer-events: none;
+      animation: floatA 12s ease-in-out infinite alternate;
+    }
+    .bg-nebula-2 {
+      position: absolute;
+      bottom: 10%;
+      right: 15%;
+      width: 520px;
+      height: 520px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(36, 161, 222, 0.25) 0%, rgba(16, 185, 129, 0.1) 50%, transparent 70%);
+      filter: blur(95px);
+      pointer-events: none;
+      animation: floatB 14s ease-in-out infinite alternate;
+    }
+    .grid-overlay {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+    @keyframes floatA {
+      from { transform: translate(0, 0) scale(1); }
+      to { transform: translate(25px, -20px) scale(1.08); }
+    }
+    @keyframes floatB {
+      from { transform: translate(0, 0) scale(1); }
+      to { transform: translate(-25px, 20px) scale(1.06); }
+    }
+    @keyframes cardPop {
+      0% { opacity: 0; transform: translateY(20px) scale(0.97); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 0 25px rgba(16, 185, 129, 0.25); }
+      50% { box-shadow: 0 0 45px rgba(16, 185, 129, 0.45); }
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Ultra Glass Card */
     .card {
-      background: rgba(15, 23, 42, 0.95);
-      border: 1px solid rgba(16, 185, 129, 0.4);
-      border-radius: 20px;
-      padding: 40px 32px;
+      background: rgba(14, 20, 36, 0.76);
+      backdrop-filter: blur(36px) saturate(190%);
+      -webkit-backdrop-filter: blur(36px) saturate(190%);
+      border: 1.5px solid rgba(192, 76, 253, 0.35);
+      border-radius: 26px;
+      padding: 44px 36px;
       text-align: center;
-      max-width: 460px;
+      max-width: 480px;
       width: 100%;
-      box-shadow: 0 20px 50px rgba(0,0,0,0.6), 0 0 30px rgba(16, 185, 129, 0.15);
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.75), 0 0 50px rgba(147, 3, 197, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+      position: relative;
+      z-index: 10;
+      animation: cardPop 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
-    .icon {
-      width: 64px;
-      height: 64px;
-      margin: 0 auto 20px;
-      border-radius: 18px;
-      background: rgba(16, 185, 129, 0.15);
-      border: 1px solid rgba(16, 185, 129, 0.3);
+    .logo-container {
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 22px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, rgba(147, 3, 197, 0.3) 0%, rgba(36, 161, 222, 0.2) 100%);
+      border: 1.5px solid rgba(192, 76, 253, 0.45);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 32px;
+      box-shadow: 0 8px 30px rgba(147, 3, 197, 0.35);
+      position: relative;
     }
-    h1 { font-size: 22px; color: #FFFFFF; margin-bottom: 8px; font-weight: 700; letter-spacing: -0.02em; }
-    p { font-size: 14px; color: #94A3B8; line-height: 1.6; margin-bottom: 24px; }
+    .logo-svg {
+      width: 40px;
+      height: 40px;
+      filter: drop-shadow(0 0 8px rgba(192, 76, 253, 0.6));
+    }
+    h1 {
+      font-size: 24px;
+      color: #FFFFFF;
+      margin-bottom: 8px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    p {
+      font-size: 14.5px;
+      color: #94A3B8;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
     .status {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      padding: 8px 18px;
+      padding: 8px 20px;
       border-radius: 9999px;
-      background: rgba(16, 185, 129, 0.12);
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.35);
       color: #34D399;
-      font-size: 13px;
+      font-size: 13.5px;
       font-weight: 600;
+      animation: pulseGlow 2.5s infinite;
     }
     .status.error {
-      background: rgba(239, 68, 68, 0.12);
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.35);
       color: #F87171;
+      animation: none;
     }
     .btn-return {
-      padding: 12px 28px;
+      padding: 13px 32px;
       border-radius: 14px;
-      background: #38BDF8;
-      color: #0F172A;
+      background: linear-gradient(135deg, #059669 0%, #10B981 100%);
+      color: #FFFFFF;
       font-weight: 700;
       border: none;
       cursor: pointer;
-      font-size: 14px;
-      box-shadow: 0 4px 16px rgba(56,189,248,0.25);
-      transition: all 0.2s ease;
+      font-size: 14.5px;
+      box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4);
+      transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
       display: inline-flex;
       align-items: center;
-      gap: 8px;
+      justify-content: center;
+      gap: 9px;
+      text-decoration: none;
     }
     .btn-return:hover {
-      opacity: 0.92;
-      transform: translateY(-1px);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 26px rgba(16, 185, 129, 0.55);
+      opacity: 0.96;
     }
     .btn-return:active {
       transform: translateY(0);
     }
+    .btn-secondary {
+      padding: 13px 24px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      color: #E2E8F0;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.14);
+      border-color: rgba(192, 76, 253, 0.45);
+      transform: translateY(-1.5px);
+    }
   </style>
 </head>
 <body>
+  <div class="bg-nebula-1"></div>
+  <div class="bg-nebula-2"></div>
+  <div class="grid-overlay"></div>
+
   <div class="card">
-    <div class="icon">✨</div>
-    <h1>Misa AI</h1>
-    <p id="msg">Google orqali autentifikatsiya yakunlanmoqda...</p>
+    <div class="logo-container">
+      <svg class="logo-svg" viewBox="0 0 48 48" fill="none">
+        <defs>
+          <linearGradient id="logoGrad" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#C04CFD" />
+            <stop offset="0.5" stopColor="#9303C5" />
+            <stop offset="1" stopColor="#38BDF8" />
+          </linearGradient>
+        </defs>
+        <path d="M24 4L28.5 17.5L42 22L28.5 26.5L24 40L19.5 26.5L6 22L19.5 17.5L24 4Z" fill="url(#logoGrad)" />
+        <circle cx="38" cy="10" r="3" fill="#E879F9" />
+        <circle cx="10" cy="38" r="2.5" fill="#38BDF8" />
+      </svg>
+    </div>
+    <h1 id="title">Misa AI</h1>
+    <p id="msg">Autentifikatsiya yakunlanmoqda...</p>
     <div id="badge" class="status">Kutilmoqda...</div>
-    <div id="actionArea" style="margin-top:24px;"></div>
+    <div id="actionArea" style="margin-top:26px;"></div>
   </div>
+
   <script>
     (function() {
       const searchParams = new URLSearchParams(window.location.search);
@@ -5502,6 +5623,7 @@ async def handle_oauth_callback(request):
       const refreshToken = hashParams.get('refresh_token') || searchParams.get('refresh_token');
       const expiresIn = hashParams.get('expires_in') || searchParams.get('expires_in');
       const code = searchParams.get('code') || hashParams.get('code');
+      const authType = hashParams.get('type') || searchParams.get('type') || '';
       let state = searchParams.get('state') || hashParams.get('state') || '';
       if (!state) {
         try {
@@ -5511,7 +5633,6 @@ async def handle_oauth_callback(request):
       const errorCode = searchParams.get('error_code') || hashParams.get('error_code') || '';
       const error = searchParams.get('error_description') || hashParams.get('error_description') || searchParams.get('error') || hashParams.get('error');
 
-      // Xavfsizlik: access_token, refresh_token va code ni brauzer manzil satridan darhol tozalash
       try {
         if (window.history && window.history.replaceState) {
           var cleanUrl = window.location.pathname + (state ? '?state=' + encodeURIComponent(state) : '');
@@ -5519,27 +5640,26 @@ async def handle_oauth_callback(request):
         }
       } catch (e) {}
 
+      const titleEl = document.getElementById('title');
       const msgEl = document.getElementById('msg');
       const badgeEl = document.getElementById('badge');
       const actEl = document.getElementById('actionArea');
       const isRemoteHost = window.location.hostname !== '127.0.0.1' && window.location.hostname !== 'localhost';
 
       function returnToApp() {
-        // 1. Mahalliy API orqali Misa oynasini darhol oldinga chiqarish
-        fetch('/api/auth/focus_app', { method: 'POST' }).catch(function() {});
-        fetch('http://127.0.0.1:18420/api/auth/focus_app', { method: 'POST' }).catch(function() {});
-        fetch('http://localhost:18420/api/auth/focus_app', { method: 'POST' }).catch(function() {});
+        fetch('/api/auth/focus_app?type=' + encodeURIComponent(authType), { method: 'POST' }).catch(function() {});
+        fetch('http://127.0.0.1:18420/api/auth/focus_app?type=' + encodeURIComponent(authType), { method: 'POST' }).catch(function() {});
+        fetch('http://localhost:18420/api/auth/focus_app?type=' + encodeURIComponent(authType), { method: 'POST' }).catch(function() {});
         try {
           var appFrame = document.createElement('iframe');
           appFrame.style.display = 'none';
-          appFrame.src = 'misa://focus';
+          appFrame.src = authType === 'recovery' ? 'misa://reset-password' : 'misa://focus';
           document.body.appendChild(appFrame);
           setTimeout(function() {
             try { document.body.removeChild(appFrame); } catch(e) {}
           }, 1000);
         } catch(e) {}
-        
-        // 2. Tugma holatini yangilash
+
         var btn = document.getElementById('returnBtn');
         if (btn) {
           btn.innerHTML = '&#10003; Misa ilovasiga qaytildi!';
@@ -5547,10 +5667,9 @@ async def handle_oauth_callback(request):
           btn.style.color = '#FFFFFF';
         }
 
-        // 3. Brauzer tabini yopishga urinish
         setTimeout(function() {
           try { window.close(); } catch(e) {}
-        }, 500);
+        }, 600);
       }
       window.returnToApp = returnToApp;
 
@@ -5566,11 +5685,22 @@ async def handle_oauth_callback(request):
       }
 
       function showSuccessUi() {
-        msgEl.innerHTML = "Tizimga muvaffaqiyatli kirdingiz!<br><span style='font-size:13px;color:#34D399;margin-top:6px;display:block;'>Misa ilovasi ochilmoqda. Ushbu brauzer sahifasini bemalol yopishingiz mumkin.</span>";
-        badgeEl.textContent = "Tasdiqlandi ✓";
-        badgeEl.className = "status";
-        if (actEl) {
-          actEl.innerHTML = '<button id="returnBtn" onclick="returnToApp()" class="btn-return" style="background:#10B981;color:#FFFFFF;">Misa ilovasiga qaytish</button><div style="font-size:12px;color:#94A3B8;margin-top:10px;">Agar oyna avtomatik ochilmasa, Misa ilovasini tanlang.</div>';
+        if (authType === 'recovery') {
+          titleEl.textContent = "Parolni tiklash tasdiqlandi!";
+          msgEl.innerHTML = "Emailingiz tasdiqlandi.<br><span style='font-size:13.5px;color:#34D399;margin-top:6px;display:block;'>Endi Misa ilovasida yangi parolingizni belgilashingiz mumkin.</span>";
+          badgeEl.textContent = "Tiklash tasdiqlandi ✓";
+          badgeEl.className = "status";
+          if (actEl) {
+            actEl.innerHTML = '<button id="returnBtn" onclick="returnToApp()" class="btn-return">🚀 Misa ilovasiga o\\'tish</button><div style="font-size:12.5px;color:#94A3B8;margin-top:12px;">Ilovada yangi parolingizni kiriting va saqlang.</div>';
+          }
+        } else {
+          titleEl.textContent = "Kirish muvaffaqiyatli!";
+          msgEl.innerHTML = "Tizimga muvaffaqiyatli kirdingiz!<br><span style='font-size:13.5px;color:#34D399;margin-top:6px;display:block;'>Misa ilovasi ochilmoqda. Ushbu sahifani bemalol yopishingiz mumkin.</span>";
+          badgeEl.textContent = "Tasdiqlandi ✓";
+          badgeEl.className = "status";
+          if (actEl) {
+            actEl.innerHTML = '<button id="returnBtn" onclick="returnToApp()" class="btn-return">✓ Misa ilovasiga qaytish</button><div style="font-size:12px;color:#94A3B8;margin-top:12px;">Agar oyna avtomatik ochilmasa, Misa ilovasini tanlang.</div>';
+          }
         }
         setTimeout(function() {
           returnToApp();
@@ -5578,23 +5708,27 @@ async def handle_oauth_callback(request):
       }
 
       if (error || errorCode) {
+        titleEl.textContent = "Avtorizatsiyada xatolik";
         var rawErr = error ? decodeURIComponent(error.replace(/\\+/g, ' ')) : errorCode;
         var safeErr = ((errorCode && rawErr.indexOf(errorCode) === -1) ? (errorCode + ': ' + rawErr) : rawErr)
           .replace(/(access_token|refresh_token|code)=[^&\\s]+/gi, '$1=[REDACTED]');
         if (errorCode === 'bad_oauth_state' || safeErr.indexOf('bad_oauth_state') !== -1 || safeErr.indexOf('OAuth state not found or expired') !== -1) {
-          msgEl.textContent = "Avtorizatsiya sessiyasi muddati tugagan yoki havola eskirgan. Misa ilovasi orqali qaytadan urinib ko'ring.";
+          msgEl.textContent = "Avtorizatsiya sessiyasi muddati tugagan yoki havola eskirgan. Misa ilovasidan qaytadan urinib ko'ring.";
+        } else if (safeErr.indexOf('otp_expired') !== -1 || safeErr.indexOf('expired') !== -1) {
+          msgEl.textContent = "Havola eskirgan yoki undan allaqachon foydalanilgan. Iltimos, Misa ilovasidan qayta so'rov yuboring.";
         } else {
           msgEl.textContent = "Xatolik: " + safeErr;
         }
         badgeEl.textContent = "Muvaffaqiyatsiz";
         badgeEl.className = "status error";
         if (actEl) {
-          actEl.innerHTML = '<button id="returnBtn" onclick="returnToApp()" class="btn-return">Misa ilovasiga qaytish</button>';
+          actEl.innerHTML = '<button id="returnBtn" onclick="returnToApp()" class="btn-return" style="background:#EF4444;">Misa ilovasiga qaytish</button>';
         }
         var errPayload = {
           state: state,
           error: safeErr,
           error_code: errorCode || undefined,
+          type: authType,
           timestamp: Date.now()
         };
         fetch('/api/auth/callback/session', {
@@ -5613,6 +5747,7 @@ async def handle_oauth_callback(request):
           expires_in: expiresIn ? Number(expiresIn) : undefined,
           code: code,
           state: state,
+          type: authType,
           timestamp: Date.now()
         };
         relayToLocalDesktop(sessionPayload);
@@ -5657,17 +5792,16 @@ async def handle_oauth_callback(request):
       }
 
       function showMissingTokenUi() {
-        msgEl.innerHTML = "Misa AI Portal<br><span style='font-size:13px;color:#94A3B8;margin-top:8px;display:block;'>Agar siz Misa AI ilovasida allaqachon tizimga kirgan bo'lsangiz, ushbu sahifani bemalol yopishingiz mumkin.</span>";
+        titleEl.textContent = "Misa AI Portali";
+        msgEl.innerHTML = "Misa AI Portal<br><span style='font-size:13.5px;color:#94A3B8;margin-top:8px;display:block;'>Agar siz Misa AI ilovasida allaqachon tizimga kirgan bo'lsangiz, ushbu sahifani bemalol yopishingiz mumkin.</span>";
         badgeEl.textContent = "Faol ✓";
         badgeEl.className = "status";
-        badgeEl.style.background = "rgba(16, 185, 129, 0.12)";
-        badgeEl.style.color = "#34D399";
         if (actEl) {
-          actEl.innerHTML = '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">' +
-            '<button id="returnBtn" onclick="returnToApp()" class="btn-return" style="background:#10B981;color:#FFFFFF;">Misa ilovasiga qaytish</button>' +
-            '<a href="/" class="btn-return" style="background:#38BDF8;color:#0F172A;text-decoration:none;">Web ilovani ochish</a>' +
+          actEl.innerHTML = '<div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">' +
+            '<button id="returnBtn" onclick="returnToApp()" class="btn-return">Misa ilovasiga qaytish</button>' +
+            '<a href="/" class="btn-secondary">Web ilovani ochish</a>' +
             '</div>' +
-            '<div style="font-size:12px;color:#94A3B8;margin-top:10px;">Agar oyna avtomatik ochilmasa, Misa ilovasini tanlang.</div>';
+            '<div style="font-size:12px;color:#94A3B8;margin-top:12px;">Agar oyna avtomatik ochilmasa, Misa ilovasini tanlang.</div>';
         }
       }
 
@@ -5805,6 +5939,8 @@ async def handle_oauth_session_save(request):
             sanitized_session["expires_in"] = data.get("expires_in")
         if oauth_error:
             sanitized_session["error"] = _redact_oauth_secrets(oauth_error)
+        if data.get("type"):
+            sanitized_session["type"] = str(data.get("type")).strip()
 
         _pending_oauth_sessions[state] = (expires_at, sanitized_session)
         if also_save_default:

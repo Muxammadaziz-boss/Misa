@@ -76,10 +76,34 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
     setTelegramModalOpen(false);
   };
 
-  // Listen for OAuth redirect sessions
+  // Check on mount if opened with recovery URL or type=recovery
+  useEffect(() => {
+    const hash = window.location.hash || "";
+    const search = window.location.search || "";
+    if (hash.includes("type=recovery") || search.includes("type=recovery") || hash.includes("recovery_token=")) {
+      setActiveTab("reset");
+      setSuccessMsg("Emailingiz tasdiqlandi. Iltimos, hisobingiz uchun yangi parolingizni belgilang.");
+      setErrorMsg(null);
+    }
+  }, []);
+
+  // Listen for OAuth redirect & recovery sessions
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setActiveTab("reset");
+        setSuccessMsg("Emailingiz tasdiqlandi. Iltimos, yangi parolingizni belgilang.");
+        setErrorMsg(null);
+        return;
+      }
       if ((event === "SIGNED_IN" || event === "USER_UPDATED" || event === "TOKEN_REFRESHED") && session?.user) {
+        const hash = window.location.hash || "";
+        const search = window.location.search || "";
+        if (hash.includes("type=recovery") || search.includes("type=recovery") || activeTab === "reset") {
+          setActiveTab("reset");
+          setSuccessMsg("Emailingiz tasdiqlandi. Iltimos, yangi parolingizni belgilang.");
+          return;
+        }
         if (session.access_token) {
           backendService.setAuthToken(session.access_token);
         }
@@ -104,7 +128,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
     return () => {
       subscription.unsubscribe();
     };
-  }, [onAuthSuccess]);
+  }, [onAuthSuccess, activeTab]);
 
   // Poll backend session when waiting for OAuth completion in browser
   useEffect(() => {
@@ -144,7 +168,23 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
         }
 
         if (res.ok && res.session) {
-          const { access_token, refresh_token, code } = res.session;
+          const { access_token, refresh_token, code, type: sessType } = res.session as any;
+          if (sessType === "recovery") {
+            shouldContinue = false;
+            setOauthWaiting(false);
+            setOauthState(null);
+            if (access_token) {
+              await supabase.auth.setSession({
+                access_token,
+                refresh_token: refresh_token || access_token,
+              });
+              backendService.setAuthToken(access_token);
+            }
+            setActiveTab("reset");
+            setSuccessMsg("Emailingiz tasdiqlandi. Iltimos, yangi parolingizni belgilang.");
+            setErrorMsg(null);
+            return;
+          }
           let sessionUser: any = null;
           let activeToken = access_token || "";
 
@@ -430,10 +470,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading || oauthLoading || oauthWaiting) return;
-    if (!token.trim()) {
-      setErrorMsg("Tiklash tokenini kiriting");
-      return;
-    }
     if (!isPasswordStrong(password)) {
       setErrorMsg("Yangi parol kamida 8 ta belgidan iborat bo'lib, harf va raqam qatnashishi kerak");
       return;
@@ -449,20 +485,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
 
     try {
       const res = await backendService.resetPassword({
-        token: token.trim(),
+        token: token.trim() || undefined,
         new_password: password,
       });
 
       if (res.ok) {
-        setSuccessMsg("Parol muvaffaqiyatli yangilandi! Tizimga kirishingiz mumkin.");
+        setSuccessMsg("Parol muvaffaqiyatli yangilandi! Endi tizimga yangi parolingiz bilan kirishingiz mumkin.");
         setTimeout(() => {
           setPassword("");
           setConfirmPassword("");
           setToken("");
           setActiveTab("login");
-        }, 1500);
+        }, 1800);
       } else {
-        setErrorMsg(res.error || "Parolni yangilashda xatolik");
+        setErrorMsg(res.error || "Parolni yangilashda xatolik yuz berdi");
       }
     } catch (err: any) {
       setErrorMsg(err.message || "Server bilan bog'lanishda xatolik");
@@ -566,21 +602,32 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
         }
         .misa-auth-input {
           width: 100%;
-          background: rgba(8, 14, 28, 0.72);
-          backdrop-filter: blur(14px);
-          -webkit-backdrop-filter: blur(14px);
-          border: 1px solid rgba(255, 255, 255, 0.12);
+          height: 48px;
+          min-height: 48px;
+          line-height: normal;
+          background: rgba(13, 19, 36, 0.95);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1.5px solid rgba(192, 76, 253, 0.42);
           border-radius: 12px;
           color: #FFFFFF;
-          font-size: 13.5px;
+          font-size: 14.5px;
           outline: none;
           box-sizing: border-box;
           transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
         }
+        .misa-auth-input:hover {
+          border-color: rgba(192, 76, 253, 0.75);
+          background: rgba(18, 24, 46, 0.98);
+        }
         .misa-auth-input:focus {
           border-color: #C04CFD !important;
-          background: rgba(14, 20, 38, 0.85) !important;
-          box-shadow: 0 0 0 3px rgba(192, 76, 253, 0.25), 0 0 16px rgba(147, 3, 197, 0.2) !important;
+          background: rgba(22, 28, 54, 1) !important;
+          box-shadow: 0 0 0 3px rgba(192, 76, 253, 0.32), 0 0 20px rgba(147, 3, 197, 0.35) !important;
+        }
+        .misa-auth-input::placeholder {
+          color: #64748B;
+          font-size: 13.5px;
         }
         .misa-social-btn {
           flex: 1;
@@ -1015,9 +1062,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
             </div>
 
             <form onSubmit={handleTelegramSubmit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              <div style={{ position: "relative" }}>
-                <div style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", color: "#38BDF8", pointerEvents: "none" }}>
-                  <TelegramColorIcon size={18} />
+              <div style={{ position: "relative", width: "100%", height: "48px" }}>
+                <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#38BDF8", pointerEvents: "none", zIndex: 2 }}>
+                  <TelegramColorIcon size={19} />
                 </div>
                 <input
                   type="text"
@@ -1025,7 +1072,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                   onChange={(e) => setTelegramInput(e.target.value)}
                   placeholder="@sherzod_dev yoki ID"
                   className="misa-auth-input"
-                  style={{ padding: "12px 14px 12px 42px" }}
+                  style={{ padding: "0 16px 0 46px" }}
                   required
                 />
               </div>
@@ -1147,9 +1194,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                   <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
                     Email manzil
                   </label>
-                  <div style={{ position: "relative" }}>
-                    <div style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", color: "#94A3B8", pointerEvents: "none" }}>
-                      <MailIcon size={16} />
+                  <div style={{ position: "relative", width: "100%", height: "48px" }}>
+                    <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#C084FC", pointerEvents: "none", zIndex: 2 }}>
+                      <MailIcon size={18} />
                     </div>
                     <input
                       type="email"
@@ -1159,7 +1206,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                       autoComplete="email"
                       required
                       className="misa-auth-input"
-                      style={{ padding: "12px 14px 12px 42px" }}
+                      style={{ padding: "0 16px 0 46px" }}
                     />
                   </div>
                 </div>
@@ -1186,9 +1233,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                       Parolni unutdingizmi?
                     </button>
                   </div>
-                  <div style={{ position: "relative" }}>
-                    <div style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", color: "#94A3B8", pointerEvents: "none" }}>
-                      <LockIcon size={16} />
+                  <div style={{ position: "relative", width: "100%", height: "48px" }}>
+                    <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#C084FC", pointerEvents: "none", zIndex: 2 }}>
+                      <LockIcon size={18} />
                     </div>
                     <input
                       type={showPassword ? "text" : "password"}
@@ -1198,7 +1245,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                       autoComplete="current-password"
                       required
                       className="misa-auth-input"
-                      style={{ padding: "12px 42px 12px 42px" }}
+                      style={{ padding: "0 46px 0 46px" }}
                     />
                     <button
                       type="button"
@@ -1210,16 +1257,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                         transform: "translateY(-50%)",
                         background: "none",
                         border: "none",
-                        color: showPassword ? "#C04CFD" : "#64748B",
+                        color: showPassword ? "#C04CFD" : "#94A3B8",
                         cursor: "pointer",
-                        padding: "4px",
+                        padding: "6px",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
+                        zIndex: 2,
                       }}
                       title={showPassword ? "Parolni yashirish" : "Parolni ko'rsatish"}
                     >
-                      {showPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+                      {showPassword ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
                     </button>
                   </div>
                 </div>
@@ -1274,7 +1322,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                       placeholder="Ismingiz"
                       autoComplete="given-name"
                       className="misa-auth-input"
-                      style={{ padding: "10px 14px" }}
+                      style={{ padding: "0 16px" }}
                     />
                   </div>
 
@@ -1289,7 +1337,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                       placeholder="Familiyangiz"
                       autoComplete="family-name"
                       className="misa-auth-input"
-                      style={{ padding: "10px 14px" }}
+                      style={{ padding: "0 16px" }}
                     />
                   </div>
                 </div>
@@ -1299,9 +1347,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                   <label style={{ fontSize: "12px", color: "#94A3B8", fontWeight: 500 }}>
                     Email manzil
                   </label>
-                  <div style={{ position: "relative" }}>
-                    <div style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", color: "#94A3B8", pointerEvents: "none" }}>
-                      <MailIcon size={16} />
+                  <div style={{ position: "relative", width: "100%", height: "48px" }}>
+                    <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#C084FC", pointerEvents: "none", zIndex: 2 }}>
+                      <MailIcon size={18} />
                     </div>
                     <input
                       type="email"
@@ -1311,7 +1359,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                       autoComplete="email"
                       required
                       className="misa-auth-input"
-                      style={{ padding: "11px 14px 11px 40px" }}
+                      style={{ padding: "0 16px 0 46px" }}
                     />
                   </div>
                 </div>
@@ -1321,9 +1369,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                   <label style={{ fontSize: "12px", color: "#94A3B8", fontWeight: 500 }}>
                     Parol (kamida 8 belgi, harf va raqam)
                   </label>
-                  <div style={{ position: "relative" }}>
-                    <div style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", color: "#94A3B8", pointerEvents: "none" }}>
-                      <LockIcon size={16} />
+                  <div style={{ position: "relative", width: "100%", height: "48px" }}>
+                    <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#C084FC", pointerEvents: "none", zIndex: 2 }}>
+                      <LockIcon size={18} />
                     </div>
                     <input
                       type={showPassword ? "text" : "password"}
@@ -1333,7 +1381,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                       autoComplete="new-password"
                       required
                       className="misa-auth-input"
-                      style={{ padding: "11px 40px 11px 40px" }}
+                      style={{ padding: "0 46px 0 46px" }}
                     />
                     <button
                       type="button"
@@ -1345,16 +1393,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                         transform: "translateY(-50%)",
                         background: "none",
                         border: "none",
-                        color: showPassword ? "#C04CFD" : "#64748B",
+                        color: showPassword ? "#C04CFD" : "#94A3B8",
                         cursor: "pointer",
-                        padding: "4px",
+                        padding: "6px",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
+                        zIndex: 2,
                       }}
                       title={showPassword ? "Parolni yashirish" : "Parolni ko'rsatish"}
                     >
-                      {showPassword ? <EyeOffIcon size={15} /> : <EyeIcon size={15} />}
+                      {showPassword ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
                     </button>
                   </div>
                 </div>
@@ -1364,9 +1413,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                   <label style={{ fontSize: "12px", color: "#94A3B8", fontWeight: 500 }}>
                     Parolni tasdiqlang
                   </label>
-                  <div style={{ position: "relative" }}>
-                    <div style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", color: "#94A3B8", pointerEvents: "none" }}>
-                      <LockIcon size={16} />
+                  <div style={{ position: "relative", width: "100%", height: "48px" }}>
+                    <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#C084FC", pointerEvents: "none", zIndex: 2 }}>
+                      <LockIcon size={18} />
                     </div>
                     <input
                       type={showConfirmPassword ? "text" : "password"}
@@ -1376,7 +1425,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                       autoComplete="new-password"
                       required
                       className="misa-auth-input"
-                      style={{ padding: "11px 40px 11px 40px" }}
+                      style={{ padding: "0 46px 0 46px" }}
                     />
                     <button
                       type="button"
@@ -1388,16 +1437,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                         transform: "translateY(-50%)",
                         background: "none",
                         border: "none",
-                        color: showConfirmPassword ? "#C04CFD" : "#64748B",
+                        color: showConfirmPassword ? "#C04CFD" : "#94A3B8",
                         cursor: "pointer",
-                        padding: "4px",
+                        padding: "6px",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
+                        zIndex: 2,
                       }}
                       title={showConfirmPassword ? "Parolni yashirish" : "Parolni ko'rsatish"}
                     >
-                      {showConfirmPassword ? <EyeOffIcon size={15} /> : <EyeIcon size={15} />}
+                      {showConfirmPassword ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
                     </button>
                   </div>
                 </div>
@@ -1447,9 +1497,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                   <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
                     Email manzil
                   </label>
-                  <div style={{ position: "relative" }}>
-                    <div style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", color: "#94A3B8", pointerEvents: "none" }}>
-                      <MailIcon size={16} />
+                  <div style={{ position: "relative", width: "100%", height: "48px" }}>
+                    <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#C084FC", pointerEvents: "none", zIndex: 2 }}>
+                      <MailIcon size={18} />
                     </div>
                     <input
                       type="email"
@@ -1458,7 +1508,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                       placeholder="user@example.com"
                       required
                       className="misa-auth-input"
-                      style={{ padding: "12px 14px 12px 42px" }}
+                      style={{ padding: "0 16px 0 46px" }}
                     />
                   </div>
                 </div>
@@ -1481,7 +1531,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                     opacity: loading ? 0.7 : 1,
                   }}
                 >
-                  {loading ? "Yuborilmoqda..." : "Tiklash kodini yuborish"}
+                  {loading ? "Yuborilmoqda..." : "Tiklash havolasini yuborish"}
                 </button>
 
                 <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px" }}>
@@ -1516,41 +1566,26 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                     onMouseEnter={(e) => (e.currentTarget.style.color = "#6EE7B7")}
                     onMouseLeave={(e) => (e.currentTarget.style.color = "#34D399")}
                   >
-                    Kodingiz bormi? Tiklash →
+                    Parolni tiklash sahifasi →
                   </button>
                 </div>
               </form>
             )}
 
-            {/* ═══ TAB 4: RESET PASSWORD FORM ═══ */}
+            {/* ═══ TAB 4: RESET PASSWORD FORM (NO MANUAL TOKEN NEEDED) ═══ */}
             {activeTab === "reset" && (
               <form onSubmit={handleResetPassword} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
                 <div style={{ fontSize: "13px", color: "#94A3B8", lineHeight: 1.5 }}>
-                  Yuborilgan bir martalik tiklash tokeni va yangi parolingizni kiriting.
+                  Emailingiz tasdiqlandi. Iltimos, hisobingiz uchun yangi xavfsiz parol kiriting va saqlang.
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                   <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
-                    Tiklash tokeni
+                    Yangi parol (kamida 8 belgi, harf va raqam)
                   </label>
-                  <input
-                    type="text"
-                    value={token}
-                    onChange={(e) => setToken(e.target.value)}
-                    placeholder="masalan: 1a2b3c4d..."
-                    required
-                    className="misa-auth-input"
-                    style={{ padding: "11px 14px" }}
-                  />
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                  <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
-                    Yangi parol
-                  </label>
-                  <div style={{ position: "relative" }}>
-                    <div style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", color: "#94A3B8", pointerEvents: "none" }}>
-                      <LockIcon size={16} />
+                  <div style={{ position: "relative", width: "100%", height: "48px" }}>
+                    <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#C084FC", pointerEvents: "none", zIndex: 2 }}>
+                      <LockIcon size={18} />
                     </div>
                     <input
                       type={showPassword ? "text" : "password"}
@@ -1559,7 +1594,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                       placeholder="••••••••"
                       required
                       className="misa-auth-input"
-                      style={{ padding: "11px 40px 11px 40px" }}
+                      style={{ padding: "0 46px 0 46px" }}
                     />
                     <button
                       type="button"
@@ -1571,12 +1606,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                         transform: "translateY(-50%)",
                         background: "none",
                         border: "none",
-                        color: showPassword ? "#C04CFD" : "#64748B",
+                        color: showPassword ? "#C04CFD" : "#94A3B8",
                         cursor: "pointer",
-                        padding: "4px",
+                        padding: "6px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        zIndex: 2,
                       }}
+                      title={showPassword ? "Parolni yashirish" : "Parolni ko'rsatish"}
                     >
-                      {showPassword ? <EyeOffIcon size={15} /> : <EyeIcon size={15} />}
+                      {showPassword ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
                     </button>
                   </div>
                 </div>
@@ -1585,9 +1625,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                   <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
                     Yangi parolni tasdiqlang
                   </label>
-                  <div style={{ position: "relative" }}>
-                    <div style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", color: "#94A3B8", pointerEvents: "none" }}>
-                      <LockIcon size={16} />
+                  <div style={{ position: "relative", width: "100%", height: "48px" }}>
+                    <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#C084FC", pointerEvents: "none", zIndex: 2 }}>
+                      <LockIcon size={18} />
                     </div>
                     <input
                       type={showConfirmPassword ? "text" : "password"}
@@ -1596,7 +1636,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                       placeholder="••••••••"
                       required
                       className="misa-auth-input"
-                      style={{ padding: "11px 40px 11px 40px" }}
+                      style={{ padding: "0 46px 0 46px" }}
                     />
                     <button
                       type="button"
@@ -1608,12 +1648,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                         transform: "translateY(-50%)",
                         background: "none",
                         border: "none",
-                        color: showConfirmPassword ? "#C04CFD" : "#64748B",
+                        color: showConfirmPassword ? "#C04CFD" : "#94A3B8",
                         cursor: "pointer",
-                        padding: "4px",
+                        padding: "6px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        zIndex: 2,
                       }}
+                      title={showConfirmPassword ? "Parolni yashirish" : "Parolni ko'rsatish"}
                     >
-                      {showConfirmPassword ? <EyeOffIcon size={15} /> : <EyeIcon size={15} />}
+                      {showConfirmPassword ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
                     </button>
                   </div>
                 </div>
@@ -1624,38 +1669,39 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                   style={{
                     marginTop: "6px",
                     padding: "13px 20px",
-                    background: "linear-gradient(135deg, #059669 0%, #10B981 100%)",
+                    background: "linear-gradient(135deg, #9303C5 0%, #C04CFD 60%, #7C3AED 100%)",
                     border: "none",
                     borderRadius: "12px",
                     color: "#FFFFFF",
-                    fontSize: "14px",
+                    fontSize: "14.5px",
                     fontWeight: 700,
                     cursor: loading ? "default" : "pointer",
-                    boxShadow: "0 4px 20px rgba(16, 185, 129, 0.35)",
-                    transition: "all 0.2s ease",
+                    boxShadow: "0 4px 22px rgba(147, 3, 197, 0.45)",
+                    transition: "all 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
                     opacity: loading ? 0.7 : 1,
                   }}
                 >
-                  {loading ? "Yangilanmoqda..." : "Parolni yangilash"}
+                  {loading ? "Parol saqlanmoqda..." : "Yangi parolni saqlash"}
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleTabChange("login")}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "#94A3B8",
-                    fontSize: "12.5px",
-                    cursor: "pointer",
-                    marginTop: "4px",
-                    transition: "color 0.15s ease",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = "#F1F5F9")}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = "#94A3B8")}
-                >
-                  ← Kirishga qaytish
-                </button>
+                <div style={{ display: "flex", justifyContent: "center", marginTop: "4px" }}>
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange("login")}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#94A3B8",
+                      fontSize: "12.5px",
+                      cursor: "pointer",
+                      transition: "color 0.15s ease",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = "#F1F5F9")}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = "#94A3B8")}
+                  >
+                    ← Kirishga qaytish
+                  </button>
+                </div>
               </form>
             )}
 
@@ -1677,7 +1723,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                     placeholder="masalan: 1a2b3c4d..."
                     required
                     className="misa-auth-input"
-                    style={{ padding: "11px 14px" }}
+                    style={{ padding: "0 16px" }}
                   />
                 </div>
 

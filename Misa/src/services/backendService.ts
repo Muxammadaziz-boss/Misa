@@ -4034,11 +4034,13 @@ class BackendService {
       };
     }
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(target);
+      const callbackBase = resolveOAuthCallbackBase();
+      const redirectTo = `${callbackBase}/api/auth/callback?type=recovery`;
+      const { error } = await supabase.auth.resetPasswordForEmail(target, { redirectTo });
       if (error) {
         return { ok: false, error: formatAuthError(error) };
       }
-      return { ok: true, message: "Parolni tiklash bo'yicha yo'riqnoma email manzilingizga yuborildi." };
+      return { ok: true, message: "Parolni tiklash havolasi email manzilingizga yuborildi. Pochtadagi xatni tekshiring." };
     } catch (err: any) {
       return { ok: false, error: formatAuthError(err) };
     }
@@ -4056,11 +4058,21 @@ class BackendService {
       };
     }
     try {
+      if (payload.token && payload.token.trim()) {
+        try {
+          await supabase.auth.verifyOtp({
+            token_hash: payload.token.trim(),
+            type: "recovery",
+          });
+        } catch (otpErr) {
+          console.warn("[ResetPassword] verifyOtp recovery urinishi:", otpErr);
+        }
+      }
       const { error } = await supabase.auth.updateUser({ password: payload.new_password });
       if (error) {
         return { ok: false, error: formatAuthError(error) };
       }
-      return { ok: true, message: "Yangi parol muvaffaqiyatli o'rnatildi!" };
+      return { ok: true, message: "Yangi parol muvaffaqiyatli o'rnatildi! Endi ushbu parol orqali tizimga kirishingiz mumkin." };
     } catch (err: any) {
       return { ok: false, error: formatAuthError(err) };
     }
