@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Misa AI — Kirish usuli uzildi</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #070B14;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: #F8FAFC;
+      -webkit-font-smoothing: antialiased;
+    }
+    table {
+      border-spacing: 0;
+    }
+    td {
+      padding: 0;
+    }
+    .wrapper {
+      width: 100%;
+      table-layout: fixed;
+      background-color: #070B14;
+      padding-top: 40px;
+      padding-bottom: 50px;
+    }
+    .main {
+      background: #0E1626;
+      margin: 0 auto;
+      width: 100%;
+      max-width: 540px;
+      border: 1px solid rgba(192, 76, 253, 0.35);
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7), 0 0 40px rgba(147, 3, 197, 0.2);
+      overflow: hidden;
+    }
+    .btn-action {
+      display: inline-block;
+      padding: 13px 32px;
+      background: linear-gradient(135deg, #F97316 0%, #EA580C 100%);
+      color: #FFFFFF !important;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 14.5px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(249, 115, 22, 0.45);
+    }
+    @media only screen and (max-width: 600px) {
+      .main {
+        width: 92% !important;
+        border-radius: 16px !important;
+      }
+    }
+  </style>
+</head>
+<body style="background-color: #070B14; margin: 0; padding: 0;">
+  <center class="wrapper">
+    <table class="main" width="100%" cellpadding="0" cellspacing="0" style="max-width: 540px; background-color: #0E1626; border: 1px solid rgba(192, 76, 253, 0.35); border-radius: 20px; margin: 0 auto;">
+      <!-- Top Gradient Accent Line -->
+      <tr>
+        <td style="height: 4px; background: linear-gradient(90deg, #F97316 0%, #C04CFD 100%);"></td>
+      </tr>
+
+      <!-- Logo & Branding -->
+      <tr>
+        <td style="padding: 36px 36px 20px; text-align: center;">
+          <table align="center" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="background: linear-gradient(135deg, #24141E 0%, #1A1230 100%); border: 1.5px solid rgba(249, 115, 22, 0.45); border-radius: 16px; padding: 10px 14px; text-align: center;">
+                <span style="font-size: 20px; font-weight: 800; color: #FFFFFF; letter-spacing: -0.5px;">✨ Misa <span style="font-size: 12px; font-weight: 700; color: #FED7AA; background: rgba(249, 115, 22, 0.25); border: 1px solid rgba(249, 115, 22, 0.4); border-radius: 6px; padding: 2px 7px; vertical-align: middle;">AI</span></span>
+              </td>
+            </tr>
+          </table>
+          <p style="margin: 12px 0 0; color: #94A3B8; font-size: 12.5px; letter-spacing: 0.2px;">
+            Avtonom Intellektual Ish Maydoni & Masofaviy Boshqaruv
+          </p>
+        </td>
+      </tr>
+
+      <!-- Divider -->
+      <tr>
+        <td style="padding: 0 36px;">
+          <div style="height: 1px; background: rgba(255, 255, 255, 0.08);"></div>
+        </td>
+      </tr>
+
+      <!-- Content Body -->
+      <tr>
+        <td style="padding: 28px 36px 20px; text-align: left;">
+          <!-- Security Badge -->
+          <div style="display: inline-block; padding: 4px 12px; background: rgba(249, 115, 22, 0.15); border: 1px solid rgba(249, 115, 22, 0.4); border-radius: 20px; color: #FB923C; font-size: 12px; font-weight: 600; margin-bottom: 14px;">
+            ⛓️ Kirish usuli o'chirildi
+          </div>
+
+          <h2 style="margin: 0 0 14px; color: #FFFFFF; font-size: 20px; font-weight: 700; letter-spacing: -0.3px;">
+            Hisobingizdan kirish usuli uzildi
+          </h2>
+          <p style="margin: 0 0 16px; color: #CBD5E1; font-size: 14.5px; line-height: 1.6;">
+            Salom! Sizning <strong>{{ .Email }}</strong> hisobingizga avval ulangan autentifikatsiya provayderlaridan biri uzildi (o'chirildi).
+          </p>
+          <p style="margin: 0 0 20px; color: #94A3B8; font-size: 13.5px; line-height: 1.5;">
+            Agar ushbu amalni o'zingiz bajargan bo'lsangiz, hammasi joyida — endi ushbu provayder orqali kirish imkoni bo'lmaydi.
+          </p>
+
+          <!-- Alert Box -->
+          <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 14px; padding: 16px; margin: 20px 0;">
+            <div style="font-size: 13px; font-weight: 700; color: #FCA5A5; margin-bottom: 6px;">
+              ⚠️ Bu amal sizning ruxsatingizsiz bajarildimi?
+            </div>
+            <p style="margin: 0; color: #F87171; font-size: 12.5px; line-height: 1.5;">
+              Agar siz bu amalni bajarmagan bo'lsangiz, zudlik bilan Misa ilovasiga kirib parolingizni o'zgartiring va hisobingiz xavfsizligini ta'minlang.
+            </p>
+          </div>
+
+          <!-- Action Button -->
+          <table align="center" cellpadding="0" cellspacing="0" style="margin: 26px auto 14px;">
+            <tr>
+              <td align="center" style="border-radius: 12px; background: linear-gradient(135deg, #F97316 0%, #EA580C 100%);">
+                <a href="{{ .SiteURL }}" target="_blank" class="btn-action" style="display: inline-block; padding: 13px 32px; color: #FFFFFF; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 14.5px; font-weight: 700; text-decoration: none; border-radius: 12px;">
+                  🛡 Xavfsizlikni tekshirish
+                </a>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+
+      <!-- Footer -->
+      <tr>
+        <td style="padding: 24px 36px 32px; background: #0A101C; border-top: 1px solid rgba(255, 255, 255, 0.06); text-align: center;">
+          <p style="margin: 0 0 6px; color: #64748B; font-size: 12px;">
+            🛡 Xavfsizlik ta'minoti: <strong>Misa AI & Supabase Cloud Auth</strong>
+          </p>
+          <p style="margin: 0; color: #475569; font-size: 11px;">
+            © 2026 Misa AI. Barcha huquqlar himoyalangan.
+          </p>
+        </td>
+      </tr>
+    </table>
+  </center>
+</body>
+</html>

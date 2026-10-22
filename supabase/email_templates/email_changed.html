@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Misa AI — Email manzil o'zgartirildi</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #070B14;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: #F8FAFC;
+      -webkit-font-smoothing: antialiased;
+    }
+    table {
+      border-spacing: 0;
+    }
+    td {
+      padding: 0;
+    }
+    .wrapper {
+      width: 100%;
+      table-layout: fixed;
+      background-color: #070B14;
+      padding-top: 40px;
+      padding-bottom: 50px;
+    }
+    .main {
+      background: #0E1626;
+      margin: 0 auto;
+      width: 100%;
+      max-width: 540px;
+      border: 1px solid rgba(192, 76, 253, 0.35);
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7), 0 0 40px rgba(147, 3, 197, 0.2);
+      overflow: hidden;
+    }
+    .btn-action {
+      display: inline-block;
+      padding: 13px 32px;
+      background: linear-gradient(135deg, #0284C7 0%, #38BDF8 100%);
+      color: #FFFFFF !important;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 14.5px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(2, 132, 199, 0.45);
+    }
+    @media only screen and (max-width: 600px) {
+      .main {
+        width: 92% !important;
+        border-radius: 16px !important;
+      }
+    }
+  </style>
+</head>
+<body style="background-color: #070B14; margin: 0; padding: 0;">
+  <center class="wrapper">
+    <table class="main" width="100%" cellpadding="0" cellspacing="0" style="max-width: 540px; background-color: #0E1626; border: 1px solid rgba(192, 76, 253, 0.35); border-radius: 20px; margin: 0 auto;">
+      <!-- Top Gradient Accent Line -->
+      <tr>
+        <td style="height: 4px; background: linear-gradient(90deg, #38BDF8 0%, #C04CFD 50%, #10B981 100%);"></td>
+      </tr>
+
+      <!-- Logo & Branding -->
+      <tr>
+        <td style="padding: 36px 36px 20px; text-align: center;">
+          <table align="center" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="background: linear-gradient(135deg, #0C1E32 0%, #1A1230 100%); border: 1.5px solid rgba(56, 189, 248, 0.45); border-radius: 16px; padding: 10px 14px; text-align: center;">
+                <span style="font-size: 20px; font-weight: 800; color: #FFFFFF; letter-spacing: -0.5px;">✨ Misa <span style="font-size: 12px; font-weight: 700; color: #BAE6FD; background: rgba(56, 189, 248, 0.25); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 6px; padding: 2px 7px; vertical-align: middle;">AI</span></span>
+              </td>
+            </tr>
+          </table>
+          <p style="margin: 12px 0 0; color: #94A3B8; font-size: 12.5px; letter-spacing: 0.2px;">
+            Avtonom Intellektual Ish Maydoni & Masofaviy Boshqaruv
+          </p>
+        </td>
+      </tr>
+
+      <!-- Divider -->
+      <tr>
+        <td style="padding: 0 36px;">
+          <div style="height: 1px; background: rgba(255, 255, 255, 0.08);"></div>
+        </td>
+      </tr>
+
+      <!-- Content Body -->
+      <tr>
+        <td style="padding: 28px 36px 20px; text-align: left;">
+          <!-- Security Badge -->
+          <div style="display: inline-block; padding: 4px 12px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 20px; color: #38BDF8; font-size: 12px; font-weight: 600; margin-bottom: 14px;">
+            ✉️ Xavfsizlik: Email yangilanishi
+          </div>
+
+          <h2 style="margin: 0 0 14px; color: #FFFFFF; font-size: 20px; font-weight: 700; letter-spacing: -0.3px;">
+            Asosiy email manzilingiz o'zgartirildi
+          </h2>
+          <p style="margin: 0 0 16px; color: #CBD5E1; font-size: 14.5px; line-height: 1.6;">
+            Salom! Sizning Misa AI platformasidagi hisobingiz uchun yangi email manzili muvaffaqiyatli belgilandi.
+          </p>
+
+          <!-- Email Change Diff Box -->
+          <div style="background: rgba(14, 24, 48, 0.85); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 14px; padding: 16px; margin: 18px 0;">
+            <div style="font-size: 12px; color: #94A3B8; margin-bottom: 6px;">Eski email:</div>
+            <div style="font-size: 14px; color: #EF4444; font-family: monospace; text-decoration: line-through; margin-bottom: 10px;">{{ .OldEmail }}</div>
+            <div style="font-size: 12px; color: #94A3B8; margin-bottom: 6px;">Yangi tasdiqlangan email:</div>
+            <div style="font-size: 15px; font-weight: 700; color: #34D399; font-family: monospace;">{{ .NewEmail }}</div>
+          </div>
+
+          <!-- Alert Box -->
+          <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 14px; padding: 16px; margin: 20px 0;">
+            <div style="font-size: 13px; font-weight: 700; color: #FCA5A5; margin-bottom: 6px;">
+              ⚠️ Bu o'zgarishni siz amalga oshirmadingizmi?
+            </div>
+            <p style="margin: 0; color: #F87171; font-size: 12.5px; line-height: 1.5;">
+              Agar siz emailingizni o'zgartirmagan bo'lsangiz, begona shaxs hisobingizga kirgan bo'lishi mumkin. Darhol hisobingizni tiklang yoki Misa xavfsizlik jamoasi bilan bog'laning.
+            </p>
+          </div>
+
+          <!-- Action Button -->
+          <table align="center" cellpadding="0" cellspacing="0" style="margin: 26px auto 14px;">
+            <tr>
+              <td align="center" style="border-radius: 12px; background: linear-gradient(135deg, #0284C7 0%, #38BDF8 100%);">
+                <a href="{{ .SiteURL }}" target="_blank" class="btn-action" style="display: inline-block; padding: 13px 32px; color: #FFFFFF; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 14.5px; font-weight: 700; text-decoration: none; border-radius: 12px;">
+                  🛡 Hisob xavfsizligini tekshirish
+                </a>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+
+      <!-- Footer -->
+      <tr>
+        <td style="padding: 24px 36px 32px; background: #0A101C; border-top: 1px solid rgba(255, 255, 255, 0.06); text-align: center;">
+          <p style="margin: 0 0 6px; color: #64748B; font-size: 12px;">
+            🛡 Xavfsizlik ta'minoti: <strong>Misa AI & Supabase Cloud Auth</strong>
+          </p>
+          <p style="margin: 0; color: #475569; font-size: 11px;">
+            © 2026 Misa AI. Barcha huquqlar himoyalangan.
+          </p>
+        </td>
+      </tr>
+    </table>
+  </center>
+</body>
+</html>
