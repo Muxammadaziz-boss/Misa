@@ -104,7 +104,7 @@
           </p>
 
           <!-- Button -->
-          <table align="center" cellpadding="0" cellspacing="0" style="margin: 28px auto 28px;">
+          <table align="center" cellpadding="0" cellspacing="0" style="margin: 28px auto 24px;">
             <tr>
               <td align="center" style="border-radius: 12px; background: linear-gradient(135deg, #059669 0%, #10B981 100%);">
                 <a href="{{ .ConfirmationURL }}" target="_blank" class="btn-confirm" style="display: inline-block; padding: 14px 34px; color: #FFFFFF; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 15px; font-weight: 700; text-decoration: none; border-radius: 12px;">
@@ -113,6 +113,31 @@
               </td>
             </tr>
           </table>
+
+          <!-- OTP Code Box with 1-Click Copy -->
+          <div style="background: rgba(14, 24, 48, 0.95); border: 1.5px dashed rgba(16, 185, 129, 0.55); border-radius: 16px; padding: 22px 20px; text-align: center; margin: 24px 0; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);">
+            <div style="font-size: 12px; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 8px;">
+              🔑 Yoki 6 xonali tasdiqlash kodingiz (OTP):
+            </div>
+            
+            <div style="margin: 12px 0 14px;">
+              <span style="display: inline-block; font-size: 34px; font-weight: 800; letter-spacing: 8px; color: #A7F3D0; background: rgba(16, 185, 129, 0.2); border: 1.5px solid rgba(16, 185, 129, 0.5); border-radius: 12px; padding: 8px 24px; font-family: 'SF Mono', Consolas, Monaco, monospace; user-select: all; -webkit-user-select: all; -moz-user-select: all; cursor: pointer;" title="Kodni belgilash va nusxalash uchun bosing">{{ .Token }}</span>
+            </div>
+
+            <table align="center" cellpadding="0" cellspacing="0" style="margin: 10px auto 4px;">
+              <tr>
+                <td align="center" style="border-radius: 10px; background: rgba(16, 185, 129, 0.22); border: 1px solid rgba(16, 185, 129, 0.55);">
+                  <a href="#copy" onclick="if(navigator.clipboard){navigator.clipboard.writeText('{{ .Token }}');alert('Kod nusxalandi: {{ .Token }}');}return false;" style="display: inline-block; padding: 8px 20px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; font-weight: 700; color: #FFFFFF; text-decoration: none; cursor: pointer;">
+                    📋 Kodni nusxalash
+                  </a>
+                </td>
+              </tr>
+            </table>
+
+            <p style="margin: 10px 0 0; color: #94A3B8; font-size: 12px; line-height: 1.4;">
+              💡 <em>Kodni ustiga bir marta bossangiz, u to'liq belgilanadi (Ctrl+C / Nusxalash).</em>
+            </p>
+          </div>
 
           <!-- Direct Link Fallback -->
           <p style="margin: 20px 0 0; color: #64748B; font-size: 11.5px; line-height: 1.4; word-break: break-all;">

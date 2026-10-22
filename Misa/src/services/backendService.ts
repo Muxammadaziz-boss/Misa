@@ -3467,6 +3467,131 @@ class BackendService {
     }
   }
 
+  public async signInWithOtp(email: string): Promise<{ ok: boolean; message?: string; error?: string }> {
+    if (!isSupabaseConfigured) {
+      return {
+        ok: false,
+        error: "Supabase sozlanmagan. Iltimos, VITE_SUPABASE_URL sozlamasini tekshiring.",
+      };
+    }
+    const cleanEmail = (email || "").trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      return {
+        ok: false,
+        error: "Iltimos, to'g'ri email manzilini kiriting.",
+      };
+    }
+    try {
+      const callbackBase = resolveOAuthCallbackBase();
+      const redirectTo = `${callbackBase}/api/auth/callback`;
+      const { error } = await supabase.auth.signInWithOtp({
+        email: cleanEmail,
+        options: {
+          emailRedirectTo: redirectTo,
+          shouldCreateUser: true,
+        },
+      });
+      if (error) {
+        return { ok: false, error: formatAuthError(error) };
+      }
+      return {
+        ok: true,
+        message: "6 xonali tasdiqlash kodi emailingizga yuborildi. Pochtadagi xatni tekshiring.",
+      };
+    } catch (err: any) {
+      return { ok: false, error: formatAuthError(err) };
+    }
+  }
+
+  public async verifyEmailOtp(email: string, token: string): Promise<AuthResponse> {
+    if (!isSupabaseConfigured) {
+      return {
+        ok: false,
+        error: "Supabase sozlanmagan. Iltimos, VITE_SUPABASE_URL sozlamasini tekshiring.",
+      };
+    }
+    const cleanEmail = (email || "").trim().toLowerCase();
+    const cleanToken = (token || "").trim().replace(/\s+/g, "");
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      return { ok: false, error: "Email manzili kiritilmagan." };
+    }
+    if (!cleanToken) {
+      return { ok: false, error: "Tasdiqlash kodi (OTP) kiritilmagan." };
+    }
+
+    try {
+      let { data, error } = await supabase.auth.verifyOtp({
+        email: cleanEmail,
+        token: cleanToken,
+        type: "email",
+      });
+
+      if (error) {
+        const retry = await supabase.auth.verifyOtp({
+          email: cleanEmail,
+          token: cleanToken,
+          type: "magiclink",
+        });
+        if (!retry.error && retry.data) {
+          data = retry.data;
+          error = null;
+        }
+      }
+
+      if (error) {
+        return { ok: false, error: formatAuthError(error) };
+      }
+
+      const sessionToken = data.session?.access_token || "";
+      if (sessionToken) {
+        this.setAuthToken(sessionToken);
+      }
+
+      const meta = data.user?.user_metadata || {};
+      const userFirstName = meta.first_name || undefined;
+      const userLastName = meta.last_name || undefined;
+      if (userFirstName) {
+        try { localStorage.setItem("misa_user_first_name", userFirstName); } catch {}
+      }
+      if (userLastName) {
+        try { localStorage.setItem("misa_user_last_name", userLastName); } catch {}
+      }
+
+      const user: MikasaAuthUser | undefined = data.user
+        ? {
+            id: data.user.id,
+            username: meta.username || meta.full_name || meta.name || cleanEmail.split("@")[0],
+            first_name: userFirstName,
+            last_name: userLastName,
+            email: data.user.email || cleanEmail,
+            is_active: true,
+            is_verified: Boolean(data.user.email_confirmed_at),
+            created_at: Date.now() / 1000,
+          }
+        : undefined;
+
+      if (user) {
+        try {
+          localStorage.setItem("misa_user_name", user.username);
+          localStorage.setItem("misa_user_email", user.email);
+          localStorage.setItem("misa_auth_token", sessionToken);
+          localStorage.setItem("misa_user_data", JSON.stringify(user));
+        } catch {}
+        this.notifyAuthChange(user);
+      }
+
+      return {
+        ok: true,
+        message: "Tizimga muvaffaqiyatli kirildi!",
+        user,
+        session_token: sessionToken,
+        expires_at: data.session?.expires_at,
+      };
+    } catch (err: any) {
+      return { ok: false, error: formatAuthError(err) };
+    }
+  }
+
   private async verifyOAuthCallbackReachability(callbackBase: string): Promise<{ ok: boolean; error?: string }> {
     if (typeof window === "undefined" || (globalThis as any).__MISA_SKIP_OAUTH_HEALTH_CHECK__) {
       return { ok: true };

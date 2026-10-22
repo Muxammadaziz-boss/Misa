@@ -66,6 +66,21 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
   const [telegramInput, setTelegramInput] = useState("");
   const [telegramLoading, setTelegramLoading] = useState(false);
 
+  // OTP Login state
+  const [loginMethod, setLoginMethod] = useState<"password" | "otp">("password");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpCooldown, setOtpCooldown] = useState(0);
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+
+  // OTP cooldown timer
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const t = setTimeout(() => setOtpCooldown((prev) => prev - 1), 1000);
+    return () => clearTimeout(t);
+  }, [otpCooldown]);
+
   // Clear messages on tab change
   const handleTabChange = (tab: AuthTab) => {
     setActiveTab(tab);
@@ -74,6 +89,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
     setOauthWaiting(false);
     setOauthState(null);
     setTelegramModalOpen(false);
+    setOtpSent(false);
+    setOtpCode("");
   };
 
   // Check on mount if opened with recovery URL or type=recovery
@@ -344,6 +361,71 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
   // Password validation helper
   const isPasswordStrong = (pwd: string) => {
     return pwd.length >= 8 && /[a-zA-Z]/.test(pwd) && /[0-9]/.test(pwd);
+  };
+
+  // OTP: Send Verification Code to Email
+  const handleSendOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (loading || otpSending) return;
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      setErrorMsg("Iltimos, to'g'ri email manzilini kiriting");
+      return;
+    }
+    setOtpSending(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    try {
+      const res = await backendService.signInWithOtp(cleanEmail);
+      if (res.ok) {
+        setOtpSent(true);
+        setOtpCooldown(60);
+        setSuccessMsg(`6 xonali tasdiqlash kodi ${cleanEmail} manziliga yuborildi! Pochtadagi xatni tekshiring.`);
+      } else {
+        setErrorMsg(res.error || "Kod yuborishda xatolik yuz berdi");
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || "Kod yuborishda kutilmagan xatolik");
+    } finally {
+      setOtpSending(false);
+    }
+  };
+
+  // OTP: Verify 6-digit Code & Sign In
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (loading || otpVerifying) return;
+    const cleanEmail = email.trim();
+    const cleanCode = otpCode.trim().replace(/\s+/g, "");
+    if (!cleanEmail) {
+      setErrorMsg("Email manzili kiritilmagan");
+      return;
+    }
+    if (!cleanCode || cleanCode.length < 6) {
+      setErrorMsg("Iltimos, 6 xonali tasdiqlash kodini to'liq kiriting");
+      return;
+    }
+
+    setOtpVerifying(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    try {
+      const res = await backendService.verifyEmailOtp(cleanEmail, cleanCode);
+      if (res.ok && res.user) {
+        setSuccessMsg("Tizimga muvaffaqiyatli kirildi!");
+        setTimeout(() => {
+          onAuthSuccess(res.user!);
+        }, 400);
+      } else {
+        setErrorMsg(res.error || "Tasdiqlash kodi xato yoki muddati tugagan");
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || "Tasdiqlashda xatolik yuz berdi");
+    } finally {
+      setOtpVerifying(false);
+    }
   };
 
   // 1. LOGIN HANDLER
@@ -1188,122 +1270,413 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
 
             {/* ═══ TAB 1: LOGIN FORM ═══ */}
             {activeTab === "login" && (
-              <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-                {/* Email Address (Pure Email, No Username) */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                  <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
-                    Email manzil
-                  </label>
-                  <div style={{ position: "relative", width: "100%", height: "48px" }}>
-                    <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#C084FC", pointerEvents: "none", zIndex: 2 }}>
-                      <MailIcon size={18} />
-                    </div>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="user@example.com"
-                      autoComplete="email"
-                      required
-                      className="misa-auth-input"
-                      style={{ padding: "0 16px 0 46px" }}
-                    />
-                  </div>
-                </div>
-
-                {/* Password with Eye Visibility Toggle */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
-                      Parol
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => handleTabChange("forgot")}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        padding: 0,
-                        color: "#E8B3FF",
-                        fontSize: "12px",
-                        fontWeight: 500,
-                        cursor: "pointer",
-                      }}
-                    >
-                      Parolni unutdingizmi?
-                    </button>
-                  </div>
-                  <div style={{ position: "relative", width: "100%", height: "48px" }}>
-                    <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#C084FC", pointerEvents: "none", zIndex: 2 }}>
-                      <LockIcon size={18} />
-                    </div>
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      autoComplete="current-password"
-                      required
-                      className="misa-auth-input"
-                      style={{ padding: "0 46px 0 46px" }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      style={{
-                        position: "absolute",
-                        right: "12px",
-                        top: "50%",
-                        transform: "translateY(-50%)",
-                        background: "none",
-                        border: "none",
-                        color: showPassword ? "#C04CFD" : "#94A3B8",
-                        cursor: "pointer",
-                        padding: "6px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        zIndex: 2,
-                      }}
-                      title={showPassword ? "Parolni yashirish" : "Parolni ko'rsatish"}
-                    >
-                      {showPassword ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Submit Button */}
-                <button
-                  type="submit"
-                  disabled={loading || oauthLoading}
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                {/* Method selector: Password vs OTP */}
+                <div
                   style={{
-                    marginTop: "8px",
-                    padding: "13px 20px",
-                    background: "linear-gradient(135deg, #9303C5 0%, #C04CFD 60%, #7C3AED 100%)",
-                    border: "none",
-                    borderRadius: "12px",
-                    color: "#FFFFFF",
-                    fontSize: "14.5px",
-                    fontWeight: 700,
-                    cursor: loading || oauthLoading ? "default" : "pointer",
-                    boxShadow: "0 4px 22px rgba(147, 3, 197, 0.45)",
-                    transition: "all 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
-                    opacity: loading || oauthLoading ? 0.7 : 1,
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!loading && !oauthLoading) {
-                      e.currentTarget.style.transform = "translateY(-1.5px)";
-                      e.currentTarget.style.boxShadow = "0 6px 26px rgba(192, 76, 253, 0.58)";
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = "translateY(0)";
-                    e.currentTarget.style.boxShadow = "0 4px 22px rgba(147, 3, 197, 0.45)";
+                    display: "flex",
+                    background: "rgba(8, 12, 24, 0.75)",
+                    border: "1px solid rgba(255, 255, 255, 0.08)",
+                    borderRadius: "11px",
+                    padding: "3px",
+                    gap: "4px",
                   }}
                 >
-                  {loading ? "Kirilmoqda..." : "Tizimga kirish"}
-                </button>
-              </form>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoginMethod("password");
+                      setErrorMsg(null);
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: "8px 12px",
+                      borderRadius: "9px",
+                      border: "none",
+                      background: loginMethod === "password" ? "rgba(192, 76, 253, 0.28)" : "transparent",
+                      color: loginMethod === "password" ? "#FFFFFF" : "#94A3B8",
+                      fontSize: "12.5px",
+                      fontWeight: loginMethod === "password" ? 700 : 500,
+                      cursor: "pointer",
+                      transition: "all 0.18s ease",
+                      boxShadow: loginMethod === "password" ? "0 2px 10px rgba(147, 3, 197, 0.35)" : "none",
+                    }}
+                  >
+                    🔑 Parol orqali
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoginMethod("otp");
+                      setErrorMsg(null);
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: "8px 12px",
+                      borderRadius: "9px",
+                      border: "none",
+                      background: loginMethod === "otp" ? "rgba(192, 76, 253, 0.28)" : "transparent",
+                      color: loginMethod === "otp" ? "#FFFFFF" : "#94A3B8",
+                      fontSize: "12.5px",
+                      fontWeight: loginMethod === "otp" ? 700 : 500,
+                      cursor: "pointer",
+                      transition: "all 0.18s ease",
+                      boxShadow: loginMethod === "otp" ? "0 2px 10px rgba(147, 3, 197, 0.35)" : "none",
+                    }}
+                  >
+                    ✉️ Kod (OTP) orqali
+                  </button>
+                </div>
+
+                {loginMethod === "password" ? (
+                  <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+                    {/* Email Address (Pure Email, No Username) */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
+                        Email manzil
+                      </label>
+                      <div style={{ position: "relative", width: "100%", height: "48px" }}>
+                        <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#C084FC", pointerEvents: "none", zIndex: 2 }}>
+                          <MailIcon size={18} />
+                        </div>
+                        <input
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="user@example.com"
+                          autoComplete="email"
+                          required
+                          className="misa-auth-input"
+                          style={{ padding: "0 16px 0 46px" }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Password with Eye Visibility Toggle */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
+                          Parol
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => handleTabChange("forgot")}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            padding: 0,
+                            color: "#E8B3FF",
+                            fontSize: "12px",
+                            fontWeight: 500,
+                            cursor: "pointer",
+                          }}
+                        >
+                          Parolni unutdingizmi?
+                        </button>
+                      </div>
+                      <div style={{ position: "relative", width: "100%", height: "48px" }}>
+                        <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#C084FC", pointerEvents: "none", zIndex: 2 }}>
+                          <LockIcon size={18} />
+                        </div>
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="••••••••"
+                          autoComplete="current-password"
+                          required
+                          className="misa-auth-input"
+                          style={{ padding: "0 46px 0 46px" }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          style={{
+                            position: "absolute",
+                            right: "12px",
+                            top: "50%",
+                            transform: "translateY(-50%)",
+                            background: "none",
+                            border: "none",
+                            color: showPassword ? "#C04CFD" : "#94A3B8",
+                            cursor: "pointer",
+                            padding: "6px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            zIndex: 2,
+                          }}
+                          title={showPassword ? "Parolni yashirish" : "Parolni ko'rsatish"}
+                        >
+                          {showPassword ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Submit Button */}
+                    <button
+                      type="submit"
+                      disabled={loading || oauthLoading}
+                      style={{
+                        marginTop: "4px",
+                        padding: "13px 20px",
+                        background: "linear-gradient(135deg, #9303C5 0%, #C04CFD 60%, #7C3AED 100%)",
+                        border: "none",
+                        borderRadius: "12px",
+                        color: "#FFFFFF",
+                        fontSize: "14.5px",
+                        fontWeight: 700,
+                        cursor: loading || oauthLoading ? "default" : "pointer",
+                        boxShadow: "0 4px 22px rgba(147, 3, 197, 0.45)",
+                        transition: "all 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
+                        opacity: loading || oauthLoading ? 0.7 : 1,
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!loading && !oauthLoading) {
+                          e.currentTarget.style.transform = "translateY(-1.5px)";
+                          e.currentTarget.style.boxShadow = "0 6px 26px rgba(192, 76, 253, 0.58)";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = "translateY(0)";
+                        e.currentTarget.style.boxShadow = "0 4px 22px rgba(147, 3, 197, 0.45)";
+                      }}
+                    >
+                      {loading ? "Kirilmoqda..." : "Tizimga kirish"}
+                    </button>
+
+                    <div style={{ textAlign: "center", marginTop: "2px" }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLoginMethod("otp");
+                          setErrorMsg(null);
+                        }}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#C084FC",
+                          fontSize: "12px",
+                          fontWeight: 500,
+                          cursor: "pointer",
+                          padding: 0,
+                          textDecoration: "underline",
+                        }}
+                      >
+                        ✉️ Parolsiz, emailga 6 xonali kod (OTP) olib kirish
+                      </button>
+                    </div>
+                  </form>
+                ) : !otpSent ? (
+                  /* OTP Step 1: Enter email & request code */
+                  <form onSubmit={handleSendOtp} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
+                        Email manzilingiz
+                      </label>
+                      <div style={{ position: "relative", width: "100%", height: "48px" }}>
+                        <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#C084FC", pointerEvents: "none", zIndex: 2 }}>
+                          <MailIcon size={18} />
+                        </div>
+                        <input
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="user@example.com"
+                          autoComplete="email"
+                          required
+                          className="misa-auth-input"
+                          style={{ padding: "0 16px 0 46px" }}
+                        />
+                      </div>
+                      <span style={{ fontSize: "12px", color: "#64748B", lineHeight: 1.4 }}>
+                        Emailingizga bir martalik 6 xonali tasdiqlash kodi va tezkor kirish havolasi yuboriladi.
+                      </span>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={otpSending || loading}
+                      style={{
+                        marginTop: "4px",
+                        padding: "13px 20px",
+                        background: "linear-gradient(135deg, #9303C5 0%, #C04CFD 60%, #7C3AED 100%)",
+                        border: "none",
+                        borderRadius: "12px",
+                        color: "#FFFFFF",
+                        fontSize: "14.5px",
+                        fontWeight: 700,
+                        cursor: otpSending || loading ? "default" : "pointer",
+                        boxShadow: "0 4px 22px rgba(147, 3, 197, 0.45)",
+                        transition: "all 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
+                        opacity: otpSending || loading ? 0.7 : 1,
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!otpSending && !loading) {
+                          e.currentTarget.style.transform = "translateY(-1.5px)";
+                          e.currentTarget.style.boxShadow = "0 6px 26px rgba(192, 76, 253, 0.58)";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = "translateY(0)";
+                        e.currentTarget.style.boxShadow = "0 4px 22px rgba(147, 3, 197, 0.45)";
+                      }}
+                    >
+                      {otpSending ? "Yuborilmoqda..." : "✉️ Tasdiqlash kodini yuborish"}
+                    </button>
+                  </form>
+                ) : (
+                  /* OTP Step 2: Enter 6-digit code received in email */
+                  <form onSubmit={handleVerifyOtp} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "10px 14px",
+                        background: "rgba(192, 76, 253, 0.12)",
+                        border: "1px solid rgba(192, 76, 253, 0.35)",
+                        borderRadius: "12px",
+                        fontSize: "12.5px",
+                        color: "#E2E8F0",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", overflow: "hidden" }}>
+                        <MailIcon size={16} color="#C084FC" />
+                        <span style={{ fontWeight: 600, textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                          {email}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOtpSent(false);
+                          setOtpCode("");
+                          setErrorMsg(null);
+                        }}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#C084FC",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          padding: "2px 6px",
+                          borderRadius: "4px",
+                          textDecoration: "underline",
+                        }}
+                      >
+                        O'zgartirish
+                      </button>
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      <label style={{ fontSize: "13px", color: "#E2E8F0", fontWeight: 600, textAlign: "center" }}>
+                        Pochtaga kelgan 6 xonali tasdiqlash kodi
+                      </label>
+                      <div style={{ position: "relative", width: "100%", height: "52px" }}>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={8}
+                          autoFocus
+                          value={otpCode}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/[^0-9]/g, "");
+                            setOtpCode(val);
+                          }}
+                          placeholder="123456"
+                          required
+                          className="misa-auth-input"
+                          style={{
+                            height: "52px",
+                            textAlign: "center",
+                            fontSize: "26px",
+                            fontWeight: 800,
+                            letterSpacing: "10px",
+                            fontFamily: "'SF Mono', Consolas, Monaco, monospace",
+                            color: "#F5D0FE",
+                            padding: "0 16px",
+                          }}
+                        />
+                      </div>
+                      <span style={{ fontSize: "11.5px", color: "#64748B", textAlign: "center" }}>
+                        💡 Xatdagi "Kodni nusxalash" tugmasini bosib, bu yerga joylashtirishingiz mumkin (Ctrl+V)
+                      </span>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={otpVerifying || !otpCode.trim()}
+                      style={{
+                        marginTop: "2px",
+                        padding: "13px 20px",
+                        background: "linear-gradient(135deg, #9303C5 0%, #C04CFD 60%, #7C3AED 100%)",
+                        border: "none",
+                        borderRadius: "12px",
+                        color: "#FFFFFF",
+                        fontSize: "14.5px",
+                        fontWeight: 700,
+                        cursor: otpVerifying || !otpCode.trim() ? "default" : "pointer",
+                        boxShadow: "0 4px 22px rgba(147, 3, 197, 0.45)",
+                        transition: "all 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
+                        opacity: otpVerifying || !otpCode.trim() ? 0.6 : 1,
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!otpVerifying && otpCode.trim()) {
+                          e.currentTarget.style.transform = "translateY(-1.5px)";
+                          e.currentTarget.style.boxShadow = "0 6px 26px rgba(192, 76, 253, 0.58)";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = "translateY(0)";
+                        e.currentTarget.style.boxShadow = "0 4px 22px rgba(147, 3, 197, 0.45)";
+                      }}
+                    >
+                      {otpVerifying ? "Tekshirilmoqda..." : "🚀 Tizimga kirish"}
+                    </button>
+
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "2px" }}>
+                      <button
+                        type="button"
+                        onClick={() => handleSendOtp()}
+                        disabled={otpCooldown > 0 || otpSending}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: otpCooldown > 0 ? "#64748B" : "#C084FC",
+                          fontSize: "12px",
+                          fontWeight: 500,
+                          cursor: otpCooldown > 0 ? "default" : "pointer",
+                          padding: 0,
+                        }}
+                      >
+                        {otpCooldown > 0 ? `Qayta yuborish (${otpCooldown}s)` : "Kodni qayta yuborish"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLoginMethod("password");
+                          setOtpSent(false);
+                          setErrorMsg(null);
+                        }}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#94A3B8",
+                          fontSize: "12px",
+                          cursor: "pointer",
+                          padding: 0,
+                          textDecoration: "underline",
+                        }}
+                      >
+                        Parol orqali kirish
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
             )}
 
             {/* ═══ TAB 2: REGISTER FORM (NO USERNAME) ═══ */}
