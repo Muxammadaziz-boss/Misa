@@ -8,15 +8,15 @@
 import os
 import sys
 import json
+import uuid
 import asyncio
 import logging
 import threading
 from datetime import datetime
 from aiohttp import web
-from typing import Optional, Tuple, Any, Dict, List, Set
+from typing import Optional, Tuple, Any, Dict, List
 import requests
 import re
-import socket
 import time
 import urllib.parse
 
@@ -27,8 +27,8 @@ for _p in (_curr_dir, _parent_dir):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from core.common_paths import get_base_dir, get_data_dir
-from core.intelligence.text_cleaner import extract_clean_response_text
+from core.common_paths import get_base_dir, get_data_dir  # noqa: E402
+from core.intelligence.text_cleaner import extract_clean_response_text  # noqa: E402
 
 BASE_DIR = get_base_dir()
 if BASE_DIR not in sys.path:
@@ -153,7 +153,7 @@ def get_modules():
             from core.agent_scheduler import get_scheduler
             _agent_scheduler = get_scheduler()
             _agent_scheduler.start()
-            
+
             def _scheduler_callback(task):
                 text = task.data.get("text", "Eslatma!")
                 logger.info(f"Rejalashtirilgan vazifa bajarildi: {task.task_id} -> {text}")
@@ -276,7 +276,7 @@ async def handle_status(request):
     m, ai, mem, sched, tools, _ = get_modules()
     user = get_current_user_name()
     ai_ok = ai.ai_mavjudmi() if ai else False
-    
+
     return web.json_response({
         "status": "online",
         "app": "MISA AI",
@@ -397,7 +397,6 @@ async def handle_system_metrics(request):
         return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 
-
 # ========== 2. CHAT & VOICE HANDLERS ==========
 def execute_command_pipeline(text: str, user: str, ovoz: str, mode: str = "ask", user_id: Optional[str] = None, image: Optional[str] = None) -> str:
     """
@@ -513,7 +512,7 @@ def execute_command_pipeline(text: str, user: str, ovoz: str, mode: str = "ask",
             m._intent_bajar(intent, params=None, matn=clean_text, foydalanuvchi_ismi=user)
             if last_gui_messages:
                 return last_gui_messages[-1]
-            
+
             intent_messages = {
                 "open_youtube": "✅ YouTube ochildi.",
                 "open_telegram": "✅ Telegram ochildi.",
@@ -553,13 +552,12 @@ def execute_command_pipeline(text: str, user: str, ovoz: str, mode: str = "ask",
         try:
             reply = ai.ai_savol_yuborish(clean_text, user, user_id=user_id)
 
-            
             # Agar AI bu buyruq deb topsa, kompyuterda haqiqatdan bajarish!
             if isinstance(reply, dict) and reply.get("type") == "command":
                 ai_intent = reply.get("intent")
                 ai_params = reply.get("params", {})
                 ai_resp = reply.get("response", "Buyruq bajarildi.")
-                
+
                 if m and hasattr(m, "_intent_bajar") and ai_intent:
                     try:
                         logger.info(f"AI command bajarilmoqda: {ai_intent} (params: {ai_params})")
@@ -568,7 +566,7 @@ def execute_command_pipeline(text: str, user: str, ovoz: str, mode: str = "ask",
                             return last_gui_messages[-1]
                     except Exception as e:
                         logger.error(f"AI intent bajarishda xatolik: {e}")
-                
+
                 return extract_clean_response_text(ai_resp)
 
             elif isinstance(reply, dict) and reply.get("type") in ("confirmation", "clarification"):
@@ -639,8 +637,10 @@ async def handle_chat(request):
                 try:
                     from core.voice.voice_manager import get_voice_manager
                     vm = get_voice_manager()
+
                     def _chat_done(interrupted: bool):
                         sync_broadcast("voice_state", {"state": "idle"}, loop)
+
                     vm.speak(reply_text, voice_id=ovoz, on_complete=_chat_done)
                 except Exception as ve:
                     logger.warning(f"VoiceManager orqali chat ijrosida xato: {ve}")
@@ -1339,6 +1339,7 @@ async def handle_voice_device_monitor_start(request):
         mgr = MicrophoneManager.get_instance()
 
         loop = asyncio.get_running_loop()
+
         def _broadcast(payload):
             sync_broadcast("mic_monitor_level", payload, loop)
 
@@ -1577,7 +1578,10 @@ def speak_out_loud(text: str, voice_type: Optional[str] = None) -> bool:
 
     def _standalone_speak():
         try:
-            import edge_tts, ctypes, tempfile, uuid
+            import edge_tts
+            import ctypes
+            import tempfile
+            import uuid
             vt = (voice_type or get_current_voice_type() or "ayol").lower()
             voice = "uz-UZ-MadinaNeural"
             pitch_str = "+0Hz"
@@ -1922,12 +1926,12 @@ async def handle_commands_list(request):
         "Dasturlash",
         "Interaktiv"
     ]
-    
+
     commands = []
-    
+
     # 1. Tezkor ilovalar va amallar
     commands.extend(QUICK_APP_SHORTCUTS)
-    
+
     # 2. ToolRegistry dagi real vositalar
     try:
         from core.agent_tools import get_registry
@@ -1937,7 +1941,7 @@ async def handle_commands_list(request):
             cat = meta.get("category", "Tizim")
             title = meta.get("title", name)
             icon = meta.get("icon", "commands")
-            
+
             commands.append({
                 "id": f"tool_{name}",
                 "name": title,
@@ -2010,8 +2014,10 @@ async def handle_commands_execute(request):
     else:
         user = get_current_user_name()
         ovoz = get_current_voice_type()
+
         def _run_cmd():
             return execute_command_pipeline(cmd_text, user, ovoz, mode="command")
+
         result_message = await loop.run_in_executor(None, _run_cmd)
 
     await broadcast_ws("command_executed", {"command": cmd_text, "result": result_message})
@@ -2769,7 +2775,7 @@ async def handle_plugins_execute(request):
     except Exception:
         return web.json_response({"ok": False, "error": "Noto'g'ri JSON formati"}, status=400)
 
-    from core.tools.security_policy import verify_internal_api_request, get_security_policy
+    from core.tools.security_policy import verify_internal_api_request
     from core.tools.runner import get_tool_runner
     from core.tools.contract import ToolContract2
     from core.intelligence.types import RiskLevel
@@ -2994,6 +3000,7 @@ CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
 USER_NAME_FILE = os.path.join(DATA_DIR, "foydalanuvchi_ismi.txt")
 VOICE_TYPE_FILE = os.path.join(DATA_DIR, "ovoz_turi.txt")
 
+
 def _read_config():
     if os.path.exists(CONFIG_FILE):
         try:
@@ -3003,12 +3010,14 @@ def _read_config():
             pass
     return {}
 
+
 def _write_config(cfg):
     try:
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(cfg, f, ensure_ascii=False, indent=2)
     except Exception as e:
         logger.error(f"Config saqlash xatosi: {e}")
+
 
 async def handle_account_get(request):
     """GET /api/account - Foydalanuvchi profili va tizim sozlamalari"""
@@ -3177,7 +3186,7 @@ async def handle_account_get(request):
         "bio": bio,
         "language": language,
         "voice_type": voice_type or user_cfg.get("voice_type", "ayol"),
-        "fish_audio_api_key": "", # Xavfsizlik: Tizim yoki xom kalit brauzerga aslo uzatilmaydi
+        "fish_audio_api_key": "",  # Xavfsizlik: Tizim yoki xom kalit brauzerga aslo uzatilmaydi
         "fish_audio_configured": has_fish_active,
         "fish_audio_has_custom": has_fish_custom,
         "fish_audio_is_default": is_fish_default,
@@ -3471,7 +3480,6 @@ async def handle_account_update(request):
                         ai_mgr.set_user_key(user_id, prov, "")
                 except Exception:
                     pass
-
 
     # 5. Bildirishnomalar
     if "notifications" in body and isinstance(body["notifications"], dict):
@@ -4396,7 +4404,6 @@ def resolve_auth_identity(
             except Exception as _ex:
                 logger.debug(f"AI key sync error in resolve_auth_identity: {_ex}")
 
-
     # Token yo'q holat
     # XAVFSIZLIK: Production rejimda Supabase sozlanmagan bo'lsa ham autentifikatsiya majburiy
     is_production = bool(
@@ -5308,8 +5315,7 @@ async def handle_health(request):
 
 
 # ========== 8.2.1. OAUTH REDIRECT & SESSION RECEIVER ==========
-import re as _re
-import threading
+_re = re
 _pending_oauth_sessions: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 _completed_oauth_states: Dict[str, float] = {}
 _pending_oauth_lock = threading.Lock()
@@ -5351,7 +5357,6 @@ def _oauth_security_headers() -> Dict[str, str]:
     }
 
 
-
 def _clean_expired_oauth_sessions():
     """Muddati o'tgan OAuth sessiyalarini va yakunlangan state keshini xotiradan tozalash"""
     now = time.time()
@@ -5372,16 +5377,16 @@ def focus_misa_desktop_window() -> bool:
         import ctypes
         from ctypes import wintypes
         user32 = ctypes.windll.user32
-        
+
         target_hwnds: List[int] = []
         titles = ["MISA AI v9.2", "Misa AI", "MISA AI", "MISA AI v9.0.2", "Misa AI v9.0"]
-        
+
         # 1. To'g'ridan-to'g'ri nomlar bo'yicha FindWindowW
         for t in titles:
             hwnd = user32.FindWindowW(None, t)
             if hwnd and user32.IsWindow(hwnd):
                 target_hwnds.append(hwnd)
-                
+
         # 2. Ishchi stoldagi barcha oynalarni skanerlash (OpenInputDesktop / EnumDesktopWindows)
         def inspect_hwnd(hwnd: int) -> None:
             if not user32.IsWindow(hwnd):
@@ -5392,10 +5397,10 @@ def focus_misa_desktop_window() -> bool:
                 buf = ctypes.create_unicode_buffer(len_title + 1)
                 user32.GetWindowTextW(hwnd, buf, len_title + 1)
                 title = buf.value
-                
+
             pid = wintypes.DWORD()
             user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-            
+
             is_misa = False
             title_lower = title.lower()
             if "misa ai" in title_lower or "misa" in title_lower:
@@ -5409,7 +5414,7 @@ def focus_misa_desktop_window() -> bool:
                         is_misa = True
                 except Exception:
                     pass
-                    
+
             if is_misa:
                 rect = wintypes.RECT()
                 user32.GetWindowRect(hwnd, ctypes.byref(rect))
@@ -5436,7 +5441,7 @@ def focus_misa_desktop_window() -> bool:
         for hwnd in target_hwnds:
             user32.ShowWindow(hwnd, SW_RESTORE)
             user32.ShowWindow(hwnd, SW_SHOW)
-            
+
             fore_hwnd = user32.GetForegroundWindow()
             fore_thread = user32.GetWindowThreadProcessId(fore_hwnd, None)
             app_thread = user32.GetWindowThreadProcessId(hwnd, None)
@@ -5449,7 +5454,6 @@ def focus_misa_desktop_window() -> bool:
                 user32.SetForegroundWindow(hwnd)
                 user32.BringWindowToTop(hwnd)
             activated = True
-            
         logger.info(f"[WINDOW] focus_misa_desktop_window: {len(target_hwnds)} ta oyna topildi, natija={activated}")
         return activated
     except Exception as e:
@@ -5705,7 +5709,7 @@ async def handle_oauth_callback(request):
     (function() {
       const searchParams = new URLSearchParams(window.location.search);
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
-      
+
       const accessToken = hashParams.get('access_token') || searchParams.get('access_token');
       const refreshToken = hashParams.get('refresh_token') || searchParams.get('refresh_token');
       const expiresIn = hashParams.get('expires_in') || searchParams.get('expires_in');
@@ -6230,10 +6234,10 @@ async def handle_account_identities_get(request):
         providers = [primary_provider] if primary_provider else ["email"]
 
     if "google" not in providers and (
-        primary_provider == "google" or
-        str(user_metadata.get("iss", "")).startswith("https://accounts.google.com") or
-        user_metadata.get("avatar_url") or
-        user_metadata.get("picture")
+        primary_provider == "google"
+        or str(user_metadata.get("iss", "")).startswith("https://accounts.google.com")
+        or user_metadata.get("avatar_url")
+        or user_metadata.get("picture")
     ):
         providers.append("google")
 
@@ -6715,27 +6719,27 @@ async def handle_command_submit(request):
             {"ok": False, "error": "FORBIDDEN", "message": "Qurilma topilmadi yoki hisobingizga tegishli emas"},
             status=403
         )
-    
+
     try:
         body = await request.json()
     except Exception:
         return web.json_response({"ok": False, "error": "BAD_REQUEST", "message": "Invalid JSON"}, status=400)
-    
+
     tool_id = body.get("tool_id")
     params = body.get("params", {})
     origin = body.get("origin", "system")
-    
+
     if not tool_id:
         return web.json_response({"ok": False, "error": "BAD_REQUEST", "message": "tool_id required"}, status=400)
-        
+
     from core.v8.command_queue import CommandQueueManager
     from core.v8.remote_tools import RemoteToolRegistry
-    
+
     registry = RemoteToolRegistry.get_default_instance()
     tool_def = registry.get_tool(tool_id)
     if not tool_def:
         return web.json_response({"ok": False, "error": "TOOL_NOT_FOUND"}, status=404)
-        
+
     cmd_mgr = CommandQueueManager.get_default_instance()
     try:
         cmd, token_obj = cmd_mgr.submit_command(
@@ -6756,141 +6760,144 @@ async def handle_command_submit(request):
     except Exception as e:
         return web.json_response({"ok": False, "error": "INTERNAL_ERROR", "message": str(e)}, status=500)
 
+
 async def handle_command_confirm(request):
     """POST /api/devices/{device_id}/commands/{command_id}/confirm"""
-    dev_id = request.match_info.get("device_id", "").strip()
     cmd_id = request.match_info.get("command_id", "").strip()
-    
+
     user_id, user, session, err = resolve_auth_identity(request, required=True)
     if err:
         return err
-        
+
     try:
         body = await request.json()
     except Exception:
         body = {}
-        
+
     token = body.get("token")
     if not token:
         return web.json_response({"ok": False, "error": "BAD_REQUEST", "message": "token required"}, status=400)
-        
+
     from core.v8.command_queue import CommandQueueManager
     cmd_mgr = CommandQueueManager.get_default_instance()
-    
+
     success, msg = cmd_mgr.confirm_command(cmd_id, token, user_id)
     if success:
         return web.json_response({"ok": True, "message": msg})
     return web.json_response({"ok": False, "error": "FORBIDDEN", "message": msg}, status=403)
 
+
 async def handle_command_cancel(request):
     """POST /api/devices/{device_id}/commands/{command_id}/cancel"""
-    dev_id = request.match_info.get("device_id", "").strip()
     cmd_id = request.match_info.get("command_id", "").strip()
-    
+
     user_id, user, session, err = resolve_auth_identity(request, required=True)
     if err:
         return err
-        
+
     from core.v8.command_queue import CommandQueueManager
     cmd_mgr = CommandQueueManager.get_default_instance()
-    
+
     success, msg = cmd_mgr.cancel_command(cmd_id, user_id)
     if success:
         return web.json_response({"ok": True, "message": msg})
     return web.json_response({"ok": False, "error": "BAD_REQUEST", "message": msg}, status=400)
 
+
 async def handle_command_pending(request):
     """GET /api/devices/{device_id}/commands/pending - Agent polls here"""
     dev_id = request.match_info.get("device_id", "").strip()
-    
+
     auth_header = request.headers.get("Authorization", "").strip()
     token = ""
     if auth_header.startswith("Bearer "):
         token = auth_header[7:].strip()
     if not token:
         token = request.headers.get("X-Misa-Device-Token", "").strip()
-        
+
     from core.v8.device_auth import DeviceAuthManager
     from core.v8.device_enrollment import DeviceEnrollmentManager
-    
+
     auth_mgr = DeviceAuthManager.get_default_instance()
     enroll_mgr = DeviceEnrollmentManager.get_default_instance()
-    
+
     cred = enroll_mgr.get_credential(dev_id)
     if not cred or cred.is_revoked:
         return web.json_response({"ok": False, "error": "DEVICE_REVOKED"}, status=403)
-        
+
     sess = None
     if token:
         for s in auth_mgr._sessions.values():
             if s.token == token and s.device_id == dev_id and s.is_valid:
                 sess = s
                 break
-                
+
     if not sess:
         return web.json_response({"ok": False, "error": "UNAUTHORIZED"}, status=401)
-        
+
     from core.v8.command_queue import CommandQueueManager
     cmd_mgr = CommandQueueManager.get_default_instance()
-    
+
     commands = cmd_mgr.get_pending_commands(dev_id)
     return web.json_response({
         "ok": True,
         "commands": commands
     })
 
+
 async def handle_command_result(request):
     """POST /api/devices/{device_id}/commands/{command_id}/result - Agent submits result"""
     dev_id = request.match_info.get("device_id", "").strip()
     cmd_id = request.match_info.get("command_id", "").strip()
-    
+
     auth_header = request.headers.get("Authorization", "").strip()
     token = ""
     if auth_header.startswith("Bearer "):
         token = auth_header[7:].strip()
     if not token:
         token = request.headers.get("X-Misa-Device-Token", "").strip()
-        
+
     from core.v8.device_auth import DeviceAuthManager
     from core.v8.device_enrollment import DeviceEnrollmentManager
-    
+
     auth_mgr = DeviceAuthManager.get_default_instance()
     enroll_mgr = DeviceEnrollmentManager.get_default_instance()
-    
+
     cred = enroll_mgr.get_credential(dev_id)
     if not cred or cred.is_revoked:
         return web.json_response({"ok": False, "error": "DEVICE_REVOKED"}, status=403)
-        
+
     sess = None
     if token:
         for s in auth_mgr._sessions.values():
             if s.token == token and s.device_id == dev_id and s.is_valid:
                 sess = s
                 break
-                
+
     if not sess:
         return web.json_response({"ok": False, "error": "UNAUTHORIZED"}, status=401)
-        
+
     try:
         body = await request.json()
     except Exception:
         return web.json_response({"ok": False, "error": "BAD_REQUEST"}, status=400)
-        
+
     from core.v8.command_queue import CommandQueueManager
     cmd_mgr = CommandQueueManager.get_default_instance()
     cmd_obj = cmd_mgr.get_command(cmd_id)
     if cmd_obj and cmd_obj.device_id and cmd_obj.device_id != dev_id:
         return web.json_response({"ok": False, "error": "FORBIDDEN", "message": "Buyruq boshqa qurilmaga tegishli"}, status=403)
-    
+
     success = cmd_mgr.record_result(cmd_id, body)
     if success:
         return web.json_response({"ok": True})
     return web.json_response({"ok": False, "error": "NOT_FOUND"}, status=404)
 
+
 async def handle_command_history(request):
     """GET /api/devices/{device_id}/commands/history"""
     dev_id = request.match_info.get("device_id", "").strip()
-    
+
     user_id, user, session, err = resolve_auth_identity(request, required=True)
     if err:
         return err
@@ -6909,10 +6916,10 @@ async def handle_command_history(request):
             {"ok": False, "error": "FORBIDDEN", "message": "Qurilma topilmadi yoki hisobingizga tegishli emas"},
             status=403
         )
-        
+
     from core.v8.command_queue import CommandQueueManager
     cmd_mgr = CommandQueueManager.get_default_instance()
-    
+
     history = cmd_mgr.get_device_history(dev_id)
     return web.json_response({
         "ok": True,
@@ -7290,6 +7297,7 @@ _AUTH_EXEMPT_PREFIXES = (
     "/api/voice/",
 )
 
+
 def _is_production_mode() -> bool:
     """Production rejimda ishga tushganligini aniqlash."""
     if os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("RAILWAY_PROJECT_ID"):
@@ -7457,7 +7465,7 @@ def create_app():
     app.router.add_get("/api/health", handle_health)
     app.router.add_get("/api/system/metrics", handle_system_metrics)
     app.router.add_get("/api/ws", handle_ws)
-    
+
     # AI Chat va Ovoz
     app.router.add_post("/api/chat", handle_chat)
     app.router.add_post("/api/chat/clear", handle_chat_clear)
@@ -7500,7 +7508,6 @@ def create_app():
     app.router.add_get("/api/voice/runtime/status", handle_voice_runtime_status)
     app.router.add_post("/api/voice/runtime/install", handle_voice_runtime_install)
     app.router.add_post("/api/voice/runtime/cancel", handle_voice_runtime_cancel)
-
 
     # Buyruqlar (Commands)
     app.router.add_get("/api/commands", handle_commands_list)
@@ -7775,6 +7782,7 @@ def run_server(host=None, port=None):
             pf.write(str(os.getpid()))
 
         import atexit
+
         def _cleanup_pid():
             try:
                 if os.path.exists(pid_file):
@@ -7879,7 +7887,6 @@ def run_server(host=None, port=None):
                         pass
 
             sync_task = asyncio.create_task(_desktop_cloud_sync_loop())
-
 
         stop_event = asyncio.Event()
 
