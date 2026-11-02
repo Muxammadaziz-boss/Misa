@@ -246,11 +246,24 @@ export class NetworkDiagnosticService {
    * Hozirgi saqlangan server rejimini aniqlash
    */
   public static getCurrentServerMode(): "cloud" | "local" | "custom" {
-    if (typeof window === "undefined" || !window.localStorage) return "cloud";
+    if (typeof window === "undefined" || !window.localStorage) {
+      return this.isTauri() ? "local" : "cloud";
+    }
     const custom = window.localStorage.getItem("misa_backend_url");
     if (custom) return "custom";
     const mode = window.localStorage.getItem("misa_server_mode");
     if (mode === "local") return "local";
-    return "cloud";
+    if (mode === "cloud" || mode === "remote") return "cloud";
+
+    // Agar foydalanuvchi alohida rejim tanlamagan bo'lsa, amaldagi API manziliga qaraymiz:
+    const currentApi = resolveApiBase();
+    if (currentApi.includes("127.0.0.1") || currentApi.includes("localhost")) {
+      return "local";
+    }
+    if (currentApi.includes("railway.app") || currentApi.includes("misa")) {
+      return "cloud";
+    }
+
+    return this.isTauri() ? "local" : "cloud";
   }
 }

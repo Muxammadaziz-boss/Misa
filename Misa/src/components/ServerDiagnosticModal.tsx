@@ -77,6 +77,7 @@ export const ServerDiagnosticModal: React.FC<ServerDiagnosticModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      setServerMode(NetworkDiagnosticService.getCurrentServerMode());
       setCurrentUrl(resolveApiBase());
       executeCheck();
     }
@@ -361,8 +362,23 @@ export const ServerDiagnosticModal: React.FC<ServerDiagnosticModalProps> = ({
           }}
         >
           <div>
-            <div style={{ fontSize: "11px", color: "#9CA3AF" }}>Hozirgi server domeni:</div>
-            <div style={{ fontSize: "14px", fontWeight: 700, color: "#C04CFD" }}>
+            <div style={{ fontSize: "11px", color: "#9CA3AF", display: "flex", alignItems: "center", gap: "6px" }}>
+              <span>Hozirgi server domeni:</span>
+              <span
+                style={{
+                  fontSize: "10px",
+                  padding: "1px 6px",
+                  borderRadius: "4px",
+                  background: serverMode === "local" ? "rgba(52, 211, 153, 0.15)" : "rgba(192, 76, 253, 0.15)",
+                  color: serverMode === "local" ? "#34D399" : "#C04CFD",
+                  border: serverMode === "local" ? "1px solid rgba(52, 211, 153, 0.3)" : "1px solid rgba(192, 76, 253, 0.3)",
+                  fontWeight: 600,
+                }}
+              >
+                {serverMode === "local" ? "Mahalliy Fon Xizmati (Kompyuteringizda)" : serverMode === "cloud" ? "Masofaviy Bulut" : "Maxsus Server"}
+              </span>
+            </div>
+            <div style={{ fontSize: "14px", fontWeight: 700, color: "#C04CFD", marginTop: "2px" }}>
               {currentUrl}
             </div>
           </div>
