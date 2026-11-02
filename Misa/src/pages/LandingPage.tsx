@@ -246,16 +246,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       }
       sessionStorage.setItem("misa_v9_startup_briefing_done", "true");
 
-      // Backend ishga tushishi uchun qayta tekshiruv (retry loop, jami ~7 soniya)
+      // Backend ishga tushishi uchun qayta tekshiruv (retry loop, jami ~18 soniya)
       let currentStat: BackendStatus = { status: "connecting" };
-      for (let attempt = 0; attempt < 10; attempt++) {
+      for (let attempt = 0; attempt < 24; attempt++) {
         try {
           currentStat = await backendService.checkStatus();
           if (currentStat.status === "online") break;
         } catch {
           currentStat = { status: "offline" };
         }
-        await new Promise((r) => setTimeout(r, 700));
+        await new Promise((r) => setTimeout(r, 750));
       }
 
       let account: any = null;
@@ -277,7 +277,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         } catch {
           targetHost = currentTarget;
         }
-        const textToSpeak = `Server bilan aloqa o'rnatib bo'lmadi (${targetHost}). Tarmoq yoki server holatini tekshirishingizni so'rayman.`;
+        const isTauri = typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
+        const textToSpeak = isTauri
+          ? `Server bilan aloqa o'rnatib bo'lmadi (${targetHost}). Agar ilovani boshqa kompyuterga o'tkazgan bo'lsangiz, "backend" papkasi Misa.exe yonida mavjudligiga yoki "run_portable.bat" orqali ishga tushirilganligiga ishonch hosil qiling.`
+          : `Server bilan aloqa o'rnatib bo'lmadi (${targetHost}). Tarmoq yoki server holatini tekshirishingizni so'rayman.`;
         setStartupBriefing(textToSpeak);
         setBriefingSeverity("error");
       }

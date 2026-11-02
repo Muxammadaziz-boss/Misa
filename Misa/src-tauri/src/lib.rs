@@ -589,6 +589,7 @@ pub fn ensure_backend_running(state: &SupervisorState) {
             *managed_lock = true;
         }
     } else {
+        backend_lifecycle_log("BINARY_NOT_FOUND", "Hech qanday backend ijrochi fayli topilmadi (backend/misa_backend.exe). Ilova papkasida 'backend' mavjudligini tekshiring.");
         println!("[ERROR] Hech qanday backend ijrochi fayli topilmadi!");
         if let Ok(mut spawning) = state.is_spawning.lock() {
             *spawning = false;
@@ -598,7 +599,7 @@ pub fn ensure_backend_running(state: &SupervisorState) {
 
     // 8. Eksponentsial kutish bilan /api/health tekshiruvi (Health check with backoff)
     println!("[BACKEND] /api/health tayyor bo'lishi kutilmoqda...");
-    let backoff_delays = [100, 250, 500, 1000, 1500, 2000, 2000, 2000, 2000, 2000];
+    let backoff_delays = [100, 250, 500, 1000, 1500, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000];
     let mut is_ready = false;
 
     for delay in backoff_delays {

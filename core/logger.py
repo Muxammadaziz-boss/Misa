@@ -27,7 +27,19 @@ if sys.platform.startswith("win"):
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOGS_DIR = os.path.join(BASE_DIR, "logs")
-os.makedirs(LOGS_DIR, exist_ok=True)
+try:
+    os.makedirs(LOGS_DIR, exist_ok=True)
+    _test_log = os.path.join(LOGS_DIR, ".write_test")
+    with open(_test_log, "w", encoding="utf-8") as _f:
+        _f.write("ok")
+    os.remove(_test_log)
+except Exception:
+    _appdata = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or os.environ.get("TEMP", "")
+    LOGS_DIR = os.path.join(_appdata, "MisaAI", "logs") if _appdata else os.path.join(BASE_DIR, "logs")
+    try:
+        os.makedirs(LOGS_DIR, exist_ok=True)
+    except Exception:
+        pass
 
 MISA_LOG_PATH = os.path.join(LOGS_DIR, "misa.log")
 BACKEND_LOG_PATH = os.path.join(LOGS_DIR, "backend.log")
