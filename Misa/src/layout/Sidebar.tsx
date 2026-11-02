@@ -86,7 +86,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside
-      className="mikasa-sidebar"
+      className="misa-sidebar"
       style={{
         width: collapsed ? "var(--sidebar-width-collapsed)" : "var(--sidebar-width-expanded)",
         height: "100%",

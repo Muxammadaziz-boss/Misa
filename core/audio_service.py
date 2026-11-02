@@ -45,7 +45,9 @@ class AudioService:
         self.sample_rate = sample_rate
         self.channels = channels
         self._is_recording = False
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
+        self._stop_event = threading.Event()
+        self._tts_playing = False
         self._recognizer = sr.Recognizer() if SR_AVAILABLE else None
 
         # VAD sozlamalari
@@ -57,6 +59,20 @@ class AudioService:
     def is_available(self) -> bool:
         """Audio tizimi to'liq ishlashga tayyormi?"""
         return AUDIO_HW_AVAILABLE and SR_AVAILABLE
+
+    def set_tts_playing(self, is_playing: bool):
+        """
+        Misa karnaydan gapirayotganda akustik aks-sado (AEC) va
+        o'z ovozidan o'zi to'xtab qolishini oldini olish (MISA-ROOT-014).
+        """
+        with self._lock:
+            self._tts_playing = bool(is_playing)
+
+    def stop_recording(self):
+        """Audio yozish jarayonini xavfsiz to'xtatish"""
+        with self._lock:
+            self._is_recording = False
+            self._stop_event.set()
 
     def calculate_rms(self, chunk: "np.ndarray") -> float:
         """Audio bo'lagining RMS (Root Mean Square) quvvatini hisoblash"""
@@ -74,8 +90,7 @@ class AudioService:
     ) -> Optional["np.ndarray"]:
         """
         Dinamik Voice Activity Detection (VAD) bilan ovoz yozib olish.
-        Foydalanuvchi gapira boshlashi bilan yozish boshlanadi va
-        gapirib bo'lishi bilan (1.2 soniya jimlikdan so'ng) darhol to'xtaydi.
+        Deadlock xavfsizligi va AEC Ducking bilan ta'minlangan.
         """
         if not AUDIO_HW_AVAILABLE:
             logger.error("Audio apparat vositalari o'rnatilmagan.")
@@ -86,6 +101,7 @@ class AudioService:
                 logger.warning("Allaqachon yozib olinmoqda")
                 return None
             self._is_recording = True
+            self._stop_event.clear()
 
         frames = []
         chunk_size = int(self.sample_rate * 0.1)  # 100ms chunks
@@ -98,13 +114,16 @@ class AudioService:
 
         try:
             with sd.InputStream(samplerate=self.sample_rate, channels=self.channels, dtype="float32") as stream:
-                while self._is_recording:
+                while self._is_recording and not self._stop_event.is_set():
                     chunk, overflowed = stream.read(chunk_size)
                     frames.append(chunk)
 
                     current_time = time.time()
                     elapsed_total = current_time - start_time
                     rms = self.calculate_rms(chunk)
+
+                    # Dynamic AEC threshold: Karnay ishlayotgan bo'lsa sezuvchanlik chegarasini oshirish
+                    active_threshold = self.vad_threshold * 4.0 if self._tts_playing else self.vad_threshold
 
                     # GUI dagi to'lqin vizualizatsiyasini yangilash
                     if on_volume_change:
@@ -116,7 +135,7 @@ class AudioService:
                             pass
 
                     # 1. Nutq boshlanganini aniqlash
-                    if rms > self.vad_threshold:
+                    if rms > active_threshold:
                         if not has_spoken:
                             has_spoken = True
                             speech_start_time = current_time
@@ -151,7 +170,9 @@ class AudioService:
             logger.error(f"VAD yozishda xatolik: {e}")
             return None
         finally:
-            self._is_recording = False
+            with self._lock:
+                self._is_recording = False
+                self._stop_event.clear()
             if on_volume_change:
                 try:
                     on_volume_change(0.0)

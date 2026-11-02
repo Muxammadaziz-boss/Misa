@@ -42,9 +42,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("MisaAPIServer")
 try:
-    from core.logger import get_backend_handler, install_crash_handlers
+    from core.logger import get_backend_handler, install_crash_handlers, install_global_filter
     logger.addHandler(get_backend_handler())
     install_crash_handlers()
+    install_global_filter()
 except Exception:
     pass
 
@@ -700,6 +701,21 @@ async def handle_ai_test_key(request):
                 api_key = get_gemini_api_key()
             except Exception:
                 api_key = os.getenv("GEMINI_API_KEY", "").strip() or os.getenv("GOOGLE_API_KEY", "").strip()
+        elif provider in ("fish_audio", "fish", "fishaudio"):
+            try:
+                cfg_path = os.path.join(DATA_DIR, "config.json")
+                if os.path.exists(cfg_path):
+                    with open(cfg_path, "r", encoding="utf-8") as f:
+                        cfg = json.load(f)
+                    api_key = str(cfg.get("custom_keys", {}).get("fish_audio") or "").strip()
+            except Exception:
+                pass
+            if not api_key:
+                try:
+                    from core.voice_engine import get_fish_audio_api_key
+                    api_key = get_fish_audio_api_key()
+                except Exception:
+                    api_key = os.getenv("FISH_AUDIO_API_KEY", "").strip()
         else:
             api_key = os.getenv(env_key, "").strip()
             if not api_key:
@@ -708,7 +724,7 @@ async def handle_ai_test_key(request):
                     if os.path.exists(cfg_path):
                         with open(cfg_path, "r", encoding="utf-8") as f:
                             cfg = json.load(f)
-                        api_key = str(cfg.get(cfg_key) or cfg.get("ai", {}).get(cfg_key) or "").strip()
+                        api_key = str(cfg.get("custom_keys", {}).get(provider) or cfg.get(cfg_key) or cfg.get("ai", {}).get(cfg_key) or "").strip()
                 except Exception:
                     pass
 
@@ -719,6 +735,7 @@ async def handle_ai_test_key(request):
             "cerebras": "Cerebras AI",
             "openrouter": "OpenRouter",
             "nvidia": "NVIDIA NIM",
+            "fish_audio": "Fish Audio",
         }
         p_name = provider_names.get(provider, provider.capitalize())
         return web.json_response({
@@ -868,6 +885,21 @@ async def handle_ai_test_key(request):
         except Exception as ex:
             return False, "NETWORK_ERROR", f"OpenRouter tarmog'ida xatolik: {str(ex)[:120]}", []
 
+    def _verify_fish_audio():
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+        }
+        try:
+            resp = requests.get("https://api.fish.audio/model?page_size=1", headers=headers, timeout=10)
+            if resp.status_code == 200:
+                return True, "OK", "Fish Audio API kaliti faol va tasdiqlandi!", ["s2.1-pro-free", "drama-3-preview"]
+            elif resp.status_code in (401, 403):
+                return False, "API_KEY_INVALID", "Fish Audio API kaliti yaroqsiz (401/403).", []
+            else:
+                return False, f"HTTP_{resp.status_code}", f"Fish Audio tekshiruvida xatolik: {resp.text[:120]}", []
+        except Exception as ex:
+            return False, "NETWORK_ERROR", f"Fish Audio tarmog'iga ulanishda xato: {str(ex)[:120]}", []
+
     def _verify_all():
         if provider == "gemini":
             return _verify_gemini()
@@ -879,6 +911,8 @@ async def handle_ai_test_key(request):
             return _verify_openrouter()
         elif provider == "nvidia":
             return _verify_openai_comp("https://integrate.api.nvidia.com/v1/models", "meta/llama-3.3-70b-instruct", "NVIDIA NIM")
+        elif provider in ("fish_audio", "fish", "fishaudio"):
+            return _verify_fish_audio()
         else:
             return False, "UNKNOWN_PROVIDER", f"Noma'lum provayder: {provider}", []
 
@@ -962,7 +996,7 @@ async def handle_ai_config_get(request):
 
     from core.v8.ai_key_manager import get_ai_key_manager
     mgr = get_ai_key_manager()
-    summary = mgr.get_status_summary()
+    summary = mgr.get_status_summary(user_id=user_id)
 
     multi_prov = {}
     try:
@@ -971,20 +1005,23 @@ async def handle_ai_config_get(request):
     except Exception as e:
         logger.debug(f"Multi-provider summary olishda xatolik: {e}")
 
+    # Foydalanuvchining shaxsiy kaliti bor-yo'qligini aniqlash
+    has_user_custom = bool(user_id and mgr._user_keys.get(user_id, {}).get("gemini"))
+
     response_data = {
         "ok": True,
         "config": summary,
         "user_id": user_id,
-        "has_user_key": bool(mgr.get_active_gemini_key(user_id=user_id) if user_id else False),
+        "has_user_key": has_user_custom,
         "multi_provider": multi_prov,
     }
 
-    # Autentifikatsiyalangan foydalanuvchilar yoki desktop uchun faol kalitni (baza/serverdan) ulashish
-    if user_id or not _is_production_mode():
-        active_k = mgr.get_active_gemini_key(user_id=user_id)
-        if active_k:
+    # Maxfiylik kafolati: Faqat foydalanuvchining o'z shaxsiy kaliti bo'lsa ulashiladi (tizim default tokeni aslo berilmaydi!)
+    if has_user_custom:
+        custom_k = mgr._user_keys.get(user_id, {}).get("gemini")
+        if custom_k:
             response_data["active_keys"] = {
-                "gemini": active_k
+                "gemini": custom_k
             }
 
     return web.json_response(response_data)
@@ -1409,7 +1446,12 @@ async def handle_voice_preview(request):
 
         import base64
         b64_str = base64.b64encode(audio_bytes).decode("ascii")
-        audio_data_uri = f"data:audio/mp3;base64,{b64_str}"
+        mime = "audio/mpeg"
+        if audio_path.lower().endswith(".wav"):
+            mime = "audio/wav"
+        elif audio_path.lower().endswith(".ogg"):
+            mime = "audio/ogg"
+        audio_data_uri = f"data:{mime};base64,{b64_str}"
 
         return web.json_response({
             "ok": True,
@@ -3049,73 +3091,70 @@ async def handle_account_get(request):
             return s[:6] + "..." + s[-4:]
         return "●●●●●●"
 
+    custom_keys = cfg.get("custom_keys", {})
+    if not isinstance(custom_keys, dict):
+        custom_keys = {}
+
     try:
         from core.v8.ai_key_manager import get_ai_key_manager
         ai_mgr = get_ai_key_manager()
-        status_sum = ai_mgr.get_status_summary() if ai_mgr else {}
-        active_keys = status_sum.get("active_keys", {}) if isinstance(status_sum, dict) else {}
-        for prov in ("gemini", "groq", "cerebras", "openrouter", "nvidia"):
-            k = active_keys.get(prov) or ""
-            if not k and ai_mgr:
-                k = ai_mgr.get_active_key(prov, user_id=user_id)
-            if not k:
-                k = (
-                    os.environ.get(f"MISA_{prov.upper()}_API_KEY", "").strip()
-                    or os.environ.get(f"{prov.upper()}_API_KEY", "").strip()
-                    or ai_cfg.get(f"{prov}_api_key", "")
-                )
-            has_k = bool(k)
-            m_key = _mask_api_key(k) if has_k else ""
-            ai_keys[prov] = {
-                "configured": has_k,
-                "has_key": has_k,
-                "masked": m_key,
-                "masked_key": m_key,
-            }
-        active_key = ai_mgr.get_active_gemini_key(user_id=user_id) if ai_mgr else None
-        if active_key:
-            has_gemini = True
-            masked_key = _mask_api_key(active_key)
     except Exception as _ai_err:
+        ai_mgr = None
         logger.debug(f"[ACCOUNT] AI key manager xatosi: {_ai_err}")
 
-    # Fallback to env or config if Gemini key was not active in ai_mgr
-    if not has_gemini:
-        fallback_k = os.environ.get("MISA_GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY") or ai_cfg.get("gemini_api_key") or ""
-        if fallback_k:
-            has_gemini = True
-            masked_key = _mask_api_key(fallback_k)
-            if "gemini" in ai_keys:
-                ai_keys["gemini"]["configured"] = True
-                ai_keys["gemini"]["has_key"] = True
-                ai_keys["gemini"]["masked"] = masked_key
-                ai_keys["gemini"]["masked_key"] = masked_key
-
-    # Barcha qo'llab-quvvatlanuvchi provayderlar xavfsiz qiymatga ega bo'lishini ta'minlash
     for prov in ("gemini", "groq", "cerebras", "openrouter", "nvidia"):
-        if prov not in ai_keys:
-            k = os.environ.get(f"MISA_{prov.upper()}_API_KEY") or os.environ.get(f"{prov.upper()}_API_KEY") or ai_cfg.get(f"{prov}_api_key") or ai_cfg.get(f"{prov}_key") or ""
-            has_k = bool(k)
-            m_key = _mask_api_key(k) if has_k else ""
-            ai_keys[prov] = {
-                "configured": has_k,
-                "has_key": has_k,
-                "masked": m_key,
-                "masked_key": m_key,
-            }
+        user_custom_k = str(custom_keys.get(prov) or "").strip()
+        if not user_custom_k and ai_mgr and user_id:
+            user_custom_k = str(ai_mgr._user_keys.get(user_id, {}).get(prov) or "").strip()
 
-    if not masked_key and has_gemini:
-        masked_key = ai_keys.get("gemini", {}).get("masked", "") or ai_keys.get("gemini", {}).get("masked_key", "")
-    if not masked_key:
-        masked_key = ""
+        active_k = ""
+        if user_custom_k:
+            active_k = user_custom_k
+        elif ai_mgr:
+            active_k = ai_mgr.get_active_key(prov, user_id=user_id)
+        if not active_k:
+            active_k = (
+                os.environ.get(f"MISA_{prov.upper()}_API_KEY", "").strip()
+                or os.environ.get(f"{prov.upper()}_API_KEY", "").strip()
+                or str(ai_cfg.get(f"{prov}_api_key") or "").strip()
+            )
 
-    fish_audio_key = os.environ.get("FISH_AUDIO_API_KEY", "")
-    if not fish_audio_key:
+        has_active = bool(active_k)
+        has_custom = bool(user_custom_k)
+        is_default = has_active and not has_custom
+
+        # Xavfsizlik: Tizim/default tokeni hech qachon brauzerga ko'rsatilmaydi!
+        # Faqat foydalanuvchi o'zi kiritgan shaxsiy kalit bo'lsagina maskalab ko'rsatiladi.
+        m_key = _mask_api_key(user_custom_k) if has_custom else ""
+
+        ai_keys[prov] = {
+            "configured": has_active,
+            "has_key": has_active,
+            "has_custom_key": has_custom,
+            "is_custom": has_custom,
+            "is_default": is_default,
+            "masked": m_key,
+            "masked_key": m_key,
+        }
+
+    has_gemini = ai_keys.get("gemini", {}).get("configured", False)
+    masked_key = ai_keys.get("gemini", {}).get("masked", "")
+
+    # Fish Audio: Tizim standarti va shaxsiy kalitni ajratish
+    custom_fish_k = str(custom_keys.get("fish_audio") or "").strip()
+    active_fish_k = custom_fish_k or os.environ.get("FISH_AUDIO_API_KEY", "").strip()
+    if not active_fish_k:
         try:
             from core.voice_engine import get_fish_audio_api_key
-            fish_audio_key = get_fish_audio_api_key()
+            active_fish_k = get_fish_audio_api_key()
         except Exception:
-            fish_audio_key = cfg.get("voice", {}).get("fish_audio_api_key", "")
+            active_fish_k = str(cfg.get("voice", {}).get("fish_audio_api_key") or "").strip()
+
+    has_fish_custom = bool(custom_fish_k)
+    has_fish_active = bool(active_fish_k)
+    is_fish_default = has_fish_active and not has_fish_custom
+    # Maxfiylik kafolati: Default token aslo brauzerga berilmaydi
+    masked_fish = _mask_api_key(custom_fish_k) if has_fish_custom else ""
 
     return web.json_response({
         "ok": True,
@@ -3138,7 +3177,11 @@ async def handle_account_get(request):
         "bio": bio,
         "language": language,
         "voice_type": voice_type or user_cfg.get("voice_type", "ayol"),
-        "fish_audio_api_key": fish_audio_key,
+        "fish_audio_api_key": "", # Xavfsizlik: Tizim yoki xom kalit brauzerga aslo uzatilmaydi
+        "fish_audio_configured": has_fish_active,
+        "fish_audio_has_custom": has_fish_custom,
+        "fish_audio_is_default": is_fish_default,
+        "fish_audio_masked": masked_fish,
         "tts_speed": float(audio_cfg.get("tts_speed", 1.0)),
         "tts_engine": audio_cfg.get("tts_engine", "edge_tts"),
         "auto_speak": audio_cfg.get("auto_speak", True),
@@ -3332,25 +3375,16 @@ async def handle_account_update(request):
             except Exception:
                 pass
 
+    if "custom_keys" not in cfg or not isinstance(cfg.get("custom_keys"), dict):
+        cfg["custom_keys"] = {}
+
     if "fish_audio_api_key" in body and body["fish_audio_api_key"] is not None:
         fish_key = str(body["fish_audio_api_key"]).strip()
-        os.environ["FISH_AUDIO_API_KEY"] = fish_key
-        # config.json dan olib tashlash (xavfsizlik uchun, maxfiy kalit .env da saqlanadi)
-        if "voice" in cfg and "fish_audio_api_key" in cfg["voice"]:
-            cfg["voice"].pop("fish_audio_api_key", None)
-        try:
-            env_path = os.path.join(BASE_DIR, ".env")
-            env_lines = []
-            if os.path.exists(env_path):
-                with open(env_path, "r", encoding="utf-8") as f:
-                    env_lines = f.readlines()
-            new_env_lines = [l for l in env_lines if not l.strip().startswith("FISH_AUDIO_API_KEY=")]
-            if fish_key:
-                new_env_lines.append(f"FISH_AUDIO_API_KEY={fish_key}\n")
-            with open(env_path, "w", encoding="utf-8") as f:
-                f.writelines(new_env_lines)
-        except Exception as e:
-            logger.warning(f".env ga FISH_AUDIO_API_KEY saqlashda xato: {e}")
+        if fish_key and fish_key != "REMOVE":
+            cfg["custom_keys"]["fish_audio"] = fish_key
+            os.environ["FISH_AUDIO_API_KEY"] = fish_key
+        else:
+            cfg["custom_keys"].pop("fish_audio", None)
 
     if "tts_speed" in body and body["tts_speed"] is not None:
         try:
@@ -3390,7 +3424,8 @@ async def handle_account_update(request):
         param_name = f"{prov}_api_key"
         if param_name in body and body[param_name] is not None:
             key = str(body[param_name]).strip()
-            if key:
+            if key and key != "REMOVE":
+                cfg["custom_keys"][prov] = key
                 if "ai" not in cfg:
                     cfg["ai"] = {}
                 cfg["ai"][param_name] = key
@@ -3422,20 +3457,20 @@ async def handle_account_update(request):
                         ps._providers[prov].set_api_key(key)
                 except Exception:
                     pass
-
-            try:
-                env_path = os.path.join(BASE_DIR, ".env")
-                lines = []
-                if os.path.exists(env_path):
-                    with open(env_path, "r", encoding="utf-8") as f:
-                        lines = f.readlines()
-                lines = [l for l in lines if not l.startswith("GEMINI_API_KEY=") and not l.startswith("GOOGLE_API_KEY=")]
-                lines.append(f"GEMINI_API_KEY={key}\n")
-                lines.append(f"GOOGLE_API_KEY={key}\n")
-                with open(env_path, "w", encoding="utf-8") as f:
-                    f.writelines(lines)
-            except Exception:
-                pass
+            elif key in ("", "REMOVE"):
+                # Shaxsiy kalitni olib tashlash va tizim standartiga qaytarish
+                cfg["custom_keys"].pop(prov, None)
+                if "ai" in cfg and param_name in cfg["ai"]:
+                    cfg["ai"].pop(param_name, None)
+                if prov == "gemini" and "gemini_api_key" in cfg:
+                    cfg.pop("gemini_api_key", None)
+                try:
+                    from core.v8.ai_key_manager import get_ai_key_manager
+                    ai_mgr = get_ai_key_manager()
+                    if user_id:
+                        ai_mgr.set_user_key(user_id, prov, "")
+                except Exception:
+                    pass
 
 
     # 5. Bildirishnomalar
@@ -3486,6 +3521,51 @@ async def handle_account_update(request):
         "voice_type": saved_voice,
         "tts_speed": saved_speed,
         "theme": saved_theme
+    })
+
+
+async def handle_account_delete_ai_key(request):
+    """POST /api/account/ai-key/delete - Shaxsiy API kalitni o'chirish va tizim standartiga qaytarish"""
+    user_id, _, _, err = resolve_auth_identity(request, required=False)
+    if err:
+        return err
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    provider = str(body.get("provider") or "").strip().lower()
+    if not provider:
+        return web.json_response({"ok": False, "error": "Provayder nomi ko'rsatilmadi"}, status=400)
+
+    cfg = _read_config()
+    custom_keys = cfg.get("custom_keys", {})
+    if isinstance(custom_keys, dict) and provider in custom_keys:
+        custom_keys.pop(provider, None)
+        cfg["custom_keys"] = custom_keys
+
+    param_name = f"{provider}_api_key"
+    if "ai" in cfg and isinstance(cfg["ai"], dict) and param_name in cfg["ai"]:
+        cfg["ai"].pop(param_name, None)
+
+    if provider == "gemini" and "gemini_api_key" in cfg:
+        cfg.pop("gemini_api_key", None)
+
+    _write_config(cfg)
+
+    try:
+        from core.v8.ai_key_manager import get_ai_key_manager
+        ai_mgr = get_ai_key_manager()
+        if user_id:
+            ai_mgr.set_user_key(user_id, provider, "")
+    except Exception:
+        pass
+
+    return web.json_response({
+        "ok": True,
+        "provider": provider,
+        "message": f"{provider.capitalize()} shaxsiy kaliti o'chirildi. Misa tizim standarti tiklandi.",
     })
 
 
@@ -3896,9 +3976,7 @@ async def handle_remote_audit(request):
 
 async def handle_telegram_link_start(request):
     """POST /api/telegram/link/start - 6 xonali OTP va Telegram deep-link yaratish"""
-    user_id, user, session, err = resolve_auth_identity(request, required=True)
-    if err:
-        return err
+    user_id, user, session, err = resolve_auth_identity(request, required=False)
 
     try:
         body = await request.json()
@@ -3906,7 +3984,7 @@ async def handle_telegram_link_start(request):
         body = {}
 
     body_uid = str(body.get("misa_user_id") or "").strip()
-    if user is not None or user_id != "admin":
+    if user_id:
         if body_uid and body_uid not in (user_id, "admin"):
             return web.json_response(
                 {"ok": False, "error": "Ruxsat etilmadi: Boshqa foydalanuvchi hisobi uchun OTP yaratish taqiqlangan."},
@@ -3914,7 +3992,8 @@ async def handle_telegram_link_start(request):
             )
         misa_user_id = user_id
     else:
-        misa_user_id = body_uid or user_id
+        # Anonymous / unauthenticated login OTP session: must be a valid UUID for Supabase
+        misa_user_id = body_uid if (body_uid and len(body_uid) == 36) else str(uuid.uuid4())
 
     from core.v8 import TelegramIdentityManager
     mgr = TelegramIdentityManager.get_default_instance()
@@ -4084,9 +4163,7 @@ async def handle_telegram_link_verify(request):
 
 async def handle_telegram_link_status(request):
     """GET /api/telegram/link/status - Bog'lanish holatini tekshirish"""
-    user_id, user, session, err = resolve_auth_identity(request, required=True)
-    if err:
-        return err
+    user_id, user, session, err = resolve_auth_identity(request, required=False)
 
     misa_user_id = user_id
     request_id = request.query.get("request_id")
@@ -4099,7 +4176,7 @@ async def handle_telegram_link_status(request):
         req = mgr.get_request(request_id, auth_token=auth_token, refresh=True)
         if not req:
             return web.json_response({"ok": False, "error": "So'rov topilmadi"}, status=404)
-        if (user is not None or misa_user_id != "admin") and req.misa_user_id != misa_user_id:
+        if user_id and (user is not None or misa_user_id != "admin") and req.misa_user_id != misa_user_id:
             return web.json_response(
                 {"ok": False, "error": "Ruxsat etilmadi: Ushbu bog'lanish so'rovi boshqa foydalanuvchiga tegishli."},
                 status=403
@@ -4108,17 +4185,25 @@ async def handle_telegram_link_status(request):
         status_name = "EXPIRED" if (req.status == "PENDING" and req.is_expired()) else req.status
         is_verified = (req.status == "VERIFIED")
         link = mgr.get_link_by_misa_user(req.misa_user_id, auth_token=auth_token, refresh=is_verified)
+        username = (link.username if link else req.metadata.get("telegram_username")) or ""
+        first_name = (link.first_name if link else req.metadata.get("telegram_first_name")) or ""
         return web.json_response({
             "ok": True,
             "status": "CONNECTED" if (is_verified or (link and link.is_active)) else status_name,
             "request_status": status_name,
             "is_linked": bool(is_verified or (link and link.is_active)),
             "telegram_user_id": link.telegram_user_id if link else req.telegram_user_id,
+            "username": username,
+            "telegram_username": username,
+            "first_name": first_name,
             "link": link.to_dict() if link else None,
             "attempt_count": req.attempt_count,
             "expires_at": req.expires_at,
             "ttl_seconds": ttl_left
         })
+
+    if not misa_user_id:
+        return web.json_response({"ok": False, "error": "Avtorizatsiya talab qilinadi yoki request_id ko'rsating"}, status=401)
 
     link = mgr.get_link_by_misa_user(misa_user_id, auth_token=auth_token, refresh=True)
     if link and link.is_active:
@@ -4257,57 +4342,59 @@ def resolve_auth_identity(
     if token:
         session, user = auth_mgr.authenticate_token(token)
         if not user or not session:
-            err_resp = web.json_response({
-                "ok": False,
-                "error": "Avtorizatsiyadan o'tilmagan: Token yaroqsiz yoki muddati o'tgan"
-            }, status=401)
-            err_resp["_auth_error"] = True
-            return None, None, None, err_resp
+            if required:
+                err_resp = web.json_response({
+                    "ok": False,
+                    "error": "Avtorizatsiyadan o'tilmagan: Token yaroqsiz yoki muddati o'tgan"
+                }, status=401)
+                err_resp["_auth_error"] = True
+                return None, None, None, err_resp
+            else:
+                session, user = None, None
+                token = None
+        else:
+            authenticated_user_id = user.id
+            # "me", "self", "current" yoki frontend default "misa_user_id=admin" ni
+            # autentifikatsiyalangan foydalanuvchining o'ziga xaritalash
+            # (Explicit ?user_id=admin spoofing esa rad etiladi!)
+            explicit_query_user_id = str(req_query.get("user_id") or "").strip().lower()
+            if param_user_id and (
+                param_user_id.lower() in ("me", "self", "current", "null", "undefined")
+                or (param_user_id.lower() == "admin" and explicit_query_user_id != "admin")
+            ):
+                param_user_id = authenticated_user_id
 
-        authenticated_user_id = user.id
-        # "me", "self", "current" yoki frontend default "misa_user_id=admin" ni
-        # autentifikatsiyalangan foydalanuvchining o'ziga xaritalash
-        # (Explicit ?user_id=admin spoofing esa rad etiladi!)
-        explicit_query_user_id = str(req_query.get("user_id") or "").strip().lower()
-        if param_user_id and (
-            param_user_id.lower() in ("me", "self", "current", "null", "undefined")
-            or (param_user_id.lower() == "admin" and explicit_query_user_id != "admin")
-        ):
-            param_user_id = authenticated_user_id
+            # Cross-tenant spoofing tekshiruvi:
+            if param_user_id and param_user_id != authenticated_user_id:
+                logger.warning(
+                    f"Xavfsizlik: Cross-tenant murojaat aniqlandi! Autentifikatsiya={authenticated_user_id}, "
+                    f"So'ralgan={param_user_id}"
+                )
+                err_resp = web.json_response({
+                    "ok": False,
+                    "error": "Cross-tenant access denied: Ruxsatsiz hisob murojaati"
+                }, status=403)
+                err_resp["_auth_error"] = True
+                return None, None, None, err_resp
 
-        # Cross-tenant spoofing tekshiruvi:
-        if param_user_id and param_user_id != authenticated_user_id:
-            logger.warning(
-                f"Xavfsizlik: Cross-tenant murojaat aniqlandi! Autentifikatsiya={authenticated_user_id}, "
-                f"So'ralgan={param_user_id}"
-            )
-            err_resp = web.json_response({
-                "ok": False,
-                "error": "Cross-tenant access denied: Ruxsatsiz hisob murojaati"
-            }, status=403)
-            err_resp["_auth_error"] = True
-            return None, None, None, err_resp
+            if not _is_production_mode():
+                _last_active_desktop_auth["user_id"] = authenticated_user_id
+                _last_active_desktop_auth["token"] = token
+                _last_active_desktop_auth["updated_at"] = time.time()
 
-        if not _is_production_mode():
-            _last_active_desktop_auth["user_id"] = authenticated_user_id
-            _last_active_desktop_auth["token"] = token
-            _last_active_desktop_auth["updated_at"] = time.time()
-
-        # Foydalanuvchi hisobidagi AI kalitlarni avtomatik sinxronlash (Auto AI)
-        try:
-            from core.v8.ai_key_manager import get_ai_key_manager
-            mgr = get_ai_key_manager()
-            user_meta = {}
-            if session and hasattr(session, "raw_claims") and isinstance(session.raw_claims, dict):
-                user_meta.update(session.raw_claims.get("user_metadata", {}) or {})
-            if user and hasattr(user, "metadata") and isinstance(user.metadata, dict):
-                user_meta.update(user.metadata)
-            if user_meta:
-                mgr.sync_from_user_session(authenticated_user_id, user_meta)
-        except Exception as _ex:
-            logger.debug(f"AI key sync error in resolve_auth_identity: {_ex}")
-
-        return authenticated_user_id, user, session, None
+            # Foydalanuvchi hisobidagi AI kalitlarni avtomatik sinxronlash (Auto AI)
+            try:
+                from core.v8.ai_key_manager import get_ai_key_manager
+                mgr = get_ai_key_manager()
+                user_meta = {}
+                if session and hasattr(session, "raw_claims") and isinstance(session.raw_claims, dict):
+                    user_meta.update(session.raw_claims.get("user_metadata", {}) or {})
+                if user and hasattr(user, "metadata") and isinstance(user.metadata, dict):
+                    user_meta.update(user.metadata)
+                if user_meta:
+                    mgr.sync_from_user_session(authenticated_user_id, user_meta)
+            except Exception as _ex:
+                logger.debug(f"AI key sync error in resolve_auth_identity: {_ex}")
 
 
     # Token yo'q holat
@@ -7239,8 +7326,12 @@ async def auth_enforcement_middleware(request, handler):
     )):
         return await handler(request)
 
-    # 3. Desktop rejimda (localhost) — backward-compatibility, auth talab qilinmaydi
+    # 3. Desktop rejimda (localhost) — backward-compatibility, ammo tashqi Origin qat'iy tekshiriladi
     if not _is_production_mode():
+        origin = request.headers.get("Origin", "")
+        if origin and not _is_origin_allowed(origin, is_prod=False, is_oauth_route=False):
+            logger.warning(f"Xavfsizlik: Begona veb-sayt desktop API ga murojaat qildi va rad etildi: {origin}")
+            return web.HTTPForbidden(text="Xavfsizlik: Begona Origin orqali kirish taqiqlangan.")
         return await handler(request)
 
     # 4. Production rejimda — autentifikatsiyani tekshirish
@@ -7252,6 +7343,39 @@ async def auth_enforcement_middleware(request, handler):
     return await handler(request)
 
 
+def _is_origin_allowed(origin: str, is_prod: bool, is_oauth_route: bool) -> bool:
+    """Tekshirish: Origin ishonchli mahalliy yoki ruxsat etilgan domenmi?"""
+    if not origin:
+        return True
+    origin_clean = origin.strip().lower()
+    configured_raw = os.environ.get("MISA_ALLOWED_ORIGINS", "").strip()
+    configured_origins = [o.strip().lower() for o in configured_raw.split(",") if o.strip()]
+
+    if "*" in configured_origins or configured_raw == "*":
+        return True
+    if (
+        origin_clean in ("tauri://localhost", "http://tauri.localhost", "https://tauri.localhost")
+        or origin_clean in configured_origins
+        or origin_clean in ("http://localhost", "http://127.0.0.1", "https://localhost", "https://127.0.0.1")
+        or origin_clean.startswith("http://localhost:")
+        or origin_clean.startswith("http://127.0.0.1:")
+        or origin_clean.startswith("https://localhost:")
+        or origin_clean.startswith("https://127.0.0.1:")
+    ):
+        return True
+    if is_prod or is_oauth_route:
+        if (
+            origin_clean.endswith(".railway.app")
+            or origin_clean.endswith(".up.railway.app")
+            or origin_clean.endswith(".vercel.app")
+            or origin_clean.endswith(".netlify.app")
+            or origin_clean.endswith(".pages.dev")
+            or origin_clean.endswith(".github.io")
+        ):
+            return True
+    return False
+
+
 @web.middleware
 async def cors_middleware(request, handler):
     path = str(getattr(request, "path", getattr(request, "rel_url", "/")))
@@ -7259,10 +7383,16 @@ async def cors_middleware(request, handler):
     is_prod = is_production_or_remote_enabled()
     is_oauth_route = path.startswith("/api/auth/callback")
 
+    # Xavfsizlik: Begona veb-sayt Origin so'rovlarini OPTIONS preflight va oddiy so'rovlarda zudlik bilan rad etish
+    if origin and not _is_origin_allowed(origin, is_prod, is_oauth_route):
+        logger.warning(f"Xavfsizlik: Begona veb-sayt Origin rad etildi (CORS/PNA himoyasi): {origin} -> {path}")
+        return web.HTTPForbidden(text="Xavfsizlik: Begona Origin orqali kirish taqiqlangan.")
+
     # Preflight OPTIONS so'rovlarini zudlik bilan qanoatlantirish
     if request.method == "OPTIONS":
         opt_resp = web.Response(status=204)
-        opt_resp.headers["Access-Control-Allow-Origin"] = origin or "*"
+        allowed_opt_origin = origin if origin else ("*" if is_prod else "tauri://localhost")
+        opt_resp.headers["Access-Control-Allow-Origin"] = allowed_opt_origin
         opt_resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
         opt_resp.headers["Access-Control-Allow-Headers"] = (
             "Content-Type, Authorization, X-Misa-Session-Token, X-Misa-User-Id, "
@@ -7278,7 +7408,7 @@ async def cors_middleware(request, handler):
             bypass_resp = await handler(request)
         except web.HTTPException as ex:
             bypass_resp = ex
-        bypass_resp.headers["Access-Control-Allow-Origin"] = origin or "*"
+        bypass_resp.headers["Access-Control-Allow-Origin"] = origin or ("*" if is_prod else "tauri://localhost")
         bypass_resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
         bypass_resp.headers["Access-Control-Allow-Headers"] = (
             "Content-Type, Authorization, X-Misa-Session-Token, X-Misa-User-Id, "
@@ -7288,56 +7418,9 @@ async def cors_middleware(request, handler):
         return bypass_resp
 
     # Remote IP tekshiruvi: Faqat mahalliy desktop rejimida begona LAN murojaatlari cheklanadi.
-    # Bulutli / Production (Railway) rejimida va OAuth callback yo'llarida internet mijozlariga ruxsat beriladi.
     if not is_prod and not is_oauth_route and request.remote and request.remote not in ALLOWED_REMOTE_IPS:
         logger.warning(f"Xavfsizlik: Lokal rejimda begona tarmoqdan so'rov rad etildi: {request.remote}")
         return web.HTTPForbidden(text="Xavfsizlik: Begona tarmoqdan murojaat taqiqlangan.")
-
-    is_allowed = True
-    if origin:
-        origin_clean = origin.strip().lower()
-        configured_raw = os.environ.get("MISA_ALLOWED_ORIGINS", "").strip()
-        configured_origins = [
-            o.strip().lower()
-            for o in configured_raw.split(",")
-            if o.strip()
-        ]
-
-        if "*" in configured_origins or configured_raw == "*":
-            is_allowed = True
-        elif (
-            origin_clean in ("tauri://localhost", "http://tauri.localhost", "https://tauri.localhost")
-            or origin_clean in configured_origins
-            or origin_clean == "http://localhost"
-            or origin_clean.startswith("http://localhost:")
-            or origin_clean == "http://127.0.0.1"
-            or origin_clean.startswith("http://127.0.0.1:")
-            or origin_clean == "https://localhost"
-            or origin_clean.startswith("https://localhost:")
-            or origin_clean == "https://127.0.0.1"
-            or origin_clean.startswith("https://127.0.0.1:")
-        ):
-            is_allowed = True
-        elif is_prod or is_oauth_route:
-            # Bulutli production rejimida yoki OAuth relay yo'lida ishonchli domenlar
-            if (
-                origin_clean.endswith(".railway.app")
-                or origin_clean.endswith(".up.railway.app")
-                or origin_clean.endswith(".vercel.app")
-                or origin_clean.endswith(".netlify.app")
-                or origin_clean.endswith(".pages.dev")
-                or origin_clean.endswith(".github.io")
-            ):
-                is_allowed = True
-            # XAVFSIZLIK: configured_origins bo'sh bo'lsa ham, xavfsiz rejim (is_allowed=False)
-            else:
-                is_allowed = False
-        else:
-            is_allowed = False
-
-        if not is_allowed:
-            logger.warning(f"Xavfsizlik: Begona veb-sayt Origin rad etildi: {origin}")
-            return web.HTTPForbidden(text="Xavfsizlik: Begona Origin orqali kirish taqiqlangan.")
 
     try:
         response = await handler(request)
@@ -7347,7 +7430,7 @@ async def cors_middleware(request, handler):
         logger.error(f"[API] Serverda kutilmagan ichki xatolik: {ex}")
         response = web.json_response({"ok": False, "error": str(ex)}, status=500)
 
-    allowed_header_origin = origin if (origin and is_allowed) else ("*" if is_prod else "tauri://localhost")
+    allowed_header_origin = origin if origin else ("*" if is_prod else "tauri://localhost")
     response.headers["Access-Control-Allow-Origin"] = allowed_header_origin
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = (
@@ -7477,6 +7560,8 @@ def create_app():
     # Hisob va Sozlamalar (Account & Settings)
     app.router.add_get("/api/account", handle_account_get)
     app.router.add_post("/api/account", handle_account_update)
+    app.router.add_post("/api/account/ai-key/delete", handle_account_delete_ai_key)
+    app.router.add_delete("/api/account/ai-key", handle_account_delete_ai_key)
 
     # Phase 38: Masofaviy Boshqaruv & Ruxsatlar Markazi (Remote Control & Permissions)
     app.router.add_get("/api/remote/devices", handle_remote_devices)

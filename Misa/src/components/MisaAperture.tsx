@@ -169,7 +169,7 @@ export const MisaAperture: React.FC<MisaApertureProps> = ({
   return (
     <div
       onClick={onClick}
-      className={`misa-aperture-wrapper misa-orb-wrapper misa-orb-wrapper misa-orb-wrapper misa-orb-wrapper mikasa-orb-wrapper ${className}`}
+      className={`misa-aperture-wrapper misa-orb-wrapper ${className}`}
       role="status"
       aria-label={`Misa AI Holati: ${normState}`}
       style={{

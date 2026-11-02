@@ -93,6 +93,13 @@ def build():
         "--hidden-import=core.voice.providers.fish_audio_provider",
         "--hidden-import=core.voice.providers.rvc_provider",
         "--hidden-import=core.providers",
+        "--collect-all=edge_tts",
+        "--collect-all=aiohttp",
+        "--collect-all=yarl",
+        "--collect-all=certifi",
+        "--collect-all=multidict",
+        "--collect-all=propcache",
+        "--collect-all=frozenlist",
         "--exclude-module=torch",
         "--exclude-module=torchaudio",
         "--exclude-module=torchvision",
@@ -134,6 +141,37 @@ def build():
             elif junk_path.exists():
                 junk_path.unlink()
 
+    # Ensure edge-tts and its full runtime dependencies are copied to _internal
+    try:
+        import site
+        sp_dirs = site.getsitepackages()
+        sp_path = None
+        for sp in sp_dirs:
+            if (Path(sp) / "edge_tts").exists():
+                sp_path = Path(sp)
+                break
+        if not sp_path:
+            venv_sp = root_dir / ".venv" / "Lib" / "site-packages"
+            if (venv_sp / "edge_tts").exists():
+                sp_path = venv_sp
+
+        if sp_path:
+            internal_dir = built_dir / "_internal"
+            for item in ["edge_tts", "tabulate", "aiohappyeyeballs", "aiosignal", "attr", "attrs", "idna"]:
+                for found in sp_path.glob(f"{item}*"):
+                    dest = internal_dir / found.name
+                    if found.is_dir():
+                        shutil.copytree(found, dest, dirs_exist_ok=True)
+                    else:
+                        shutil.copy2(found, dest)
+            for pkg in ["aiohttp", "certifi", "multidict", "yarl", "frozenlist", "propcache"]:
+                src_pkg = sp_path / pkg
+                if src_pkg.exists():
+                    shutil.copytree(src_pkg, internal_dir / pkg, dirs_exist_ok=True)
+            logger.info("✔ Successfully injected edge_tts & aiohttp runtime packages into _internal")
+    except Exception as e:
+        logger.warning(f"Could not inject edge_tts runtime dependencies: {e}")
+
     logger.info(f"✔ Successfully compiled backend: {exe_file}")
 
     # Destination 1: Misa/src-tauri/backend/ (for Tauri bundle.resources)
@@ -143,8 +181,8 @@ def build():
     shutil.copytree(built_dir, tauri_backend_dir)
     logger.info(f"✔ Deployed backend to Tauri resources: {tauri_backend_dir}")
 
-    # Destination 2: release/v9.2/backend/ (for release distribution)
-    for rel_ver in ["v9.2"]:
+    # Destination 2: release/v9.2 & v9.3/backend/ (for release distribution)
+    for rel_ver in ["v9.2", "v9.3"]:
         rel_dir = root_dir / "release" / rel_ver
         if rel_dir.exists():
             release_backend_dir = rel_dir / "backend"

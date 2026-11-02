@@ -442,6 +442,10 @@ export interface AccountSettings {
   language?: string;
   voice_type: string;
   fish_audio_api_key?: string;
+  fish_audio_configured?: boolean;
+  fish_audio_has_custom?: boolean;
+  fish_audio_is_default?: boolean;
+  fish_audio_masked?: string;
   tts_speed: number;
   tts_engine?: string;
   auto_speak?: boolean;
@@ -456,7 +460,18 @@ export interface AccountSettings {
   thinking_enabled?: boolean;
   has_gemini_key?: boolean;
   api_key_masked?: string;
-  ai_keys?: Record<string, { has_key: boolean; masked_key: string }>;
+  ai_keys?: Record<
+    string,
+    {
+      configured?: boolean;
+      has_key?: boolean;
+      has_custom_key?: boolean;
+      is_custom?: boolean;
+      is_default?: boolean;
+      masked?: string;
+      masked_key?: string;
+    }
+  >;
   groq_api_key?: string;
   cerebras_api_key?: string;
   openrouter_api_key?: string;
@@ -1418,7 +1433,8 @@ class BackendService {
     text: string,
     mode: "ask" | "command" | "summary" = "ask",
     speak: boolean = true,
-    image?: string
+    image?: string,
+    signal?: AbortSignal
   ): Promise<ChatResponse> {
     this.notifyVoiceState("thinking");
     try {
@@ -1434,6 +1450,7 @@ class BackendService {
         method: "POST",
         headers,
         body: JSON.stringify(payload),
+        signal,
       });
       if (!res.ok) {
         const errText = await res.text().catch(() => "");
@@ -1451,6 +1468,14 @@ class BackendService {
       return data;
     } catch (err: any) {
       this.notifyVoiceState("idle");
+      if (err?.name === "AbortError") {
+        return {
+          ok: false,
+          response: "Generatsiya to'xtatildi.",
+          reply: "Generatsiya to'xtatildi.",
+          error: "Aborted",
+        };
+      }
       const friendlyMsg = normalizeApiError(err, "AI xizmatiga ulanishda muammo yuz berdi.");
       return {
         ok: false,
@@ -1870,9 +1895,11 @@ class BackendService {
       return null;
     }
 
-    // 2. Web Speech Recognition check
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    // 2. Web Speech Recognition check (Privacy Opt-In: MISA-ROOT-026)
+    const isWebSpeechAllowed = localStorage.getItem("misa_web_speech_opt_in") === "true";
+    const SpeechRecognition = isWebSpeechAllowed
+      ? ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
+      : null;
 
     if (!SpeechRecognition) {
       // Fallback to backend voice recognition
@@ -2584,6 +2611,20 @@ class BackendService {
     apiKey?: string
   ): Promise<{ ok: boolean; valid?: boolean; message?: string; error?: string; error_code?: string; status_code?: number }> {
     return this.testApiKey(apiKey, "gemini");
+  }
+
+  public async deleteAiKey(provider: string): Promise<{ ok: boolean; message?: string; error?: string }> {
+    try {
+      const authHeaders = await this.getFreshAuthHeaders();
+      const res = await fetch(`${API_BASE}/api/account/ai-key/delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ provider }),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { ok: false, error: err.message || String(err) };
+    }
   }
 
   public async getAiConfig(): Promise<{
@@ -3953,7 +3994,10 @@ class BackendService {
     }
   }
 
-  public async linkGoogleAccount(customState?: string): Promise<{ ok: boolean; url?: string; state?: string; redirectTo?: string; error?: string }> {
+  public async linkOAuthAccount(
+    provider: "google" | "github",
+    customState?: string
+  ): Promise<{ ok: boolean; url?: string; state?: string; redirectTo?: string; error?: string }> {
     if (!isSupabaseConfigured) {
       return { ok: false, error: "Supabase konfiguratsiyasi topilmadi" };
     }
@@ -3976,21 +4020,62 @@ class BackendService {
       this.oauthPollFailures = 0;
       await this.preRegisterOAuthState(state, callbackBase, "link");
 
+      const options: any = {
+        redirectTo,
+        skipBrowserRedirect: true,
+      };
+      if (provider === "google") {
+        options.queryParams = {
+          access_type: "offline",
+          prompt: "consent",
+        };
+      }
+
       const { data, error } = await supabase.auth.linkIdentity({
-        provider: "google",
-        options: {
-          redirectTo,
-          skipBrowserRedirect: true,
-          queryParams: {
-            access_type: "offline",
-            prompt: "consent"
-          }
-        }
+        provider,
+        options,
       });
       if (error) {
         return { ok: false, error: formatAuthError(error) };
       }
       return { ok: true, url: data?.url, state, redirectTo };
+    } catch (err: any) {
+      return { ok: false, error: formatAuthError(err) };
+    }
+  }
+
+  public async linkGoogleAccount(customState?: string) {
+    return this.linkOAuthAccount("google", customState);
+  }
+
+  public async linkGitHubAccount(customState?: string) {
+    return this.linkOAuthAccount("github", customState);
+  }
+
+  public async unlinkOAuthAccount(
+    provider: "google" | "github"
+  ): Promise<{ ok: boolean; message?: string; error?: string }> {
+    const providerTitle = provider === "google" ? "Google" : "GitHub";
+    try {
+      const { data: idData, error: idErr } = await supabase.auth.getUserIdentities();
+      if (idErr) {
+        return { ok: false, error: formatAuthError(idErr) };
+      }
+      const targetId = idData?.identities?.find((id: any) => id.provider === provider);
+      if (!targetId) {
+        return { ok: false, error: `${providerTitle} hisobi topilmadi` };
+      }
+      if ((idData?.identities?.length || 0) <= 1) {
+        return {
+          ok: false,
+          error: "Yagona faol kirish hisobini uzib bo'lmaydi. Avval boshqa kirish usulini bog'lang.",
+        };
+      }
+      const { error: unlinkErr } = await supabase.auth.unlinkIdentity(targetId);
+      if (unlinkErr) {
+        return { ok: false, error: formatAuthError(unlinkErr) };
+      }
+      return { ok: true, message: `${providerTitle} hisobi muvaffaqiyatli uzildi` };
     } catch (err: any) {
       return { ok: false, error: formatAuthError(err) };
     }
@@ -4233,8 +4318,9 @@ class BackendService {
   // ========== Phase 42: Device Enrollment & Pairing ==========
   public async startDevicePairing(ttl: number = 300): Promise<DevicePairingStartResponse> {
     try {
+      const authHeaders = await this.getFreshAuthHeaders();
       const headers = {
-        ...this.getAuthHeaders(),
+        ...authHeaders,
         "Content-Type": "application/json",
       };
       const res = await fetch(`${API_BASE}/api/devices/pairing/start`, {
@@ -4250,7 +4336,7 @@ class BackendService {
 
   public async getDevicePairingStatus(pairingId: string): Promise<DevicePairingStatusResponse> {
     try {
-      const headers = this.getAuthHeaders();
+      const headers = await this.getFreshAuthHeaders();
       const res = await fetch(`${API_BASE}/api/devices/pairing/${encodeURIComponent(pairingId)}`, {
         method: "GET",
         headers,
@@ -4263,8 +4349,9 @@ class BackendService {
 
   public async cancelDevicePairing(pairingId: string): Promise<{ ok: boolean; message?: string; error?: string }> {
     try {
+      const authHeaders = await this.getFreshAuthHeaders();
       const headers = {
-        ...this.getAuthHeaders(),
+        ...authHeaders,
         "Content-Type": "application/json",
       };
       const res = await fetch(`${API_BASE}/api/devices/pairing/${encodeURIComponent(pairingId)}/cancel`, {
@@ -4480,11 +4567,11 @@ class BackendService {
 
   public async sendMessage(
     text: string,
-    options?: { mode?: "ask" | "command" | "summary" | string; speak?: boolean; image?: string; [key: string]: any }
+    options?: { mode?: "ask" | "command" | "summary" | string; speak?: boolean; image?: string; signal?: AbortSignal; [key: string]: any }
   ): Promise<ChatResponse> {
     const mode = (options?.mode === "command" || options?.mode === "summary" ? options.mode : "ask") as "ask" | "command" | "summary";
     const speak = options?.speak !== undefined ? Boolean(options.speak) : true;
-    const res = await this.sendChat(text, mode, speak, options?.image);
+    const res = await this.sendChat(text, mode, speak, options?.image, options?.signal);
     const rawReply = res.reply || res.response || "";
     const cleanReply = unwrapCleanResponse(rawReply);
     return {

@@ -287,18 +287,20 @@ fn find_bundled_backend_binary() -> Option<(PathBuf, PathBuf)> {
     // 2. Joriy ishchi katalog
     if let Ok(cwd) = std::env::current_dir() {
         candidates.push((cwd.join("backend").join("misa_backend.exe"), cwd.join("backend")));
+        candidates.push((cwd.join("release").join("v9.3").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.3").join("backend")));
+        candidates.push((cwd.join("release").join("v9.3").join("misa_backend.exe"), cwd.join("release").join("v9.3")));
         candidates.push((cwd.join("release").join("v9.2").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.2").join("backend")));
         candidates.push((cwd.join("release").join("v9.0.2").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.0.2").join("backend")));
         candidates.push((cwd.join("release").join("v9.0.1").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.0.1").join("backend")));
         candidates.push((cwd.join("release").join("v9.0.0").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.0.0").join("backend")));
         candidates.push((cwd.join("release").join("v8.0.0").join("backend").join("misa_backend.exe"), cwd.join("release").join("v8.0.0").join("backend")));
         candidates.push((cwd.join("Misa").join("src-tauri").join("backend").join("misa_backend.exe"), cwd.join("Misa").join("src-tauri").join("backend")));
-        candidates.push((cwd.join("mikasa-7").join("src-tauri").join("backend").join("misa_backend.exe"), cwd.join("mikasa-7").join("src-tauri").join("backend")));
     }
 
     // 3. LocalAppData runtime katalogi (%LOCALAPPDATA%\MisaAI\...)
     if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
         let p = PathBuf::from(local_app_data);
+        candidates.push((p.join("MisaAI").join("runtime").join("v9.3").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("runtime").join("v9.3").join("backend")));
         candidates.push((p.join("MisaAI").join("runtime").join("v9.2").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("runtime").join("v9.2").join("backend")));
         candidates.push((p.join("MisaAI").join("runtime").join("v9.0.2").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("runtime").join("v9.0.2").join("backend")));
         candidates.push((p.join("MisaAI").join("runtime").join("v9.0.1").join("backend").join("misa_backend.exe"), p.join("MisaAI").join("runtime").join("v9.0.1").join("backend")));
@@ -311,6 +313,10 @@ fn find_bundled_backend_binary() -> Option<(PathBuf, PathBuf)> {
     if let Ok(exe_path) = std::env::current_exe() {
         let mut curr = exe_path.as_path();
         while let Some(parent) = curr.parent() {
+            let rel93 = parent.join("release").join("v9.3").join("backend");
+            if rel93.exists() {
+                candidates.push((rel93.join("misa_backend.exe"), rel93));
+            }
             let rel92 = parent.join("release").join("v9.2").join("backend");
             if rel92.exists() {
                 candidates.push((rel92.join("misa_backend.exe"), rel92));
@@ -336,7 +342,7 @@ fn find_bundled_backend_binary() -> Option<(PathBuf, PathBuf)> {
     }
 
     for (exe, work_dir) in candidates {
-        if exe.exists() && work_dir.join("_internal").join("python311.dll").exists() {
+        if exe.exists() {
             return Some((exe, work_dir));
         }
     }
@@ -660,6 +666,12 @@ fn app_toggle_maximize(window: tauri::Window) -> Result<bool, String> {
 
 #[tauri::command]
 fn app_open_external_url(url: String) -> Result<(), String> {
+    let trimmed = url.trim();
+    let lower = trimmed.to_lowercase();
+    if !(lower.starts_with("http://") || lower.starts_with("https://") || lower.starts_with("mailto:")) {
+        startup_log("SECURITY", &format!("Blocked unsafe URL scheme in app_open_external_url: {}", url));
+        return Err("Xavfsizlik: Faqat http://, https:// va mailto: protokollariga ruxsat berilgan.".into());
+    }
     startup_log("OPENER", &format!("Opening external URL via native OS shell: {}", url));
     #[cfg(target_os = "windows")]
     {
@@ -1197,18 +1209,20 @@ pub fn show_native_message_box(title: &str, message: &str, is_error: bool) {
 
 #[cfg(target_os = "windows")]
 fn register_custom_protocol() {
-    if let Ok(current_exe) = std::env::current_exe() {
-        let exe_str = current_exe.to_string_lossy().to_string();
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        let cmd = format!(
-            "reg add \"HKCU\\Software\\Classes\\misa\" /ve /d \"URL:Misa Protocol\" /f >nul 2>&1 & reg add \"HKCU\\Software\\Classes\\misa\" /v \"URL Protocol\" /d \"\" /f >nul 2>&1 & reg add \"HKCU\\Software\\Classes\\misa\\shell\\open\\command\" /ve /d \"\\\"{}\\\" \\\"%1\\\"\" /f >nul 2>&1",
-            exe_str
-        );
-        let _ = Command::new("cmd")
-            .args(["/C", &cmd])
-            .creation_flags(CREATE_NO_WINDOW)
-            .status();
-    }
+    std::thread::spawn(|| {
+        if let Ok(current_exe) = std::env::current_exe() {
+            let exe_str = current_exe.to_string_lossy().to_string();
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            let cmd = format!(
+                "reg add \"HKCU\\Software\\Classes\\misa\" /ve /d \"URL:Misa Protocol\" /f >nul 2>&1 & reg add \"HKCU\\Software\\Classes\\misa\" /v \"URL Protocol\" /d \"\" /f >nul 2>&1 & reg add \"HKCU\\Software\\Classes\\misa\\shell\\open\\command\" /ve /d \"\\\"{}\\\" \\\"%1\\\"\" /f >nul 2>&1",
+                exe_str
+            );
+            let _ = Command::new("cmd")
+                .args(["/C", &cmd])
+                .creation_flags(CREATE_NO_WINDOW)
+                .status();
+        }
+    });
 }
 #[cfg(not(target_os = "windows"))]
 fn register_custom_protocol() {}
@@ -1305,8 +1319,8 @@ pub fn run() {
             startup_log("TAURI", "Building main WebviewWindow with on_new_window interceptor...");
             let win = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
                 .title("MISA AI v9.3")
-                .inner_size(1280.0, 800.0)
-                .min_inner_size(1024.0, 700.0)
+                .inner_size(1200.0, 720.0)
+                .min_inner_size(960.0, 600.0)
                 .resizable(true)
                 .center()
                 .decorations(false)

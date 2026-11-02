@@ -264,6 +264,22 @@ class ReActAgent:
         if self._manager_agent and self._manager_agent.can_handle(user_input):
             self._notify(0, "thought", {"thought": "ManagerAgent ga yo'naltirildi"})
             manager_result = self._manager_agent.execute(user_input)
+
+            if manager_result.get("requires_confirmation") or manager_result.get("status") == "requires_confirmation":
+                prompt = manager_result.get("prompt") or f"'{user_input}' amalini bajarishni tasdiqlaysizmi?"
+                challenge_token = manager_result.get("challenge_token")
+                self._notify(0, "thought", {"thought": f"Tasdiqlash talab etiladi: {prompt}"})
+                return {
+                    "response": f"⚠️ **Tasdiqlash talab etiladi:** {prompt}",
+                    "requires_confirmation": True,
+                    "challenge_token": challenge_token,
+                    "action": user_input,
+                    "risk_level": manager_result.get("risk_level", "high"),
+                    "tools_used": [],
+                    "steps": [],
+                    "success": False,
+                }
+
             if manager_result.get("status") == "success" and manager_result.get(
                 "delegated_to"
             ):

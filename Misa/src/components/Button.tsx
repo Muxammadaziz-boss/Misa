@@ -61,14 +61,14 @@ export const Button: React.FC<ButtonProps> = ({
           background: "var(--primary)",
           border: "1px solid var(--primary-glow)",
           color: "#FFFFFF",
-          boxShadow: "0 2px 10px rgba(2, 132, 199, 0.3)",
+          boxShadow: "0 2px 14px rgba(147, 3, 197, 0.35)",
         };
     }
   };
 
   return (
     <button
-      className={`mikasa-button btn-${variant} ${className}`}
+      className={`misa-button btn-${variant} ${className}`}
       style={{
         display: "inline-flex",
         alignItems: "center",

@@ -152,6 +152,120 @@ h1, h2, h3, h4, .font-headline {
   outline: none;
 }
 
+/* ── Unified Input Box with Icon & Closed Border (Ultra Glass) ── */
+.misa-input-box {
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  height: 50px !important;
+  min-height: 50px !important;
+  background: rgba(10, 15, 30, 0.88) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1.5px solid rgba(192, 76, 253, 0.45) !important;
+  border-radius: 14px !important;
+  padding: 0 12px !important;
+  box-sizing: border-box !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.misa-input-box:hover {
+  border-color: rgba(192, 76, 253, 0.75) !important;
+  background: rgba(16, 22, 44, 0.95) !important;
+}
+
+.misa-input-box:focus-within {
+  border-color: #C04CFD !important;
+  background: rgba(20, 26, 52, 1) !important;
+  box-shadow: 0 0 0 3px rgba(192, 76, 253, 0.32), 0 0 22px rgba(147, 3, 197, 0.38) !important;
+}
+
+.misa-input-inner {
+  flex: 1 !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  color: #FFFFFF !important;
+  font-size: 14.5px !important;
+  padding: 0 6px !important;
+  margin: 0 !important;
+  font-family: inherit !important;
+}
+
+.misa-input-inner::placeholder {
+  color: #64748B !important;
+  font-size: 13.5px !important;
+}
+
+/* ── OAuth Glass Buttons (Google, GitHub, Telegram) ── */
+.misa-social-btn {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  height: 44px !important;
+  padding: 0 10px !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 12px !important;
+  color: #FFFFFF !important;
+  font-size: 13.5px !important;
+  font-weight: 500 !important;
+  font-family: inherit !important;
+  cursor: pointer !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  outline: none !important;
+  box-sizing: border-box !important;
+  min-width: 0 !important;
+  white-space: nowrap !important;
+}
+
+.misa-social-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(192, 76, 253, 0.5) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35), 0 0 14px rgba(192, 76, 253, 0.25) !important;
+  transform: translateY(-1.5px) !important;
+}
+
+.misa-social-btn:active:not(:disabled) {
+  transform: translateY(0) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.misa-social-btn:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+.misa-social-btn svg {
+  flex-shrink: 0 !important;
+  display: block !important;
+}
+
+.misa-social-btn span {
+  display: inline-flex !important;
+  align-items: center !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+
+/* Hide native Edge/WebKit password reveal eye and clear icons */
+input::-ms-reveal { display: none !important; }
+input::-ms-clear { display: none !important; }
+input::-webkit-contacts-auto-fill-button { display: none !important; }
+input::-webkit-credentials-auto-fill-button { display: none !important; }
+
 /* ── Violet Luminous Buttons & Pills ── */
 .btn-violet-glow,
 .misa-btn-violet {
@@ -214,8 +328,7 @@ h1, h2, h3, h4, .font-headline {
   .misa-search-btn {
     padding: 6px 8px !important;
   }
-  .misa-topnav-center,
-  .mikasa-topnav-center {
+  .misa-topnav-center {
     gap: 2px !important;
   }
   .misa-nav-pill {
@@ -409,7 +522,7 @@ button {
 }
 
 .misa-orb-wrapper,
-.mikasa-orb-wrapper {
+.misa-aperture-wrapper {
   will-change: transform;
 }
 

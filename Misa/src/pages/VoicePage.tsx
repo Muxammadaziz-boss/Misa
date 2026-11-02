@@ -29,6 +29,15 @@ export const VoicePage: React.FC<VoicePageProps> = ({
   const [backendStatus, setBackendStatus] = useState<BackendStatus>({ status: "connecting" });
   const [userTranscript, setUserTranscript] = useState<string>("");
   const [lastTranscript, setLastTranscript] = useState<string>("");
+  const [webSpeechOptIn, setWebSpeechOptIn] = useState<boolean>(() => {
+    return localStorage.getItem("misa_web_speech_opt_in") === "true";
+  });
+
+  const toggleWebSpeechOptIn = () => {
+    const next = !webSpeechOptIn;
+    setWebSpeechOptIn(next);
+    localStorage.setItem("misa_web_speech_opt_in", String(next));
+  };
 
   useEffect(() => {
     const unsubVoice = backendService.onVoiceStateChange((state) => {
@@ -163,26 +172,52 @@ export const VoicePage: React.FC<VoicePageProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={onNavigateChat}
-          title="Matnli chatga o'tish"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            padding: "7px 14px",
-            borderRadius: "999px",
-            background: "rgba(147, 3, 197, 0.18)",
-            border: "1px solid rgba(192, 76, 253, 0.35)",
-            color: "#E8B3FF",
-            fontSize: "12px",
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
-        >
-          <ChatIcon size={14} color="#E8B3FF" />
-          <span>Matnli suhbat</span>
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <button
+            onClick={toggleWebSpeechOptIn}
+            title={
+              webSpeechOptIn
+                ? "Bulutli ovoz tanib olish (Web Speech API) faol — Ovoz serverga yuborilishi mumkin. Maxfiy rejimga o'tish uchun bosing."
+                : "Faqat mahalliy ovoz tizimi faol (Maxfiy) — Bulutli Web Speech API ga ruxsat berish uchun bosing."
+            }
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "7px 14px",
+              borderRadius: "999px",
+              background: webSpeechOptIn ? "rgba(59, 130, 246, 0.18)" : "rgba(78, 222, 163, 0.15)",
+              border: webSpeechOptIn ? "1px solid rgba(59, 130, 246, 0.45)" : "1px solid rgba(78, 222, 163, 0.4)",
+              color: webSpeechOptIn ? "#93C5FD" : "#4EDEA3",
+              fontSize: "11.5px",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            <span>{webSpeechOptIn ? "☁️ Bulutli STT: Ruxsat berilgan" : "🛡️ Maxfiy: Faqat Mahalliy"}</span>
+          </button>
+
+          <button
+            onClick={onNavigateChat}
+            title="Matnli chatga o'tish"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "7px 14px",
+              borderRadius: "999px",
+              background: "rgba(147, 3, 197, 0.18)",
+              border: "1px solid rgba(192, 76, 253, 0.35)",
+              color: "#E8B3FF",
+              fontSize: "12px",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            <ChatIcon size={14} color="#E8B3FF" />
+            <span>Matnli suhbat</span>
+          </button>
+        </div>
       </div>
 
       {/* 2. Center Optical AI Aperture & Voice Controls */}

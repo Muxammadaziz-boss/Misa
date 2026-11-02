@@ -39,6 +39,12 @@ SENSITIVE_PATTERNS = [
     (re.compile(r"AIza[0-9A-Za-z_-]{35}"), "AIza***MASKED_KEY***"),
     # OpenAI/Anthropic/OpenRouter keys (sk-...)
     (re.compile(r"sk-[a-zA-Z0-9_-]{20,}"), "sk-***MASKED_KEY***"),
+    # Groq API keys (gsk_...)
+    (re.compile(r"gsk_[a-zA-Z0-9_-]{20,}"), "gsk_***MASKED_KEY***"),
+    # Cerebras API keys (csk-...)
+    (re.compile(r"csk-[a-zA-Z0-9_-]{20,}"), "csk-***MASKED_KEY***"),
+    # Telegram Bot tokens (123456789:ABCdef...)
+    (re.compile(r"\b[0-9]{8,10}:[a-zA-Z0-9_-]{20,45}\b"), "***MASKED_TELEGRAM_TOKEN***"),
     # Supabase new keys (sb_secret_..., sb_publishable_...)
     (re.compile(r"sb_secret_[a-zA-Z0-9_-]{20,}"), "sb_secret_***MASKED***"),
     (re.compile(r"sb_publishable_[a-zA-Z0-9_-]{20,}"), "sb_publishable_***MASKED***"),
@@ -46,6 +52,8 @@ SENSITIVE_PATTERNS = [
     (re.compile(r"(Bearer\s+)[A-Za-z0-9_\-\.]{15,}", re.IGNORECASE), r"\1***MASKED_TOKEN***"),
     # Private keys
     (re.compile(r"-----BEGIN (?:RSA |EC )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC )?PRIVATE KEY-----"), "***MASKED_PRIVATE_KEY***"),
+    # Query parameters with passwords or tokens
+    (re.compile(r"([?&](?:password|token|api_key|secret)=)[^&\s]+", re.IGNORECASE), r"\1***MASKED***"),
     # JSON password / token / secret / api_key / refresh_token fields
     (re.compile(r'("(?:password|api_key|token|secret|access_token|refresh_token|session_token|service_role|private_key)"\s*:\s*)"[^"]+"', re.IGNORECASE), r'\1"***MASKED***"'),
 ]
@@ -63,6 +71,17 @@ class SensitiveDataFilter(logging.Filter):
         except Exception:
             pass
         return True
+
+
+def install_global_filter():
+    """Barcha mavjud va kelgusi logger handlerlariga xavfsizlik filtrini biriktirish"""
+    filt = SensitiveDataFilter()
+    root = logging.getLogger()
+    if filt not in root.filters:
+        root.addFilter(filt)
+    for h in root.handlers:
+        if filt not in h.filters:
+            h.addFilter(filt)
 
 
 def sanitize_text(text: str) -> str:

@@ -603,10 +603,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       return;
     }
 
-    // 2. Aks holda (backend offline bo'lganda), brauzer ichki SpeechRecognition orqali zaxira tinglash
+    // 2. Aks holda (backend offline bo'lganda), brauzer ichki SpeechRecognition orqali zaxira tinglash (Privacy Opt-In: MISA-ROOT-026)
+    const isWebSpeechAllowed = localStorage.getItem("misa_web_speech_opt_in") === "true";
     isListeningRef.current = true;
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecognition = isWebSpeechAllowed
+      ? ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
+      : null;
 
     if (SpeechRecognition) {
       const micAllowed = await startAudioMonitor();

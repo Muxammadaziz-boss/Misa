@@ -16,6 +16,7 @@ import {
   CheckIcon,
   CloseIcon,
   GoogleIcon,
+  GithubIcon,
   TelegramIcon,
   LaptopIcon,
   RefreshIcon,
@@ -45,7 +46,7 @@ interface AccountPageProps {
   onOpenUpdateModal?: (info: UpdateCheckResponse) => void;
 }
 
-type ProfileTab = "profile" | "voice_ai" | "appearance" | "security";
+type ProfileTab = "profile" | "voice_ai" | "appearance" | "security" | "system_hub";
 
 const AVATAR_STYLES = [
   { id: "violet", label: "Misa Binafsha", color: "#9303C5" },
@@ -224,20 +225,23 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   );
   const [rememberChats, setRememberChats] = useState<boolean>(true);
   const [autoSuggestions, setAutoSuggestions] = useState<boolean>(true);
-  const [activeKeyProvider, setActiveKeyProvider] = useState<"gemini" | "groq" | "cerebras" | "openrouter" | "nvidia">("gemini");
+  const [activeKeyProvider, setActiveKeyProvider] = useState<"gemini" | "groq" | "cerebras" | "openrouter" | "nvidia" | "fish_audio">("gemini");
   const [geminiApiKey, setGeminiApiKey] = useState<string>("");
   const [groqApiKey, setGroqApiKey] = useState<string>("");
   const [cerebrasApiKey, setCerebrasApiKey] = useState<string>("");
   const [openrouterApiKey, setOpenrouterApiKey] = useState<string>("");
   const [nvidiaApiKey, setNvidiaApiKey] = useState<string>("");
-  const [aiKeysStatus, setAiKeysStatus] = useState<Record<string, { configured: boolean; masked: string }>>({
-    gemini: { configured: false, masked: "" },
-    groq: { configured: false, masked: "" },
-    cerebras: { configured: false, masked: "" },
-    openrouter: { configured: false, masked: "" },
-    nvidia: { configured: false, masked: "" },
+  const [aiKeysStatus, setAiKeysStatus] = useState<Record<string, { configured: boolean; has_custom_key: boolean; is_default: boolean; masked: string }>>({
+    gemini: { configured: false, has_custom_key: false, is_default: false, masked: "" },
+    groq: { configured: false, has_custom_key: false, is_default: false, masked: "" },
+    cerebras: { configured: false, has_custom_key: false, is_default: false, masked: "" },
+    openrouter: { configured: false, has_custom_key: false, is_default: false, masked: "" },
+    nvidia: { configured: false, has_custom_key: false, is_default: false, masked: "" },
+    fish_audio: { configured: false, has_custom_key: false, is_default: false, masked: "" },
   });
   const [testingKey, setTestingKey] = useState<boolean>(false);
+  const [savingKey, setSavingKey] = useState<boolean>(false);
+  const [showCurrentApiKey, setShowCurrentApiKey] = useState<boolean>(false);
 
   // 3. Tashqi Ko'rinish Holati
   const [themeMode, setThemeMode] = useState<"dark" | "light" | "system">("dark");
@@ -253,10 +257,22 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   const [newPassword, setNewPassword] = useState<string>("");
   const [confirmPassword, setConfirmPassword] = useState<string>("");
   const [telegramAcc, setTelegramAcc] = useState<TelegramAccountResponse | null>(null);
+  const [telegramModalOpen, setTelegramModalOpen] = useState<boolean>(false);
+  const [telegramUsernameInput, setTelegramUsernameInput] = useState<string>(
+    () => localStorage.getItem("misa_linked_telegram") || ""
+  );
+  const [telegramLinking, setTelegramLinking] = useState<boolean>(false);
+  const [telegramOtp, setTelegramOtp] = useState<string>("");
+  const [telegramDeepLink, setTelegramDeepLink] = useState<string>("");
+  const [telegramRequestId, setTelegramRequestId] = useState<string>("");
+  const [telegramOtpLoading, setTelegramOtpLoading] = useState<boolean>(false);
+  const [telegramOtpCopied, setTelegramOtpCopied] = useState<boolean>(false);
   const [githubToken, setGithubToken] = useState<string>(
     () => backendService.getGithubToken() || ""
   );
   const [githubModalOpen, setGithubModalOpen] = useState<boolean>(false);
+  const [userIdentities, setUserIdentities] = useState<any[]>([]);
+  const [linkingProvider, setLinkingProvider] = useState<string | null>(null);
 
   // RVC AI Modellari Yuklab Olish Holati (Ashley Clayson va Yukari uchun)
   const [voiceRuntimeNeedsDownload, setVoiceRuntimeNeedsDownload] = useState<boolean>(true);
@@ -369,10 +385,13 @@ export const AccountPage: React.FC<AccountPageProps> = ({
             if (data.avatar) setAvatarStyle(data.avatar);
             if (data.avatar_url) setAvatarUrl(data.avatar_url);
             if (data.voice_type) setVoiceType(data.voice_type);
-            if (data.fish_audio_api_key) {
-              const fk = data.fish_audio_api_key;
-              setFishKeyConfigured(true);
-              setMaskedFishKey(fk.length > 10 ? `${fk.slice(0, 7)}...${fk.slice(-4)}` : "●●●●●●");
+            const hasCustomFish = Boolean(data.fish_audio_has_custom);
+            const isFishConfigured = Boolean(data.fish_audio_configured || data.fish_audio_is_default || hasCustomFish);
+            setFishKeyConfigured(isFishConfigured);
+            if (hasCustomFish && data.fish_audio_masked) {
+              setMaskedFishKey(data.fish_audio_masked);
+            } else {
+              setMaskedFishKey(""); // Default token aslo ko'rsatilmaydi
             }
             if (typeof data.tts_speed === "number") setTtsSpeed(data.tts_speed);
             if (typeof data.auto_speak === "boolean") setAutoSpeak(data.auto_speak);
@@ -380,19 +399,22 @@ export const AccountPage: React.FC<AccountPageProps> = ({
             if (data.ai_model) setAiModel(data.ai_model);
             if (typeof data.thinking_enabled === "boolean") setThinkingEnabled(data.thinking_enabled);
             if (data.ai_keys) {
-              const normalizedKeys: Record<string, { configured: boolean; masked: string }> = {};
+              const normalizedKeys: Record<string, { configured: boolean; has_custom_key: boolean; is_default: boolean; masked: string }> = {};
               for (const [provider, val] of Object.entries(data.ai_keys as Record<string, any>)) {
                 normalizedKeys[provider] = {
                   configured: Boolean(val?.configured || val?.has_key),
-                  masked: val?.masked || val?.masked_key || "",
+                  has_custom_key: Boolean(val?.has_custom_key || val?.is_custom),
+                  is_default: Boolean(val?.is_default),
+                  masked: (val?.has_custom_key || val?.is_custom) ? (val?.masked || val?.masked_key || "") : "",
                 };
               }
+              normalizedKeys.fish_audio = {
+                configured: isFishConfigured,
+                has_custom_key: hasCustomFish,
+                is_default: Boolean(data.fish_audio_is_default),
+                masked: hasCustomFish ? (data.fish_audio_masked || "") : "",
+              };
               setAiKeysStatus((prev) => ({ ...prev, ...normalizedKeys }));
-            } else if (data.api_key_masked) {
-              setAiKeysStatus((prev) => ({
-                ...prev,
-                gemini: { configured: true, masked: data.api_key_masked },
-              }));
             }
           }
         })
@@ -403,6 +425,13 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       backendService
         .getTelegramAccount()
         .then((acc) => setTelegramAcc(acc))
+        .catch(() => {});
+
+      supabase.auth
+        .getUserIdentities()
+        .then(({ data }) => {
+          if (data?.identities) setUserIdentities(data.identities);
+        })
         .catch(() => {});
 
       backendService
@@ -762,27 +791,27 @@ export const AccountPage: React.FC<AccountPageProps> = ({
           });
         } catch {}
         const masked = geminiApiKey.trim().slice(0, 8) + "..." + geminiApiKey.trim().slice(-4);
-        setAiKeysStatus((prev) => ({ ...prev, gemini: { configured: true, masked } }));
+        setAiKeysStatus((prev) => ({ ...prev, gemini: { configured: true, has_custom_key: true, is_default: false, masked } }));
         setGeminiApiKey("");
       }
       if (groqApiKey.trim()) {
         const masked = groqApiKey.trim().slice(0, 7) + "..." + groqApiKey.trim().slice(-4);
-        setAiKeysStatus((prev) => ({ ...prev, groq: { configured: true, masked } }));
+        setAiKeysStatus((prev) => ({ ...prev, groq: { configured: true, has_custom_key: true, is_default: false, masked } }));
         setGroqApiKey("");
       }
       if (cerebrasApiKey.trim()) {
         const masked = cerebrasApiKey.trim().slice(0, 6) + "..." + cerebrasApiKey.trim().slice(-4);
-        setAiKeysStatus((prev) => ({ ...prev, cerebras: { configured: true, masked } }));
+        setAiKeysStatus((prev) => ({ ...prev, cerebras: { configured: true, has_custom_key: true, is_default: false, masked } }));
         setCerebrasApiKey("");
       }
       if (openrouterApiKey.trim()) {
         const masked = openrouterApiKey.trim().slice(0, 9) + "..." + openrouterApiKey.trim().slice(-4);
-        setAiKeysStatus((prev) => ({ ...prev, openrouter: { configured: true, masked } }));
+        setAiKeysStatus((prev) => ({ ...prev, openrouter: { configured: true, has_custom_key: true, is_default: false, masked } }));
         setOpenrouterApiKey("");
       }
       if (nvidiaApiKey.trim()) {
         const masked = nvidiaApiKey.trim().slice(0, 7) + "..." + nvidiaApiKey.trim().slice(-4);
-        setAiKeysStatus((prev) => ({ ...prev, nvidia: { configured: true, masked } }));
+        setAiKeysStatus((prev) => ({ ...prev, nvidia: { configured: true, has_custom_key: true, is_default: false, masked } }));
         setNvidiaApiKey("");
       }
 
@@ -863,7 +892,12 @@ export const AccountPage: React.FC<AccountPageProps> = ({
           }
         }
 
-        const audio = new Audio(res.audio_data);
+        const rawAudio = String(res.audio_data || "");
+        const safeAudioSrc = rawAudio.startsWith("data:audio/mp3;")
+          ? rawAudio.replace("data:audio/mp3;", "data:audio/mpeg;")
+          : rawAudio;
+
+        const audio = new Audio(safeAudioSrc);
         audio.volume = previewVolume;
 
         audio.addEventListener("loadedmetadata", () => {
@@ -879,15 +913,21 @@ export const AccountPage: React.FC<AccountPageProps> = ({
           setPreviewCurrentTime(0);
         });
 
-        audio.addEventListener("error", () => {
+        audio.addEventListener("error", (e) => {
           setPreviewPlaying(false);
           setPreviewLoading(false);
+          console.warn("Audio element playback error:", e);
           showToast("Audio faylni ijro etishda xatolik yuz berdi");
         });
 
         previewAudioRef.current = audio;
-        await audio.play();
-        setPreviewPlaying(true);
+        try {
+          await audio.play();
+          setPreviewPlaying(true);
+        } catch (playErr) {
+          console.warn("Audio play exception:", playErr);
+          setPreviewPlaying(false);
+        }
 
         const voiceObj = VOICE_OPTIONS.find((v) => v.id === voiceId);
         showToast(`${voiceObj ? voiceObj.name : voiceId} ovozi ijro etilmoqda 🔊`);
@@ -924,8 +964,8 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     }
   };
 
-  // API kalitni jonli tekshirish (Gemini, Groq, Cerebras, OpenRouter, NVIDIA)
-  const handleTestCurrentApiKey = async (provider: "gemini" | "groq" | "cerebras" | "openrouter" | "nvidia") => {
+  // API kalitni jonli tekshirish (Gemini, Groq, Cerebras, OpenRouter, NVIDIA, Fish Audio)
+  const handleTestCurrentApiKey = async (provider: "gemini" | "groq" | "cerebras" | "openrouter" | "nvidia" | "fish_audio") => {
     setTestingKey(true);
     let keyToTest = "";
     if (provider === "gemini") keyToTest = geminiApiKey.trim();
@@ -933,31 +973,95 @@ export const AccountPage: React.FC<AccountPageProps> = ({
     else if (provider === "cerebras") keyToTest = cerebrasApiKey.trim();
     else if (provider === "openrouter") keyToTest = openrouterApiKey.trim();
     else if (provider === "nvidia") keyToTest = nvidiaApiKey.trim();
+    else if (provider === "fish_audio") keyToTest = fishAudioApiKey.trim();
 
     try {
       const res = await backendService.testApiKey(keyToTest || undefined, provider);
       if (res.ok) {
-        showToast(res.message || `${provider.toUpperCase()} API kaliti faol ✓`);
-        if (keyToTest) {
-          const masked = keyToTest.slice(0, 6) + "..." + keyToTest.slice(-4);
-          setAiKeysStatus((prev) => ({
-            ...prev,
-            [provider]: { configured: true, masked },
-          }));
-          if (provider === "gemini") {
-            setGeminiApiKey("");
-          } else if (provider === "groq") setGroqApiKey("");
-          else if (provider === "cerebras") setCerebrasApiKey("");
-          else if (provider === "openrouter") setOpenrouterApiKey("");
-          else if (provider === "nvidia") setNvidiaApiKey("");
-        }
+        showToast(res.message || `${provider.toUpperCase()} API kaliti to'g'ri va faol ✓`);
       } else {
         showToast(res.error || res.message || "API kalitda xatolik yuz berdi");
       }
     } catch {
-      showToast("API kalitni tekshirishda xatolik");
+      showToast("API kalitni tekshirishda xatolik yuz berdi");
     } finally {
       setTestingKey(false);
+    }
+  };
+
+  // Muayyan bitta AI kalitni tezkor saqlash
+  const handleSaveSingleAiKey = async (provider: "gemini" | "groq" | "cerebras" | "openrouter" | "nvidia" | "fish_audio") => {
+    let keyToSave = "";
+    if (provider === "gemini") keyToSave = geminiApiKey.trim();
+    else if (provider === "groq") keyToSave = groqApiKey.trim();
+    else if (provider === "cerebras") keyToSave = cerebrasApiKey.trim();
+    else if (provider === "openrouter") keyToSave = openrouterApiKey.trim();
+    else if (provider === "nvidia") keyToSave = nvidiaApiKey.trim();
+    else if (provider === "fish_audio") keyToSave = fishAudioApiKey.trim();
+
+    if (!keyToSave) {
+      showToast("Iltimos, avval kalitni kiriting");
+      return;
+    }
+
+    setSavingKey(true);
+    try {
+      const paramName = `${provider}_api_key`;
+      const res = await backendService.updateAccount({ [paramName]: keyToSave } as any);
+      if (res.ok) {
+        const masked = keyToSave.length > 10 ? `${keyToSave.slice(0, 6)}...${keyToSave.slice(-4)}` : "●●●●●●";
+        setAiKeysStatus((prev) => ({
+          ...prev,
+          [provider]: { configured: true, has_custom_key: true, is_default: false, masked },
+        }));
+        if (provider === "gemini") {
+          setGeminiApiKey("");
+          try { await supabase.auth.updateUser({ data: { gemini_api_key: keyToSave } }); } catch {}
+        } else if (provider === "groq") setGroqApiKey("");
+        else if (provider === "cerebras") setCerebrasApiKey("");
+        else if (provider === "openrouter") setOpenrouterApiKey("");
+        else if (provider === "nvidia") setNvidiaApiKey("");
+        else if (provider === "fish_audio") {
+          setFishAudioApiKey("");
+          setFishKeyConfigured(true);
+          setMaskedFishKey(masked);
+        }
+        showToast(`${provider.toUpperCase()} shaxsiy kaliti muvaffaqiyatli saqlandi va faollashtirildi ✓`);
+      } else {
+        showToast(res.message || "Kalitni saqlashda xatolik");
+      }
+    } catch (e: any) {
+      showToast(normalizeApiError(e, "Kalitni saqlashda xatolik"));
+    } finally {
+      setSavingKey(false);
+    }
+  };
+
+  // Shaxsiy kalitni o'chirish va tizim standartiga qaytarish
+  const handleDeleteApiKey = async (provider: string) => {
+    try {
+      const res = await backendService.deleteAiKey(provider);
+      if (res.ok) {
+        setAiKeysStatus((prev) => ({
+          ...prev,
+          [provider]: { configured: true, has_custom_key: false, is_default: true, masked: "" },
+        }));
+        if (provider === "gemini") setGeminiApiKey("");
+        else if (provider === "groq") setGroqApiKey("");
+        else if (provider === "cerebras") setCerebrasApiKey("");
+        else if (provider === "openrouter") setOpenrouterApiKey("");
+        else if (provider === "nvidia") setNvidiaApiKey("");
+        else if (provider === "fish_audio") {
+          setFishAudioApiKey("");
+          setMaskedFishKey("");
+          setFishKeyConfigured(true);
+        }
+        showToast(`${provider.toUpperCase()} shaxsiy kaliti o'chirildi. Tizim standarti faol ✓`);
+      } else {
+        showToast(res.error || "Kalitni o'chirishda xatolik");
+      }
+    } catch {
+      showToast("Kalitni o'chirishda xatolik yuz berdi");
     }
   };
 
@@ -981,6 +1085,229 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       setConfirmPassword("");
     } catch (err: any) {
       showToast(err.message || "Parolni o'zgartirib bo'lmadi");
+    }
+  };
+
+  // Telegram bog'lash (OTP himoyalangan)
+  const handleOpenTelegramModal = async () => {
+    setTelegramModalOpen(true);
+    setTelegramOtpLoading(true);
+    setTelegramOtpCopied(false);
+    try {
+      const res = await backendService.startTelegramLink(currentUser?.id);
+      if (res && res.ok && res.otp) {
+        setTelegramOtp(res.otp);
+        setTelegramDeepLink(
+          res.deep_link ||
+            `https://t.me/${res.bot_username || "Misa_ai_agent_bot"}?start=${res.link_token || "link"}`
+        );
+        setTelegramRequestId(res.request_id || "");
+      } else {
+        const errMsg = res?.error || "Telegram ulanish kodini serverdan olib bo'lmadi";
+        showToast(errMsg);
+      }
+    } catch (err: any) {
+      showToast(normalizeApiError(err, "Telegram ulanish kodini olishda xatolik yuz berdi"));
+    } finally {
+      setTelegramOtpLoading(false);
+    }
+  };
+
+  // Telegram modal ochilganda botdan OTP tasdiqlanishini avtomatik tinglash
+  useEffect(() => {
+    if (!telegramModalOpen) return;
+    let isSubscribed = true;
+
+    // 1. Jonli WebSocket bildirishnomasi
+    const unsub = backendService.onWsMessage(async (msg: any) => {
+      if (!isSubscribed) return;
+      const type = msg?.type;
+      if (type === "PAIRING_VERIFIED" || type === "TELEGRAM_CONNECTED") {
+        const verifiedUsername =
+          (msg.telegram_username || msg.username || telegramUsernameInput || "").replace(/^@/, "") || "faol";
+        const verifiedId = msg.telegram_user_id || Date.now();
+
+        if (currentUser?.id) {
+          await supabase.from("telegram_links").upsert(
+            {
+              user_id: currentUser.id,
+              telegram_user_id: verifiedId,
+              telegram_username: verifiedUsername,
+              first_name: firstName || undefined,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "telegram_user_id" }
+          );
+        }
+        localStorage.setItem("misa_linked_telegram", verifiedUsername);
+        setTelegramAcc({
+          ok: true,
+          is_linked: true,
+          link: {
+            telegram_username: verifiedUsername,
+            telegram_user_id: verifiedId,
+            misa_user_id: currentUser?.id || "user",
+          } as any,
+        });
+        setTelegramModalOpen(false);
+        showToast(`🎉 Telegram (@${verifiedUsername}) hisobingizga muvaffaqiyatli bog'landi! ✓`);
+      }
+    });
+
+    // 2. Status polling tekshiruvi (har 2.5 soniyada)
+    const interval = setInterval(async () => {
+      if (!isSubscribed) return;
+      try {
+        const st = await backendService.getTelegramLinkStatus(
+          telegramRequestId || undefined,
+          currentUser?.id
+        );
+        if (st && (st.is_linked || st.status === "VERIFIED")) {
+          const verifiedUsername =
+            (st.link?.telegram_username || telegramUsernameInput || "").replace(/^@/, "") || "faol";
+          const verifiedId = st.link?.telegram_user_id || Date.now();
+          if (currentUser?.id) {
+            await supabase.from("telegram_links").upsert(
+              {
+                user_id: currentUser.id,
+                telegram_user_id: verifiedId,
+                telegram_username: verifiedUsername,
+                first_name: firstName || undefined,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "telegram_user_id" }
+            );
+          }
+          localStorage.setItem("misa_linked_telegram", verifiedUsername);
+          setTelegramAcc(st);
+          setTelegramModalOpen(false);
+          showToast(`🎉 Telegram (@${verifiedUsername}) hisobingizga muvaffaqiyatli bog'landi! ✓`);
+        }
+      } catch {}
+    }, 2500);
+
+    return () => {
+      isSubscribed = false;
+      unsub();
+      clearInterval(interval);
+    };
+  }, [telegramModalOpen, telegramRequestId, currentUser?.id, firstName, telegramUsernameInput]);
+
+  // Telegram bog'lash: Faqat OTP tasdiqlangach ulanadi (Zero-Trust 2FA)
+  const handleLinkTelegram = async () => {
+    const clean = telegramUsernameInput.trim().replace(/^@/, "");
+    if (!clean) {
+      showToast("Telegram username kiriting");
+      return;
+    }
+    setTelegramLinking(true);
+    try {
+      const res = await backendService.startTelegramLink(currentUser?.id);
+      if (res && res.ok && res.otp) {
+        setTelegramOtp(res.otp);
+        setTelegramDeepLink(
+          res.deep_link ||
+            `https://t.me/${res.bot_username || "Misa_ai_agent_bot"}?start=${res.link_token || "link"}`
+        );
+        setTelegramRequestId(res.request_id || "");
+      }
+      showToast(`@${clean} hisobini ulash uchun botdagi tugmani bosing yoki kodni yuboring!`);
+    } catch (err: any) {
+      showToast(err.message || "Bog'lash so'rovida xatolik");
+    } finally {
+      setTelegramLinking(false);
+    }
+  };
+
+  const handleUnlinkTelegram = async () => {
+    if (!window.confirm("Haqiqatan ham Telegram bog'lanishini uzmoqchimisiz?")) return;
+    try {
+      if (currentUser?.id) {
+        await supabase
+          .from("telegram_links")
+          .delete()
+          .eq("user_id", currentUser.id);
+      }
+      localStorage.removeItem("misa_linked_telegram");
+      await backendService.unlinkTelegramAccount().catch(() => {});
+      setTelegramAcc(null);
+      setTelegramUsernameInput("");
+      showToast("Telegram hisobingiz uzildi");
+    } catch {
+      showToast("Uzishda xatolik yuz berdi");
+    }
+  };
+
+  const refreshUserIdentities = async () => {
+    try {
+      const { data, error } = await supabase.auth.getUserIdentities();
+      if (!error && data?.identities) {
+        setUserIdentities(data.identities);
+      }
+    } catch {}
+  };
+
+  const handleLinkGoogle = async () => {
+    try {
+      setLinkingProvider("google");
+      const res = await backendService.linkGoogleAccount();
+      if (!res.ok) {
+        showToast(res.error || "Google hisobini bog'lashda xatolik");
+      } else if (res.url) {
+        showToast("Google orqali tasdiqlash oynasi ochildi...");
+        await backendService.openExternalUrl(res.url);
+      }
+    } catch (err: any) {
+      showToast(err.message || "Xatolik yuz berdi");
+    } finally {
+      setLinkingProvider(null);
+    }
+  };
+
+  const handleUnlinkGoogle = async () => {
+    if (!window.confirm("Haqiqatan ham Google hisobini uzmoqchimisiz?")) return;
+    try {
+      const res = await backendService.unlinkOAuthAccount("google");
+      if (res.ok) {
+        showToast("Google hisobi muvaffaqiyatli uzildi ✓");
+        await refreshUserIdentities();
+      } else {
+        showToast(res.error || "Google hisobini uzishda xatolik");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Xatolik yuz berdi");
+    }
+  };
+
+  const handleLinkGithub = async () => {
+    try {
+      setLinkingProvider("github");
+      const res = await backendService.linkGitHubAccount();
+      if (!res.ok) {
+        showToast(res.error || "GitHub hisobini bog'lashda xatolik");
+      } else if (res.url) {
+        showToast("GitHub orqali tasdiqlash oynasi ochildi...");
+        await backendService.openExternalUrl(res.url);
+      }
+    } catch (err: any) {
+      showToast(err.message || "GitHub hisobini bog'lashda xatolik");
+    } finally {
+      setLinkingProvider(null);
+    }
+  };
+
+  const handleUnlinkGithub = async () => {
+    if (!window.confirm("Haqiqatan ham GitHub hisobini uzmoqchimisiz?")) return;
+    try {
+      const res = await backendService.unlinkOAuthAccount("github");
+      if (res.ok) {
+        showToast("GitHub hisobi muvaffaqiyatli uzildi ✓");
+        await refreshUserIdentities();
+      } else {
+        showToast(res.error || "GitHub hisobini uzishda xatolik");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Xatolik yuz berdi");
     }
   };
 
@@ -1081,23 +1408,83 @@ export const AccountPage: React.FC<AccountPageProps> = ({
               >
                 {fullName}
               </h1>
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "5px",
-                  padding: "3px 10px",
-                  borderRadius: "999px",
-                  background: currentUser ? "rgba(16, 185, 129, 0.15)" : "rgba(147, 3, 197, 0.2)",
-                  border: currentUser ? "1px solid rgba(52, 211, 153, 0.35)" : "1px solid rgba(192, 76, 253, 0.35)",
-                  color: currentUser ? "#34D399" : "#E8B3FF",
-                  fontSize: "11px",
-                  fontWeight: 600,
-                }}
-              >
-                <SparklesIcon size={11} color="currentColor" />
-                <span>{currentUser ? "Google orqali faol" : "Mahalliy Agent"}</span>
-              </span>
+              {(() => {
+                if (!currentUser) {
+                  return (
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "5px",
+                        padding: "3px 10px",
+                        borderRadius: "999px",
+                        background: "rgba(147, 3, 197, 0.2)",
+                        border: "1px solid rgba(192, 76, 253, 0.35)",
+                        color: "#E8B3FF",
+                        fontSize: "11px",
+                        fontWeight: 600,
+                      }}
+                    >
+                      <SparklesIcon size={11} color="currentColor" />
+                      <span>Mahalliy Agent</span>
+                    </span>
+                  );
+                }
+                const p = (currentUser.provider || "").toLowerCase();
+                const linkedTg = localStorage.getItem("misa_linked_telegram") || (currentUser as any)?.telegram_username;
+
+                let label = "Faol hisob";
+                let color = "#34D399";
+                let bg = "rgba(16, 185, 129, 0.15)";
+                let border = "1px solid rgba(52, 211, 153, 0.35)";
+
+                if (p === "google" && linkedTg) {
+                  label = `Google & Telegram (@${linkedTg})`;
+                  color = "#38BDF8";
+                  bg = "rgba(56, 189, 248, 0.15)";
+                  border = "1px solid rgba(56, 189, 248, 0.35)";
+                } else if (p === "google") {
+                  label = "Google orqali faol";
+                  color = "#34D399";
+                  bg = "rgba(16, 185, 129, 0.15)";
+                  border = "1px solid rgba(52, 211, 153, 0.35)";
+                } else if (p === "telegram") {
+                  label = "Telegram orqali faol";
+                  color = "#38BDF8";
+                  bg = "rgba(56, 189, 248, 0.15)";
+                  border = "1px solid rgba(56, 189, 248, 0.35)";
+                } else if (p === "github") {
+                  label = "GitHub orqali faol";
+                  color = "#C084FC";
+                  bg = "rgba(192, 76, 253, 0.15)";
+                  border = "1px solid rgba(192, 76, 253, 0.35)";
+                } else {
+                  label = "Email orqali faol";
+                  color = "#60A5FA";
+                  bg = "rgba(96, 165, 250, 0.15)";
+                  border = "1px solid rgba(96, 165, 250, 0.35)";
+                }
+
+                return (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "5px",
+                      padding: "3px 10px",
+                      borderRadius: "999px",
+                      background: bg,
+                      border,
+                      color,
+                      fontSize: "11px",
+                      fontWeight: 600,
+                    }}
+                  >
+                    <SparklesIcon size={11} color="currentColor" />
+                    <span>{label}</span>
+                  </span>
+                );
+              })()}
             </div>
 
             <div
@@ -1193,7 +1580,8 @@ export const AccountPage: React.FC<AccountPageProps> = ({
             { id: "profile", label: "Shaxsiy profil", icon: UserIcon },
             { id: "voice_ai", label: "Misa AI va Ovoz", icon: VolumeIcon },
             { id: "appearance", label: "Tashqi ko'rinish", icon: SettingsIcon },
-            { id: "security", label: "Xavfsizlik va Xizmatlar", icon: ShieldIcon },
+            { id: "security", label: "Xavfsizlik va Kalitlar", icon: ShieldIcon },
+            { id: "system_hub", label: "Tizim Ulanishlari", icon: LaptopIcon },
           ] as { id: ProfileTab; label: string; icon: any }[]
         ).map((t) => {
           const active = activeTab === t.id;
@@ -2427,19 +2815,40 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                     </div>
                   </div>
                   {fishKeyConfigured && (
-                    <span
-                      style={{
-                        fontSize: "11px",
-                        padding: "3px 10px",
-                        borderRadius: "999px",
-                        background: "rgba(16, 185, 129, 0.15)",
-                        border: "1px solid rgba(52, 211, 153, 0.35)",
-                        color: "#34D399",
-                        fontWeight: 600,
-                      }}
-                    >
-                      Faol: {maskedFishKey || "sk-fish-... ✓"}
-                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          padding: "3px 10px",
+                          borderRadius: "999px",
+                          background: maskedFishKey ? "rgba(16, 185, 129, 0.15)" : "rgba(147, 3, 197, 0.15)",
+                          border: maskedFishKey ? "1px solid rgba(52, 211, 153, 0.35)" : "1px solid rgba(192, 76, 253, 0.35)",
+                          color: maskedFishKey ? "#34D399" : "#E8B3FF",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {maskedFishKey ? `Shaxsiy kalit: ${maskedFishKey}` : "⚡ Tizim standarti faol"}
+                      </span>
+                      {maskedFishKey && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteApiKey("fish_audio")}
+                          style={{
+                            background: "rgba(239, 68, 68, 0.15)",
+                            border: "1px solid rgba(239, 68, 68, 0.35)",
+                            color: "#F87171",
+                            borderRadius: "8px",
+                            padding: "3px 8px",
+                            fontSize: "10.5px",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                          title="Shaxsiy kalitni o'chirish va tizim standartiga qaytish"
+                        >
+                          O'chirish
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -2449,7 +2858,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       type={showFishKey ? "text" : "password"}
                       value={fishAudioApiKey}
                       onChange={(e) => setFishAudioApiKey(e.target.value)}
-                      placeholder={fishKeyConfigured ? "Yangi Fish Audio kalitini kiritish (sk-fish-...)" : "Fish Audio API kaliti (sk-fish-...)"}
+                      placeholder={maskedFishKey ? "Yangi Fish Audio kalitini kiritish (sk-fish-...)" : "Fish Audio API kaliti (ixtiyoriy, sk-fish-...)"}
                       className="misa-glass-input"
                       style={{
                         width: "100%",
@@ -2480,8 +2889,26 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleSaveProfile()}
-                    disabled={savingProfile || !fishAudioApiKey.trim()}
+                    onClick={() => handleTestCurrentApiKey("fish_audio")}
+                    disabled={testingKey}
+                    style={{
+                      padding: "10px 14px",
+                      borderRadius: "12px",
+                      background: "rgba(255, 255, 255, 0.08)",
+                      border: "1px solid rgba(255, 255, 255, 0.15)",
+                      color: "#E2E8F0",
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {testingKey ? "..." : "Tekshirish"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveSingleAiKey("fish_audio")}
+                    disabled={savingKey || !fishAudioApiKey.trim()}
                     style={{
                       padding: "10px 18px",
                       borderRadius: "12px",
@@ -2494,7 +2921,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       whiteSpace: "nowrap",
                     }}
                   >
-                    Saqlash
+                    {savingKey ? "..." : "Saqlash"}
                   </button>
                 </div>
               </div>
@@ -2634,54 +3061,110 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                 </div>
               </div>
 
-              {/* AI Provayderlar API Kalitlari Boshqaruvi */}
+              {/* Mening API kalitlarim va AI Provayderlar */}
               <div
                 style={{
-                  padding: "16px",
-                  borderRadius: "16px",
+                  padding: "18px",
+                  borderRadius: "18px",
                   background: "rgba(2, 6, 14, 0.45)",
                   border: "1px solid rgba(255, 255, 255, 0.08)",
                   display: "flex",
                   flexDirection: "column",
-                  gap: "12px",
+                  gap: "14px",
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
                   <div>
-                    <div style={{ fontSize: "13px", fontWeight: 700, color: "#FFFFFF" }}>
-                      AI Provayderlari va Shaxsiy API Kalitlar
+                    <div style={{ fontSize: "14px", fontWeight: 700, color: "#FFFFFF", display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span>🔑</span>
+                      <span>Mening API kalitlarim va AI Provayderlar</span>
                     </div>
-                    <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
-                      Groq, Cerebras, Gemini, OpenRouter va NVIDIA API kalitlarini sozlash
+                    <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                      Shaxsiy API kalitlaringizni boshqarish, tekshirish va tizim standartlaridan foydalanish
                     </div>
                   </div>
-                  {/* Holat indikatori */}
-                  <span
-                    style={{
-                      fontSize: "11px",
-                      padding: "3px 10px",
-                      borderRadius: "12px",
-                      background: aiKeysStatus[activeKeyProvider]?.configured
-                        ? "rgba(16, 185, 129, 0.15)"
-                        : "rgba(234, 179, 8, 0.15)",
-                      color: aiKeysStatus[activeKeyProvider]?.configured ? "#34D399" : "#FBBF24",
-                      fontWeight: 600,
-                      border: aiKeysStatus[activeKeyProvider]?.configured
-                        ? "1px solid rgba(16, 185, 129, 0.3)"
-                        : "1px solid rgba(234, 179, 8, 0.3)",
-                    }}
-                  >
-                    {aiKeysStatus[activeKeyProvider]?.configured
-                      ? `● Faol: ${aiKeysStatus[activeKeyProvider].masked}`
-                      : "○ Zaxira / Kiritilmagan"}
-                  </span>
+
+                  {/* Tanlangan provayder holat indikatori */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    {aiKeysStatus[activeKeyProvider]?.has_custom_key ? (
+                      <>
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            padding: "4px 10px",
+                            borderRadius: "12px",
+                            background: "rgba(16, 185, 129, 0.15)",
+                            color: "#34D399",
+                            fontWeight: 600,
+                            border: "1px solid rgba(16, 185, 129, 0.35)",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "5px",
+                          }}
+                        >
+                          <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#34D399" }} />
+                          Shaxsiy kalit: {aiKeysStatus[activeKeyProvider].masked || "Ulangan"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteApiKey(activeKeyProvider)}
+                          style={{
+                            padding: "3px 8px",
+                            borderRadius: "8px",
+                            background: "rgba(239, 68, 68, 0.15)",
+                            border: "1px solid rgba(239, 68, 68, 0.35)",
+                            color: "#F87171",
+                            fontSize: "10.5px",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            transition: "all 0.15s ease",
+                          }}
+                          title="Shaxsiy kalitni o'chirish va tizim standartiga qaytarish"
+                        >
+                          O'chirish
+                        </button>
+                      </>
+                    ) : aiKeysStatus[activeKeyProvider]?.is_default ? (
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          padding: "4px 10px",
+                          borderRadius: "12px",
+                          background: "rgba(99, 102, 241, 0.15)",
+                          color: "#A5B4FC",
+                          fontWeight: 600,
+                          border: "1px solid rgba(99, 102, 241, 0.35)",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "5px",
+                        }}
+                      >
+                        <span>⚡</span>
+                        Tizim standarti faol
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          padding: "4px 10px",
+                          borderRadius: "12px",
+                          background: "rgba(234, 179, 8, 0.12)",
+                          color: "#FBBF24",
+                          fontWeight: 600,
+                          border: "1px solid rgba(234, 179, 8, 0.25)",
+                        }}
+                      >
+                        ○ Kalit kiritilmagan
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                {/* Provayder Tanlash Tablari */}
+                {/* Provayder Tanlash Tablari (6 ta provayder) */}
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(5, 1fr)",
+                    gridTemplateColumns: "repeat(6, 1fr)",
                     gap: "6px",
                     background: "rgba(2, 6, 14, 0.6)",
                     padding: "4px",
@@ -2695,24 +3178,30 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                     { id: "cerebras" as const, label: "Cerebras", icon: "🧠" },
                     { id: "openrouter" as const, label: "OpenRouter", icon: "🌐" },
                     { id: "nvidia" as const, label: "NVIDIA", icon: "🟢" },
+                    { id: "fish_audio" as const, label: "Fish Audio", icon: "🎙️" },
                   ].map((p) => {
                     const isSelected = activeKeyProvider === p.id;
-                    const isConfigured = aiKeysStatus[p.id]?.configured;
+                    const status = aiKeysStatus[p.id];
+                    const hasCustom = status?.has_custom_key;
+                    const isDefault = status?.is_default;
                     return (
                       <button
                         key={p.id}
                         type="button"
-                        onClick={() => setActiveKeyProvider(p.id)}
+                        onClick={() => {
+                          setActiveKeyProvider(p.id);
+                          setShowCurrentApiKey(false);
+                        }}
                         style={{
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
                           gap: "5px",
-                          padding: "7px 6px",
+                          padding: "8px 6px",
                           borderRadius: "8px",
                           background: isSelected ? "rgba(147, 3, 197, 0.45)" : "transparent",
                           border: isSelected ? "1px solid #C04CFD" : "1px solid transparent",
-                          color: isSelected ? "#FFFFFF" : isConfigured ? "#34D399" : "var(--text-secondary)",
+                          color: isSelected ? "#FFFFFF" : hasCustom ? "#34D399" : isDefault ? "#A5B4FC" : "var(--text-secondary)",
                           fontSize: "11.5px",
                           fontWeight: isSelected ? 700 : 500,
                           cursor: "pointer",
@@ -2721,9 +3210,11 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       >
                         <span>{p.icon}</span>
                         <span>{p.label}</span>
-                        {isConfigured && (
-                          <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#34D399" }} />
-                        )}
+                        {hasCustom ? (
+                          <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#34D399" }} title="Shaxsiy kalit ulangan" />
+                        ) : isDefault ? (
+                          <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#818CF8" }} title="Tizim standarti faol" />
+                        ) : null}
                       </button>
                     );
                   })}
@@ -2731,6 +3222,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
 
                 {/* Faol Provayder Maydoni */}
                 {(() => {
+                  const currentStatus = aiKeysStatus[activeKeyProvider];
                   const info = {
                     gemini: {
                       title: "Google Gemini AI (2.0 Flash / 1.5 Pro)",
@@ -2738,9 +3230,11 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       url: "https://aistudio.google.com/app/apikey",
                       val: geminiApiKey,
                       setVal: setGeminiApiKey,
-                      placeholder: aiKeysStatus.gemini?.configured
-                        ? `Ulangan: ${aiKeysStatus.gemini.masked} (Yangi kalit kiritish mumkin)`
-                        : "AIzaSy... Google Gemini kalitini kiriting",
+                      placeholder: currentStatus?.has_custom_key
+                        ? `Yangi Gemini kalitini kiritish (${currentStatus.masked})`
+                        : currentStatus?.is_default
+                        ? "Tizim standarti faol. Yangi shaxsiy Gemini kalitini kiritishingiz mumkin..."
+                        : "AIzaSy... Google Gemini API kalitini kiriting",
                     },
                     groq: {
                       title: "Groq Cloud LPU (Llama 3.3 70B — 300 tok/sek)",
@@ -2748,8 +3242,10 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       url: "https://console.groq.com/keys",
                       val: groqApiKey,
                       setVal: setGroqApiKey,
-                      placeholder: aiKeysStatus.groq?.configured
-                        ? `Ulangan: ${aiKeysStatus.groq.masked} (Yangi kalit kiritish mumkin)`
+                      placeholder: currentStatus?.has_custom_key
+                        ? `Yangi Groq kalitini kiritish (${currentStatus.masked})`
+                        : currentStatus?.is_default
+                        ? "Tizim standarti faol. Yangi shaxsiy Groq kalitini kiritishingiz mumkin..."
                         : "gsk_... Groq API kalitini kiriting",
                     },
                     cerebras: {
@@ -2758,8 +3254,10 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       url: "https://cloud.cerebras.ai",
                       val: cerebrasApiKey,
                       setVal: setCerebrasApiKey,
-                      placeholder: aiKeysStatus.cerebras?.configured
-                        ? `Ulangan: ${aiKeysStatus.cerebras.masked} (Yangi kalit kiritish mumkin)`
+                      placeholder: currentStatus?.has_custom_key
+                        ? `Yangi Cerebras kalitini kiritish (${currentStatus.masked})`
+                        : currentStatus?.is_default
+                        ? "Tizim standarti faol. Yangi shaxsiy Cerebras kalitini kiritishingiz mumkin..."
                         : "csk-... Cerebras API kalitini kiriting",
                     },
                     openrouter: {
@@ -2768,8 +3266,10 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       url: "https://openrouter.ai/keys",
                       val: openrouterApiKey,
                       setVal: setOpenrouterApiKey,
-                      placeholder: aiKeysStatus.openrouter?.configured
-                        ? `Ulangan: ${aiKeysStatus.openrouter.masked} (Yangi kalit kiritish mumkin)`
+                      placeholder: currentStatus?.has_custom_key
+                        ? `Yangi OpenRouter kalitini kiritish (${currentStatus.masked})`
+                        : currentStatus?.is_default
+                        ? "Tizim standarti faol. Yangi shaxsiy OpenRouter kalitini kiritishingiz mumkin..."
                         : "sk-or-v1-... OpenRouter kalitini kiriting",
                     },
                     nvidia: {
@@ -2778,14 +3278,30 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       url: "https://build.nvidia.com",
                       val: nvidiaApiKey,
                       setVal: setNvidiaApiKey,
-                      placeholder: aiKeysStatus.nvidia?.configured
-                        ? `Ulangan: ${aiKeysStatus.nvidia.masked} (Yangi kalit kiritish mumkin)`
+                      placeholder: currentStatus?.has_custom_key
+                        ? `Yangi NVIDIA kalitini kiritish (${currentStatus.masked})`
+                        : currentStatus?.is_default
+                        ? "Tizim standarti faol. Yangi shaxsiy NVIDIA kalitini kiritishingiz mumkin..."
                         : "nvapi-... NVIDIA NIM kalitini kiriting",
+                    },
+                    fish_audio: {
+                      title: "Fish Audio API (Yuqori sifatli ovoz sintezi)",
+                      hint: "Rasmiy API kalit: fish.audio (Account -> API Keys)",
+                      url: "https://fish.audio",
+                      val: fishAudioApiKey,
+                      setVal: setFishAudioApiKey,
+                      placeholder: currentStatus?.has_custom_key
+                        ? `Yangi Fish Audio kalitini kiritish (${currentStatus.masked})`
+                        : currentStatus?.is_default
+                        ? "Tizim standarti faol. Yangi shaxsiy Fish Audio kalitini kiritishingiz mumkin..."
+                        : "sk-... Fish Audio API kalitini kiriting",
                     },
                   }[activeKeyProvider];
 
+                  const hasInput = Boolean(info.val.trim());
+
                   return (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11.5px" }}>
                         <span style={{ color: "#E8B3FF", fontWeight: 600 }}>{info.title}</span>
                         <a
@@ -2800,21 +3316,48 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                         </a>
                       </div>
 
-                      <div style={{ display: "flex", gap: "8px" }}>
-                        <input
-                          type="password"
-                          value={info.val}
-                          onChange={(e) => info.setVal(e.target.value)}
-                          placeholder={info.placeholder}
-                          className="misa-glass-input"
-                          style={{ flex: 1, padding: "9px 14px", borderRadius: "12px", fontSize: "12.5px" }}
-                        />
+                      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                        <div style={{ position: "relative", flex: 1 }}>
+                          <input
+                            type={showCurrentApiKey ? "text" : "password"}
+                            value={info.val}
+                            onChange={(e) => info.setVal(e.target.value)}
+                            placeholder={info.placeholder}
+                            className="misa-glass-input"
+                            style={{
+                              width: "100%",
+                              padding: "10px 40px 10px 14px",
+                              borderRadius: "12px",
+                              fontSize: "12.5px",
+                              boxSizing: "border-box",
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowCurrentApiKey(!showCurrentApiKey)}
+                            style={{
+                              position: "absolute",
+                              right: "10px",
+                              top: "50%",
+                              transform: "translateY(-50%)",
+                              background: "transparent",
+                              border: "none",
+                              color: "var(--text-secondary)",
+                              cursor: "pointer",
+                              fontSize: "12px",
+                            }}
+                            title={showCurrentApiKey ? "Yashirish" : "Ko'rsatish"}
+                          >
+                            {showCurrentApiKey ? "👁" : "👁‍🗨"}
+                          </button>
+                        </div>
+
                         <button
                           type="button"
                           onClick={() => handleTestCurrentApiKey(activeKeyProvider)}
                           disabled={testingKey}
                           style={{
-                            padding: "9px 16px",
+                            padding: "10px 16px",
                             borderRadius: "12px",
                             background: "rgba(147, 3, 197, 0.25)",
                             border: "1px solid rgba(192, 76, 253, 0.4)",
@@ -2823,13 +3366,40 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                             fontWeight: 600,
                             cursor: "pointer",
                             whiteSpace: "nowrap",
+                            transition: "all 0.15s ease",
                           }}
                         >
-                          {testingKey ? "Tekshirilmoqda..." : "Tekshirish"}
+                          {testingKey ? "Tekshirilmoqda..." : "Tekshirib ko'rish"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleSaveSingleAiKey(activeKeyProvider)}
+                          disabled={savingKey || !hasInput}
+                          style={{
+                            padding: "10px 18px",
+                            borderRadius: "12px",
+                            background: hasInput ? "#9303C5" : "rgba(255, 255, 255, 0.08)",
+                            border: "none",
+                            color: "#FFFFFF",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            cursor: hasInput ? "pointer" : "default",
+                            whiteSpace: "nowrap",
+                            transition: "all 0.15s ease",
+                          }}
+                        >
+                          {savingKey ? "..." : "Saqlash"}
                         </button>
                       </div>
-                      <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
-                        💡 {info.hint}
+
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", color: "var(--text-secondary)" }}>
+                        <span>💡 {info.hint}</span>
+                        {currentStatus?.has_custom_key && (
+                          <span style={{ color: "#34D399" }}>
+                            Shaxsiy kalit faol: {currentStatus.masked}
+                          </span>
+                        )}
                       </div>
                     </div>
                   );
@@ -3287,58 +3857,200 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                 </div>
                 <div>
                   <h2 style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF", margin: 0 }}>
-                    Ulangan xizmatlar va Integratsiyalar
+                    Ulangan hisoblar va Akkauntlarni bog'lash
                   </h2>
                   <p style={{ fontSize: "11.5px", color: "var(--text-secondary)", margin: 0 }}>
-                    Tashqi platformalar bilan sinxronizatsiya
+                    Google, GitHub va Telegram hisoblaringizni yagona profilga bog'lash va boshqarish
                   </p>
                 </div>
               </div>
 
-              {/* Google Workspace */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "12px 16px",
-                  borderRadius: "14px",
-                  background: "rgba(2, 6, 14, 0.48)",
-                  border: "1px solid rgba(255, 255, 255, 0.07)",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  <GoogleIcon size={18} />
-                  <div>
-                    <div style={{ fontSize: "13px", fontWeight: 600, color: "#FFFFFF" }}>
-                      Google Workspace
+              {/* 1. Google Workspace */}
+              {(() => {
+                const googleId = userIdentities.find((id) => id.provider === "google");
+                const isGoogle = Boolean(
+                  googleId ||
+                    currentUser?.provider === "google" ||
+                    (currentUser?.email && currentUser.email.includes("@gmail.com"))
+                );
+                const googleEmail =
+                  googleId?.identity_data?.email || currentUser?.email || "Google hisobi";
+                return (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "12px 16px",
+                      borderRadius: "14px",
+                      background: "rgba(2, 6, 14, 0.48)",
+                      border: "1px solid rgba(255, 255, 255, 0.07)",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      <GoogleIcon size={18} />
+                      <div>
+                        <div style={{ fontSize: "13px", fontWeight: 600, color: "#FFFFFF" }}>
+                          Google Workspace
+                        </div>
+                        <div style={{ fontSize: "11px", color: isGoogle ? "#4EDEA3" : "var(--text-secondary)" }}>
+                          {isGoogle ? `● Ulangan (${googleEmail})` : "Hisob hali bog'lanmagan"}
+                        </div>
+                      </div>
                     </div>
-                    <div style={{ fontSize: "11px", color: currentUser?.email ? "#4EDEA3" : "var(--text-secondary)" }}>
-                      {currentUser?.email ? `● Ulangan (${currentUser.email})` : "Hisob ulanmagan"}
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      {isGoogle ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleLinkGoogle}
+                            disabled={linkingProvider === "google"}
+                            style={{
+                              padding: "6px 12px",
+                              borderRadius: "10px",
+                              background: "rgba(255, 255, 255, 0.06)",
+                              border: "1px solid rgba(255, 255, 255, 0.12)",
+                              fontSize: "12px",
+                              color: "#F5F0FF",
+                              cursor: "pointer",
+                            }}
+                          >
+                            {linkingProvider === "google" ? "..." : "Qayta sinxronlash"}
+                          </button>
+                          {userIdentities.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={handleUnlinkGoogle}
+                              style={{
+                                padding: "6px 12px",
+                                borderRadius: "10px",
+                                background: "rgba(239, 68, 68, 0.15)",
+                                border: "1px solid rgba(239, 68, 68, 0.3)",
+                                color: "#F87171",
+                                fontSize: "12px",
+                                fontWeight: 600,
+                                cursor: "pointer",
+                              }}
+                            >
+                              Uzish
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleLinkGoogle}
+                          disabled={linkingProvider === "google"}
+                          className="misa-btn-violet"
+                          style={{
+                            padding: "6px 14px",
+                            borderRadius: "10px",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {linkingProvider === "google" ? "..." : "Bog'lash"}
+                        </button>
+                      )}
                     </div>
                   </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const res = await backendService.signInWithGoogle("link");
-                    if (res.url) await backendService.openExternalUrl(res.url);
-                  }}
-                  style={{
-                    padding: "6px 14px",
-                    borderRadius: "10px",
-                    background: "rgba(255, 255, 255, 0.06)",
-                    border: "1px solid rgba(255, 255, 255, 0.1)",
-                    fontSize: "12px",
-                    color: "#F5F0FF",
-                    cursor: "pointer",
-                  }}
-                >
-                  {currentUser?.email ? "Qayta sinxronlash" : "Ulash"}
-                </button>
-              </div>
+                );
+              })()}
 
-              {/* Telegram Bot */}
+              {/* 2. GitHub Account (OAuth) */}
+              {(() => {
+                const githubId = userIdentities.find((id) => id.provider === "github");
+                const isGithub = Boolean(githubId || currentUser?.provider === "github");
+                const ghUsername =
+                  githubId?.identity_data?.user_name ||
+                  githubId?.identity_data?.name ||
+                  githubId?.identity_data?.email ||
+                  "GitHub hisobi";
+                return (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "12px 16px",
+                      borderRadius: "14px",
+                      background: "rgba(2, 6, 14, 0.48)",
+                      border: "1px solid rgba(255, 255, 255, 0.07)",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      <GithubIcon size={18} color="#FFFFFF" />
+                      <div>
+                        <div style={{ fontSize: "13px", fontWeight: 600, color: "#FFFFFF" }}>
+                          GitHub Hisobi (OAuth)
+                        </div>
+                        <div style={{ fontSize: "11px", color: isGithub ? "#4EDEA3" : "var(--text-secondary)" }}>
+                          {isGithub ? `● Ulangan (@${ghUsername})` : "GitHub orqali kirish va akkauntni bog'lash"}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      {isGithub ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleLinkGithub}
+                            disabled={linkingProvider === "github"}
+                            style={{
+                              padding: "6px 12px",
+                              borderRadius: "10px",
+                              background: "rgba(255, 255, 255, 0.06)",
+                              border: "1px solid rgba(255, 255, 255, 0.12)",
+                              fontSize: "12px",
+                              color: "#F5F0FF",
+                              cursor: "pointer",
+                            }}
+                          >
+                            {linkingProvider === "github" ? "..." : "Qayta sinxronlash"}
+                          </button>
+                          {userIdentities.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={handleUnlinkGithub}
+                              style={{
+                                padding: "6px 12px",
+                                borderRadius: "10px",
+                                background: "rgba(239, 68, 68, 0.15)",
+                                border: "1px solid rgba(239, 68, 68, 0.3)",
+                                color: "#F87171",
+                                fontSize: "12px",
+                                fontWeight: 600,
+                                cursor: "pointer",
+                              }}
+                            >
+                              Uzish
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleLinkGithub}
+                          disabled={linkingProvider === "github"}
+                          className="misa-btn-violet"
+                          style={{
+                            padding: "6px 14px",
+                            borderRadius: "10px",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {linkingProvider === "github" ? "..." : "Bog'lash"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* 3. Telegram Bot */}
               <div
                 style={{
                   display: "flex",
@@ -3359,32 +4071,73 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                     <div
                       style={{
                         fontSize: "11px",
-                        color: telegramAcc?.is_linked ? "#4EDEA3" : "var(--text-secondary)",
+                        color: (telegramAcc?.is_linked || localStorage.getItem("misa_linked_telegram"))
+                          ? "#4EDEA3"
+                          : "var(--text-secondary)",
                       }}
                     >
-                      {telegramAcc?.is_linked
-                        ? `● Ulangan (@${telegramAcc.link?.telegram_username || "faol"})`
-                        : "Masofaviy xabarlar va bildirishnomalar"}
+                      {(telegramAcc?.is_linked || localStorage.getItem("misa_linked_telegram"))
+                        ? `● Ulangan (@${telegramAcc?.link?.telegram_username || localStorage.getItem("misa_linked_telegram") || "faol"})`
+                        : "Masofaviy xabarlar va bitta umumiy kirish"}
                     </div>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onNavigate && onNavigate("/telegram")}
-                  className="misa-btn-violet"
-                  style={{
-                    padding: "6px 14px",
-                    borderRadius: "10px",
-                    fontSize: "12px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  {telegramAcc?.is_linked ? "Boshqarish" : "Ulash"}
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  {(telegramAcc?.is_linked || localStorage.getItem("misa_linked_telegram")) ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleOpenTelegramModal}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: "10px",
+                          background: "rgba(56, 189, 248, 0.15)",
+                          border: "1px solid rgba(56, 189, 248, 0.35)",
+                          color: "#38BDF8",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                      >
+                        O'zgartirish
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleUnlinkTelegram}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: "10px",
+                          background: "rgba(239, 68, 68, 0.15)",
+                          border: "1px solid rgba(239, 68, 68, 0.3)",
+                          color: "#F87171",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                      >
+                        Uzish
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleOpenTelegramModal}
+                      className="misa-btn-violet"
+                      style={{
+                        padding: "6px 14px",
+                        borderRadius: "10px",
+                        fontSize: "12px",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Ulash
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {/* GitHub Integration */}
+              {/* 4. GitHub Repozitoriyalar */}
               <div
                 style={{
                   display: "flex",
@@ -3398,10 +4151,10 @@ export const AccountPage: React.FC<AccountPageProps> = ({
               >
                 <div>
                   <div style={{ fontSize: "13px", fontWeight: 600, color: "#FFFFFF" }}>
-                    GitHub Repozitoriyalar
+                    GitHub Repozitoriyalar (PAT Token)
                   </div>
                   <div style={{ fontSize: "11px", color: githubToken ? "#4EDEA3" : "var(--text-secondary)" }}>
-                    {githubToken ? "● Token saqlangan" : "Kod baza va repozitoriyalar tahlili"}
+                    {githubToken ? "● Token saqlangan — repozitoriyalar tahlili faol" : "Kod baza va repozitoriyalar tahlili uchun token"}
                   </div>
                 </div>
                 <button
@@ -3418,7 +4171,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                     cursor: "pointer",
                   }}
                 >
-                  {githubToken ? "Yangilash" : "Ulash"}
+                  {githubToken ? "Yangilash" : "Token kiritish"}
                 </button>
               </div>
             </div>
@@ -3770,6 +4523,543 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                 }}
               >
                 Saqlash
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: TELEGRAM BOG'LASH (OTP HIMOYALANGAN) */}
+      {telegramModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 500,
+            background: "rgba(2, 6, 14, 0.85)",
+            backdropFilter: "blur(16px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px",
+          }}
+          onClick={() => setTelegramModalOpen(false)}
+        >
+          <div
+            className="misa-ultra-glass"
+            style={{
+              width: "100%",
+              maxWidth: "480px",
+              borderRadius: "24px",
+              padding: "26px",
+              background: "linear-gradient(135deg, rgba(20, 10, 36, 0.98) 0%, rgba(6, 3, 14, 0.98) 100%)",
+              border: "1px solid rgba(56, 189, 248, 0.4)",
+              boxShadow: "0 24px 60px rgba(0, 0, 0, 0.85), 0 0 35px rgba(56, 189, 248, 0.25)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "16px",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Sarlavha */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div
+                  style={{
+                    width: "42px",
+                    height: "42px",
+                    borderRadius: "12px",
+                    background: "rgba(56, 189, 248, 0.2)",
+                    border: "1px solid rgba(56, 189, 248, 0.4)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <TelegramIcon size={22} color="#38BDF8" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: "16.5px", fontWeight: 700, color: "#FFFFFF", margin: 0 }}>
+                    Telegram hisobini xavfsiz bog'lash
+                  </h3>
+                  <span style={{ fontSize: "11.5px", color: "#34D399", fontWeight: 600 }}>
+                    🔒 2FA / OTP himoyalangan ulanish
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTelegramModalOpen(false)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "rgba(255, 255, 255, 0.5)",
+                  fontSize: "18px",
+                  cursor: "pointer",
+                  padding: "4px",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <p style={{ fontSize: "12.5px", color: "#CBD5E1", margin: 0, lineHeight: 1.5 }}>
+              Begona shaxslar sizning nomingizdan kira olmasligi uchun Telegram botimiz orqali haqiqiy egalikni tasdiqlang:
+            </p>
+
+            {/* 6 xonali OTP ko'rsatish bloki */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "16px 20px",
+                borderRadius: "16px",
+                background: "rgba(56, 189, 248, 0.08)",
+                border: "1.5px solid rgba(56, 189, 248, 0.45)",
+                boxShadow: "0 0 25px rgba(56, 189, 248, 0.15)",
+              }}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                <span style={{ fontSize: "11px", color: "#38BDF8", fontWeight: 600, textTransform: "uppercase" }}>
+                  Bir martalik tasdiqlash kodi (OTP):
+                </span>
+                <span
+                  style={{
+                    fontSize: "26px",
+                    fontWeight: 800,
+                    letterSpacing: "6px",
+                    color: "#FFFFFF",
+                    fontFamily: "monospace",
+                  }}
+                >
+                  {telegramOtpLoading ? "Yuklanmoqda..." : telegramOtp || "------"}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (telegramOtp) {
+                    navigator.clipboard.writeText(telegramOtp);
+                    setTelegramOtpCopied(true);
+                    setTimeout(() => setTelegramOtpCopied(false), 2000);
+                    showToast("Kod nusxalandi!");
+                  }
+                }}
+                disabled={telegramOtpLoading || !telegramOtp}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: "10px",
+                  background: telegramOtpCopied ? "rgba(16, 185, 129, 0.25)" : "rgba(255, 255, 255, 0.1)",
+                  border: telegramOtpCopied ? "1px solid #10B981" : "1px solid rgba(255, 255, 255, 0.2)",
+                  color: telegramOtpCopied ? "#34D399" : "#F1F5F9",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                {telegramOtpCopied ? "✓ Nusxalandi" : "Nusxalash"}
+              </button>
+            </div>
+
+            {/* Asosiy harakat: Bot orqali tasdiqlash */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (telegramDeepLink) {
+                    await backendService.openExternalUrl(telegramDeepLink);
+                  } else {
+                    await backendService.openExternalUrl("https://t.me/Misa_ai_agent_bot?start=auth");
+                  }
+                }}
+                style={{
+                  width: "100%",
+                  padding: "13px 20px",
+                  background: "linear-gradient(135deg, #24A1DE 0%, #0284C7 100%)",
+                  border: "none",
+                  borderRadius: "14px",
+                  color: "#FFFFFF",
+                  fontSize: "13.5px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "10px",
+                  boxShadow: "0 4px 20px rgba(36, 161, 222, 0.4)",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                <TelegramIcon size={20} color="#FFFFFF" />
+                <span>🤖 @Misa_ai_agent_bot da tasdiqlash</span>
+              </button>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                  padding: "8px",
+                  fontSize: "12px",
+                  color: "#94A3B8",
+                }}
+              >
+                <span
+                  style={{
+                    width: "8px",
+                    height: "8px",
+                    borderRadius: "50%",
+                    background: "#38BDF8",
+                    boxShadow: "0 0 10px #38BDF8",
+                    animation: "pulse 1.5s infinite",
+                  }}
+                />
+                <span>Botda 'Boshlash' (/start) yoki kodni yuborishingiz kutilmoqda...</span>
+              </div>
+            </div>
+
+            {/* Qo'shimcha: Username kiritish (OTP himoyalangan) */}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
+                paddingTop: "10px",
+                borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <label style={{ fontSize: "11.5px", color: "#94A3B8" }}>
+                  Telegram @username kiritib kod olish:
+                </label>
+              </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <input
+                  type="text"
+                  placeholder="@username (masalan: @username)"
+                  value={telegramUsernameInput}
+                  onChange={(e) => setTelegramUsernameInput(e.target.value)}
+                  className="misa-glass-input"
+                  style={{
+                    flex: 1,
+                    padding: "10px 14px",
+                    borderRadius: "10px",
+                    fontSize: "12.5px",
+                    border: "1px solid rgba(255, 255, 255, 0.12)",
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleLinkTelegram}
+                  disabled={telegramLinking}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: "10px",
+                    background: "rgba(56, 189, 248, 0.12)",
+                    border: "1px solid rgba(56, 189, 248, 0.3)",
+                    color: "#38BDF8",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  {telegramLinking ? "..." : "Kod olish"}
+                </button>
+              </div>
+              <span style={{ fontSize: "11px", color: "#64748B", lineHeight: 1.4 }}>
+                🔒 Xavfsizlik: Begona shaxslar boshqaning Telegram hisobini ulab olmasligi uchun botda tasdiqlash shart.
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Tizim va Boshqaruv Ulanishlari Markazi (MISA-ROOT-020) */}
+      {activeTab === "system_hub" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          {/* Header Card */}
+          <div
+            className="misa-ultra-glass"
+            style={{
+              padding: "24px 28px",
+              borderRadius: "20px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              background: "rgba(24, 13, 36, 0.72)",
+              border: "1px solid rgba(192, 76, 253, 0.35)",
+            }}
+          >
+            <div>
+              <h3
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontSize: "18px",
+                  fontWeight: 700,
+                  color: "#FFFFFF",
+                  margin: "0 0 6px 0",
+                }}
+              >
+                Misa Tizim va Ulanishlar Markazi
+              </h3>
+              <p style={{ margin: 0, fontSize: "13px", color: "var(--text-secondary)", maxWidth: "620px" }}>
+                Barcha masofaviy boshqaruv, tashqi servislar, Telegram bot va apparat integratsiyalari bir joyda
+                jamlangan.
+              </p>
+            </div>
+            <span
+              style={{
+                fontSize: "12px",
+                fontWeight: 600,
+                padding: "6px 14px",
+                borderRadius: "999px",
+                background: "rgba(147, 3, 197, 0.22)",
+                border: "1px solid rgba(192, 76, 253, 0.4)",
+                color: "#E8B3FF",
+              }}
+            >
+              Yagona Boshqaruv Markazi
+            </span>
+          </div>
+
+          {/* Grid of 4 Consolidated Management Portals */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+              gap: "16px",
+            }}
+          >
+            {/* Telegram Bot */}
+            <div
+              className="misa-glass-card"
+              style={{
+                padding: "20px 22px",
+                borderRadius: "18px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                gap: "14px",
+                border: "1px solid rgba(56, 189, 248, 0.28)",
+              }}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <div
+                    style={{
+                      width: "38px",
+                      height: "38px",
+                      borderRadius: "12px",
+                      background: "rgba(56, 189, 248, 0.16)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <TelegramIcon size={20} color="#38BDF8" />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: "14.5px", fontWeight: 700, color: "#FFFFFF" }}>
+                      Telegram Integratsiyasi
+                    </h4>
+                    <span style={{ fontSize: "11px", color: "#38BDF8" }}>
+                      {telegramAcc?.is_linked ? "● Ulangan" : "Ulanmagan"}
+                    </span>
+                  </div>
+                </div>
+                <p style={{ margin: 0, fontSize: "12.5px", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                  Telegram orqali kompyuterni boshqarish, matnli topshiriqlar berish va masofadan hisobotlarni qabul qilish.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => onNavigate?.("/telegram")}
+                className="misa-btn-violet"
+                style={{
+                  padding: "9px 16px",
+                  borderRadius: "10px",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  textAlign: "center",
+                }}
+              >
+                Telegram Sahifasiga O'tish →
+              </button>
+            </div>
+
+            {/* Remote Control & WOL */}
+            <div
+              className="misa-glass-card"
+              style={{
+                padding: "20px 22px",
+                borderRadius: "18px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                gap: "14px",
+                border: "1px solid rgba(192, 76, 253, 0.3)",
+              }}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <div
+                    style={{
+                      width: "38px",
+                      height: "38px",
+                      borderRadius: "12px",
+                      background: "rgba(147, 3, 197, 0.2)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <LaptopIcon size={20} color="#C04CFD" />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: "14.5px", fontWeight: 700, color: "#FFFFFF" }}>
+                      Masofaviy Boshqaruv
+                    </h4>
+                    <span style={{ fontSize: "11px", color: "#C04CFD" }}>Wake-on-LAN & Buyruqlar</span>
+                  </div>
+                </div>
+                <p style={{ margin: 0, fontSize: "12.5px", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                  Lokal tarmoqdagi boshqa kompyuterlarni masofadan uyg'otish (WOL), ekran holatini ko'rish va buyruq yuborish.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => onNavigate?.("/remote")}
+                className="misa-btn-violet"
+                style={{
+                  padding: "9px 16px",
+                  borderRadius: "10px",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  textAlign: "center",
+                }}
+              >
+                Masofaviy Panelga O'tish →
+              </button>
+            </div>
+
+            {/* Connected Devices */}
+            <div
+              className="misa-glass-card"
+              style={{
+                padding: "20px 22px",
+                borderRadius: "18px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                gap: "14px",
+                border: "1px solid rgba(78, 222, 163, 0.3)",
+              }}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <div
+                    style={{
+                      width: "38px",
+                      height: "38px",
+                      borderRadius: "12px",
+                      background: "rgba(78, 222, 163, 0.16)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <SparklesIcon size={18} color="#4EDEA3" />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: "14.5px", fontWeight: 700, color: "#FFFFFF" }}>
+                      Ulangan Qurilmalar
+                    </h4>
+                    <span style={{ fontSize: "11px", color: "#4EDEA3" }}>Apparat & Mobil Ro'yxat</span>
+                  </div>
+                </div>
+                <p style={{ margin: 0, fontSize: "12.5px", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                  Misa agenti tizimiga bog'langan planshetlar, noutbuklar va avtorizatsiyalangan apparat vositalarini boshqarish.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => onNavigate?.("/devices")}
+                className="misa-btn-violet"
+                style={{
+                  padding: "9px 16px",
+                  borderRadius: "10px",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  textAlign: "center",
+                }}
+              >
+                Qurilmalar Sahifasiga O'tish →
+              </button>
+            </div>
+
+            {/* Plugins and Tools */}
+            <div
+              className="misa-glass-card"
+              style={{
+                padding: "20px 22px",
+                borderRadius: "18px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                gap: "14px",
+                border: "1px solid rgba(255, 171, 0, 0.3)",
+              }}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <div
+                    style={{
+                      width: "38px",
+                      height: "38px",
+                      borderRadius: "12px",
+                      background: "rgba(255, 171, 0, 0.16)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <SettingsIcon size={18} color="#FFD166" />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: "14.5px", fontWeight: 700, color: "#FFFFFF" }}>
+                      Pluginlar va Kengaytmalar
+                    </h4>
+                    <span style={{ fontSize: "11px", color: "#FFD166" }}>Modullar & Vositalar</span>
+                  </div>
+                </div>
+                <p style={{ margin: 0, fontSize: "12.5px", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                  Tizim agentining imkoniyatlarini kengaytiruvchi maxsus skriptlar, brauzer integratsiyalari va API vositalari.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => onNavigate?.("/plugins")}
+                className="misa-btn-violet"
+                style={{
+                  padding: "9px 16px",
+                  borderRadius: "10px",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  textAlign: "center",
+                }}
+              >
+                Pluginlar Markaziga O'tish →
               </button>
             </div>
           </div>

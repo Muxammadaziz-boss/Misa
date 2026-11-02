@@ -10,12 +10,13 @@ export interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonEl
 export const IconButton: React.FC<IconButtonProps> = ({
   icon,
   title,
-  size = 34,
+  size = 36,
   variant = "glass",
   className = "",
   style,
   ...props
 }) => {
+  const effectiveSize = Math.max(36, size);
   const getStyles = (): React.CSSProperties => {
     switch (variant) {
       case "primary":
@@ -43,11 +44,13 @@ export const IconButton: React.FC<IconButtonProps> = ({
   return (
     <button
       title={title}
-      aria-label={title}
-      className={`icon-button ${className}`}
+      aria-label={title || "Tugma"}
+      className={`misa-icon-button icon-button ${className}`}
       style={{
-        width: `${size}px`,
-        height: `${size}px`,
+        width: `${effectiveSize}px`,
+        height: `${effectiveSize}px`,
+        minWidth: "36px",
+        minHeight: "36px",
         borderRadius: "50%",
         display: "inline-flex",
         alignItems: "center",

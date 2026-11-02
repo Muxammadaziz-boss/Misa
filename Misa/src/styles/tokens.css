@@ -92,25 +92,58 @@
   --shadow-glow: 0 0 28px rgba(147, 3, 197, 0.4), 0 0 60px rgba(192, 76, 253, 0.15);
   --shadow-glass: 0 20px 50px rgba(2, 6, 14, 0.8), 0 0 35px rgba(147, 3, 197, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 
+  /* Glass Surface Tokens (MISA-ROOT-018) */
+  --glass-bg: rgba(24, 13, 36, 0.55);
+  --glass-bg-hover: rgba(33, 20, 48, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-border-hover: rgba(192, 76, 253, 0.35);
+  --glass-border-focus: rgba(192, 76, 253, 0.55);
+
   /* 8. Motion */
   --transition-fast: 150ms cubic-bezier(0.16, 1, 0.3, 1);
   --transition-normal: 220ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* 9. Z-Index Scale (MISA-ROOT-022) */
+  --z-base: 1;
+  --z-sticky: 10;
+  --z-overlay: 40;
+  --z-modal: 50;
+  --z-toast: 100;
+  --z-tooltip: 110;
 }
 
-/* Light Mode Adaptive Override (when user selects "Yorug'" in Appearance settings) */
+/* Light Mode Adaptive Override (MISA-ROOT-019 - WCAG 1.4.3 Contrast Enhancement) */
 html.theme-light {
   --bg-darkest: #F6F3FA;
   --background: #F6F3FA;
   --surface-lowest: #FFFFFF;
   --surface-low: rgba(255, 255, 255, 0.82);
   --surface: rgba(255, 255, 255, 0.78);
-  --surface-elevated: rgba(248, 244, 255, 0.9);
-  --surface-card: rgba(255, 255, 255, 0.85);
+  --surface-elevated: rgba(248, 244, 255, 0.95);
+  --surface-card: rgba(255, 255, 255, 0.9);
   --text-primary: #160C24;
-  --text-secondary: #4E4163;
-  --text-muted: #7D6F94;
-  --border-subtle: rgba(147, 3, 197, 0.14);
-  --border-strong: rgba(147, 3, 197, 0.28);
+  --text-secondary: #3B2E52;
+  --text-muted: #615278;
+  --border-subtle: rgba(147, 3, 197, 0.16);
+  --border-strong: rgba(147, 3, 197, 0.32);
+  --border-violet: rgba(147, 3, 197, 0.45);
+  --glass-bg: rgba(255, 255, 255, 0.88);
+  --glass-bg-hover: rgba(245, 238, 255, 0.96);
+  --glass-border: rgba(147, 3, 197, 0.2);
+  --glass-border-hover: rgba(147, 3, 197, 0.4);
+  --glass-border-focus: rgba(147, 3, 197, 0.65);
+}
+
+/* Accessible Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Disable animations when user toggles off UI animations */

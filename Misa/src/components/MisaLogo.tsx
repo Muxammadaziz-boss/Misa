@@ -25,7 +25,7 @@ export const MisaLogo: React.FC<MisaLogoProps> = ({
   return (
     <div
       onClick={onClick}
-      className={`misa-logo misa-logo misa-logo misa-logo misa-logo mikasa-logo ${className}`}
+      className={`misa-logo ${className}`}
       style={{
         display: "inline-flex",
         alignItems: "center",

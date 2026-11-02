@@ -82,6 +82,22 @@
             }
           }
         }, true);
+
+        // 3. Videolarda brauzerning standart kontekst menyusini va Picture-in-Picture ni butunlay bloklash
+        document.addEventListener("contextmenu", function(e) {
+          if (e.target && (e.target.tagName === "VIDEO" || (e.target.closest && e.target.closest("video")))) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }, true);
+
+        document.addEventListener("enterpictureinpicture", function(e) {
+          try {
+            if (document.pictureInPictureElement) {
+              document.exitPictureInPicture().catch(function() {});
+            }
+          } catch(err) {}
+        }, true);
       })();
     </script>
     <script type="module" src="/src/main.tsx"></script>

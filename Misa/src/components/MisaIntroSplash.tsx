@@ -16,9 +16,30 @@ export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
   const startTimeRef = useRef<number>(Date.now());
   const completedRef = useRef<boolean>(false);
 
-  const handleComplete = useCallback(() => {
+  const handleComplete = useCallback((instant: boolean = false) => {
     if (completedRef.current) return;
     completedRef.current = true;
+
+    // Immediately stop video and exit picture-in-picture if triggered
+    try {
+      if ((document as any).pictureInPictureElement) {
+        (document as any).exitPictureInPicture().catch(() => {});
+      }
+    } catch {}
+
+    if (videoRef.current) {
+      try {
+        videoRef.current.pause();
+        videoRef.current.removeAttribute("src");
+        videoRef.current.load();
+      } catch {}
+    }
+
+    if (instant) {
+      setIsFading(true);
+      onFinish();
+      return;
+    }
 
     // Enforce smooth minimum time so it doesn't flash if video ends instantly
     const elapsed = Date.now() - startTimeRef.current;
@@ -28,30 +49,35 @@ export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
       setIsFading(true);
       setTimeout(() => {
         onFinish();
-      }, 350);
+      }, 200);
     }, remaining);
   }, [minDurationMs, onFinish]);
 
   useEffect(() => {
-    // Show skip button after 1 second so user isn't locked if they're in a hurry
-    const skipTimer = setTimeout(() => {
-      setCanSkip(true);
-    }, 800);
+    // Check if user has opted to skip intro splash entirely (MISA-ROOT-031)
+    try {
+      if (localStorage.getItem("misa_skip_intro") === "true") {
+        onFinish();
+        return;
+      }
+    } catch {}
+
+    // Make skip immediately accessible without arbitrary 800ms lockup
+    setCanSkip(true);
 
     // Keyboard shortcut to skip (Escape, Space, Enter)
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" || e.key === " " || e.key === "Enter") {
         e.preventDefault();
-        handleComplete();
+        handleComplete(true);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => {
-      clearTimeout(skipTimer);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [handleComplete]);
+  }, [handleComplete, onFinish]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -76,19 +102,35 @@ export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
       }
     };
 
+    const onVideoEnd = () => handleComplete(false);
+
     video.addEventListener("timeupdate", handleTimeUpdate);
-    video.addEventListener("ended", handleComplete);
-    video.addEventListener("error", handleComplete);
+    video.addEventListener("ended", onVideoEnd);
+    video.addEventListener("error", onVideoEnd);
 
     return () => {
       video.removeEventListener("timeupdate", handleTimeUpdate);
-      video.removeEventListener("ended", handleComplete);
-      video.removeEventListener("error", handleComplete);
+      video.removeEventListener("ended", onVideoEnd);
+      video.removeEventListener("error", onVideoEnd);
+      try {
+        if ((document as any).pictureInPictureElement) {
+          (document as any).exitPictureInPicture().catch(() => {});
+        }
+      } catch {}
+      try {
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+      } catch {}
     };
   }, [handleComplete]);
 
   return (
     <div
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
       style={{
         position: "fixed",
         inset: 0,
@@ -123,6 +165,14 @@ export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
         ref={videoRef}
         playsInline
         autoPlay
+        muted
+        controls={false}
+        disablePictureInPicture
+        controlsList="nodownload noplaybackrate nofullscreen noremoteplayback"
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
         style={{
           position: "absolute",
           inset: 0,
@@ -134,6 +184,7 @@ export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
           margin: 0,
           padding: 0,
           display: "block",
+          pointerEvents: "none",
         }}
       >
         <source src="/Misa.mp4" type="video/mp4" />
@@ -167,7 +218,7 @@ export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
       {/* Skip Button */}
       {canSkip && (
         <button
-          onClick={handleComplete}
+          onClick={() => handleComplete(true)}
           style={{
             position: "absolute",
             top: "24px",

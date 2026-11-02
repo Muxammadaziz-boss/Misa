@@ -127,6 +127,17 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   const initialQuerySent = useRef(false);
   const recognitionRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const handleStopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsLoading(false);
+    activeAgentPlanRef.current = null;
+    setActiveAgentPlan(null);
+  };
 
   const formatNow = () =>
     new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -406,8 +417,16 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     activeAgentPlanRef.current = null;
     setActiveAgentPlan(null);
 
+    const abortCtrl = new AbortController();
+    abortControllerRef.current = abortCtrl;
+
     try {
-      const response = await backendService.sendMessage(effectiveQuery, { speak: autoSpeak, image: imageToSend });
+      const response = await backendService.sendMessage(effectiveQuery, {
+        speak: autoSpeak,
+        image: imageToSend,
+        signal: abortCtrl.signal,
+      });
+      if (abortCtrl.signal.aborted) return;
       const completedPlan = activeAgentPlanRef.current || undefined;
       const rawText = response.reply || response.response || "Buyruq bajarildi.";
       const aiText = unwrapCleanResponse(rawText);
@@ -419,7 +438,19 @@ export const ChatPage: React.FC<ChatPageProps> = ({
         agentPlan: completedPlan,
       };
       setMessages((prev) => [...prev, aiMsg]);
-    } catch {
+    } catch (err: any) {
+      if (abortCtrl.signal.aborted || err?.name === "AbortError") {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `aborted_${Date.now()}`,
+            sender: "misa",
+            text: "Generatsiya to'xtatildi.",
+            timestamp: formatNow(),
+          },
+        ]);
+        return;
+      }
       setMessages((prev) => [
         ...prev,
         {
@@ -433,6 +464,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       setIsLoading(false);
       activeAgentPlanRef.current = null;
       setActiveAgentPlan(null);
+      abortControllerRef.current = null;
     }
   };
 
@@ -1296,6 +1328,11 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                           </span>
                           {(() => {
                             const isWarning = msg.text.includes("403") || msg.text.includes("429");
+                            const isFallback =
+                              msg.text.toLowerCase().includes("fallback") ||
+                              msg.text.toLowerCase().includes("zaxira") ||
+                              msg.text.includes("Cerebras") ||
+                              msg.text.includes("Groq");
                             const isOffline =
                               msg.text.includes("offline") ||
                               msg.text.includes("mahalliy yordamchi") ||
@@ -1304,21 +1341,29 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 
                             const badgeLabel = isWarning
                               ? "v9.3 Ogohlantirish"
+                              : isFallback
+                              ? "🛡️ Zaxira model"
                               : isOffline
                               ? "v9.3 Mahalliy"
                               : "v9.3 Neural";
                             const badgeBg = isWarning
                               ? "rgba(255, 171, 0, 0.18)"
+                              : isFallback
+                              ? "rgba(59, 130, 246, 0.2)"
                               : isOffline
                               ? "rgba(100, 116, 139, 0.2)"
                               : "rgba(147, 3, 197, 0.2)";
                             const badgeColor = isWarning
                               ? "#FFD166"
+                              : isFallback
+                              ? "#93C5FD"
                               : isOffline
                               ? "#CBD5E1"
                               : "#E8B3FF";
                             const badgeBorder = isWarning
                               ? "1px solid rgba(255, 171, 0, 0.4)"
+                              : isFallback
+                              ? "1px solid rgba(59, 130, 246, 0.45)"
                               : isOffline
                               ? "1px solid rgba(148, 163, 184, 0.3)"
                               : "1px solid rgba(192, 76, 253, 0.3)";
@@ -1492,6 +1537,32 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                         )}
 
                         <MarkdownView content={msg.text} />
+
+                        {(msg.id.startsWith("err_") || msg.text.startsWith("Xatolik:") || msg.text.toLowerCase().includes("ulanib bo'lmadi")) && (
+                          <div style={{ marginTop: "12px" }}>
+                            <button
+                              type="button"
+                              onClick={() => handleRegenerateLast(idx)}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                padding: "6px 14px",
+                                borderRadius: "8px",
+                                background: "rgba(239, 68, 68, 0.16)",
+                                border: "1px solid rgba(239, 68, 68, 0.45)",
+                                color: "#FCA5A5",
+                                fontSize: "12px",
+                                fontWeight: 600,
+                                cursor: "pointer",
+                                transition: "all 0.15s ease",
+                              }}
+                            >
+                              <RefreshIcon size={13} color="#FCA5A5" />
+                              <span>Qayta urinish</span>
+                            </button>
+                          </div>
+                        )}
 
                         {msg.imageUrl && (
                           <div style={{ marginTop: "14px" }}>
@@ -1743,30 +1814,51 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                 }}
               />
 
-              {/* Right Controls: Send */}
+              {/* Right Controls: Send / Stop */}
               <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
-                <button
-                  type="button"
-                  onClick={() => handleSend()}
-                  disabled={(!inputText.trim() && attachedFiles.length === 0) || isLoading}
-                  title="Xabarni yuborish"
-                  className="misa-btn-violet"
-                  style={{
-                    width: "38px",
-                    height: "38px",
-                    borderRadius: "50%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    opacity: (inputText.trim() || attachedFiles.length > 0) && !isLoading ? 1 : 0.45,
-                    cursor:
-                      (inputText.trim() || attachedFiles.length > 0) && !isLoading
-                        ? "pointer"
-                        : "default",
-                  }}
-                >
-                  <ArrowUpIcon size={16} color="#FFFFFF" />
-                </button>
+                {isLoading ? (
+                  <button
+                    type="button"
+                    onClick={handleStopGeneration}
+                    title="Javob generatsiyasini to'xtatish"
+                    style={{
+                      width: "38px",
+                      height: "38px",
+                      borderRadius: "50%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: "rgba(239, 68, 68, 0.22)",
+                      border: "1px solid rgba(239, 68, 68, 0.6)",
+                      color: "#EF4444",
+                      cursor: "pointer",
+                      boxShadow: "0 0 16px rgba(239, 68, 68, 0.35)",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <span style={{ width: "12px", height: "12px", backgroundColor: "#EF4444", borderRadius: "2px" }} />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleSend()}
+                    disabled={!inputText.trim() && attachedFiles.length === 0}
+                    title="Xabarni yuborish"
+                    className="misa-btn-violet"
+                    style={{
+                      width: "38px",
+                      height: "38px",
+                      borderRadius: "50%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      opacity: inputText.trim() || attachedFiles.length > 0 ? 1 : 0.45,
+                      cursor: inputText.trim() || attachedFiles.length > 0 ? "pointer" : "default",
+                    }}
+                  >
+                    <ArrowUpIcon size={16} color="#FFFFFF" />
+                  </button>
+                )}
               </div>
             </div>
 

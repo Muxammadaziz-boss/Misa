@@ -48,6 +48,17 @@ class WindowTarget:
         return (l <= x <= r) and (t <= y <= b)
 
 
+def sanitize_window_title(title: str, max_len: int = 160) -> str:
+    """Oyna sarlavhasidan nazorat belgilarini va prompt injection xatarlarini tozalash (OWASP LLM01 himoyasi)"""
+    if not title:
+        return ""
+    clean = "".join(ch for ch in title if ch.isprintable() or ch == ' ')
+    for tag in ("<system>", "</system>", "<prompt>", "</prompt>", "<instruction>", "</instruction>", "<|im_start|>", "<|im_end|>", "[INST]", "[/INST]"):
+        clean = clean.replace(tag, "")
+    clean = clean.replace("```", "'''")
+    return clean.strip()[:max_len]
+
+
 class WindowsGUIController:
     """
     Windows tizimida GUI harakatlarini xavfsiz va aniq nazorat qiluvchi markaziy kontroller.
@@ -165,13 +176,13 @@ class WindowsGUIController:
         if sys.platform != "win32" or not hwnd:
             return None
 
-        # Sarlavha
+        # Sarlavha (sanitizatsiya qilingan)
         length = ctypes.windll.user32.GetWindowTextLengthW(hwnd)
         title = ""
         if length > 0:
             buf = ctypes.create_unicode_buffer(length + 1)
             ctypes.windll.user32.GetWindowTextW(hwnd, buf, length + 1)
-            title = buf.value
+            title = sanitize_window_title(buf.value)
 
         # Sinf nomi
         class_buf = ctypes.create_unicode_buffer(256)

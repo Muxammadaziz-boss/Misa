@@ -57,8 +57,8 @@ pub fn startup_log(tag: &str, msg: &str) {
     let ts = get_timestamp();
     let line = format!("{} [{}] {}\n", ts, tag, msg);
 
-    // Konsolga chiqarish (agar biriktirilgan bo'lsa)
-    print!("{}", line);
+    // Konsolga xavfsiz chiqarish (agar biriktirilgan bo'lsa, xatolik yuz bersa panic qilmaydi)
+    let _ = std::io::stdout().write_all(line.as_bytes());
 
     let log_dir = get_log_dir();
     let _ = create_dir_all(&log_dir);
@@ -77,7 +77,7 @@ pub fn crash_log(stage: &str, details: &str) {
     let tid = current_tid();
 
     let line = format!("{} [CRASH] stage={} PID={} TID={} details={}\n", ts, stage, pid, tid, details);
-    eprint!("{}", line);
+    let _ = std::io::stderr().write_all(line.as_bytes());
 
     let log_dir = get_log_dir();
     let _ = create_dir_all(&log_dir);
@@ -194,7 +194,7 @@ pub fn network_log(msg: &str) {
     let sanitized = mask_sensitive_url(msg);
     let line = format!("{} [NETWORK] {}\n", ts, sanitized);
 
-    print!("{}", line);
+    let _ = std::io::stdout().write_all(line.as_bytes());
 
     let log_dir = get_log_dir();
     let _ = create_dir_all(&log_dir);
@@ -214,7 +214,7 @@ pub fn backend_lifecycle_log(event: &str, msg: &str) {
     let sanitized = mask_sensitive_url(msg);
     let line = format!("{} [BACKEND_LIFECYCLE] PID={} [{}] {}\n", ts, pid, event, sanitized);
 
-    print!("{}", line);
+    let _ = std::io::stdout().write_all(line.as_bytes());
 
     let log_dir = get_log_dir();
     let _ = create_dir_all(&log_dir);
@@ -234,7 +234,7 @@ pub fn voice_runtime_log(event: &str, msg: &str) {
     let sanitized = mask_sensitive_url(msg);
     let line = format!("{} [VOICE_RUNTIME] PID={} [{}] {}\n", ts, pid, event, sanitized);
 
-    print!("{}", line);
+    let _ = std::io::stdout().write_all(line.as_bytes());
 
     let log_dir = get_log_dir();
     let _ = create_dir_all(&log_dir);

@@ -490,8 +490,12 @@ def _system_control(action: str, value: str = "") -> dict:
         }
 
     elif action == "open_app" and value:
-        # Xavfsiz ilova ochish — PowerShell Start-Process orqali
-        # Umumiy ilova nomlari mapping
+        raw_val = value.strip()
+        # Sanitizatsiya (CWE-78 himoyasi): buyruq in'ektsiyasi belgilarini to'liq bloklash
+        if not re.match(r"^[a-zA-Z0-9_\-\. ]+$", raw_val):
+            logger.warning(f"Xavfsizlik: Ilova nomida nojo'ya belgilar aniqlandi: '{value}'")
+            return {"error": f"Xavfsizlik: Ilova nomida ruxsat etilmagan belgilar mavjud: '{value}'"}
+
         APP_ALIASES = {
             "steam": "steam",
             "notepad": "notepad",
@@ -506,14 +510,20 @@ def _system_control(action: str, value: str = "") -> dict:
             "spotify": "spotify",
             "obs": "obs64",
         }
-        app_cmd = APP_ALIASES.get(value.lower().strip(), value)
+        app_cmd = APP_ALIASES.get(raw_val.lower(), raw_val)
 
         try:
-            # PowerShell Start-Process — xavfsiz, shell injection yo'q
-            subprocess.Popen(
-                ["powershell", "-NoProfile", "-Command", f"Start-Process '{app_cmd}'"],
-                creationflags=subprocess.CREATE_NO_WINDOW,
-            )
+            if sys.platform == "win32":
+                # Windowsda xavfsiz Start-Process (string interpolation va PowerShell command injection yo'q)
+                subprocess.Popen(
+                    ["cmd.exe", "/c", "start", "", app_cmd],
+                    shell=False,
+                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
+                )
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", "-a", app_cmd])
+            else:
+                subprocess.Popen(["xdg-open", app_cmd])
             return {"message": f"'{value}' ochildi", "app": app_cmd}
         except Exception as e:
             return {"error": f"'{value}' ochilmadi: {e}"}

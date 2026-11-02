@@ -102,7 +102,7 @@ export const AppShell: React.FC<AppShellProps> = ({
 
   return (
     <div
-      className="misa-app-shell mikasa-app-shell"
+      className="misa-app-shell"
       style={{
         display: "flex",
         flexDirection: "column",
@@ -175,7 +175,7 @@ export const AppShell: React.FC<AppShellProps> = ({
       >
         <nav
           data-tauri-drag-region
-          className="misa-ultra-glass mikasa-glass-topnav"
+          className="misa-ultra-glass misa-glass-topnav"
           aria-label="Asosiy navigatsiya"
           style={{
             flex: 1,
@@ -221,7 +221,7 @@ export const AppShell: React.FC<AppShellProps> = ({
 
           {/* ── CENTER: Detached Floating Navigation Pills ── */}
           <div
-            className="misa-topnav-center mikasa-topnav-center"
+            className="misa-topnav-center"
             style={{
               display: "flex",
               alignItems: "center",

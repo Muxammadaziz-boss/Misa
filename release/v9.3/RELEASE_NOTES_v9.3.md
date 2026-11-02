@@ -30,8 +30,8 @@ Ushbu relizda dastur to'liq qayta yig'ildi va quyidagi muhim yangilanishlar kiri
 
 | Fayl nomi | Hajmi | Turi | SHA-256 Nazorat Yig'indisi |
 | :--- | :--- | :--- | :--- |
-| **`Misa-AI-v9.3-Portable.zip`** | **470.45 MB** | To'liq Portativ Paket (Backend + Python Runtime + RVC HuBERT bilan) | `008f1f159dd8357c63b470281086ca479d9d79d7d530c4b7c00841ec8a94cbc9` |
-| **`Misa-AI-v9.3.exe`** | **5.24 MB** | Mustaqil Standalone Desktop Executable | `9d7d3e8122181176354c35e92854f7b8780926b0ededc649a231c6da5d58982f` |
+| **`Misa-AI-v9.3-Portable.zip`** | **515.78 MB** | To'liq Portativ Paket (Backend + Python Runtime + RVC HuBERT bilan) | `3c6415a58379130ac2b72f3f5de2a689631078adefa148e055e32e921c7c17b4` |
+| **`Misa-AI-v9.3.exe`** | **10.15 MB** | Mustaqil Standalone Desktop Executable | `46501a7574bb9d2915fa0f20c128d1d668dad27f99f2ac779cb4ff0d019d832c` |
 | **`WebView2Loader.dll`** | **0.15 MB** | Native Windows WebView2 yuklagich | `8427b1fc58ec707813e5c0a51eb5d69397bb333250a7b891be4d3b123f1e0f1c` |
 | **`MicrosoftEdgeWebview2Setup.exe`** | **1.77 MB** | Offline WebView2 Bootstrapper | `87ad3fe4e3faa1b48bad79de1b9269e5eb30574545bb6f5f7c37d51035748caf` |
 | **`run_portable.bat`** | **360 B** | Bir bosishda ishga tushiruvchi skript | — |
@@ -40,4 +40,3 @@ Ushbu relizda dastur to'liq qayta yig'ildi va quyidagi muhim yangilanishlar kiri
 
 Barcha fayllar mahalliy ravishda quyidagi papkada tayyor:
 📂 `yordamchi_9.0.0/release/v9.3/`
-

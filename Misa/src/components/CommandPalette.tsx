@@ -295,6 +295,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           <input
             ref={inputRef}
             type="text"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={isOpen}
+            aria-controls="command-palette-listbox"
+            aria-activedescendant={filtered[selectedIndex] ? `cmd-item-${filtered[selectedIndex].id}` : undefined}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Sahifa, buyruq yoki Misa uchun savol yozing..."
@@ -310,6 +315,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           {query && (
             <button
               onClick={() => setQuery("")}
+              aria-label="Qidiruvni tozalash"
               style={{ color: "var(--text-muted)", cursor: "pointer", padding: "2px" }}
             >
               <CloseIcon size={14} />
@@ -331,6 +337,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 
         {/* Results List */}
         <div
+          id="command-palette-listbox"
+          role="listbox"
+          aria-label="Buyruqlar ro'yxati"
           style={{
             maxHeight: "360px",
             overflowY: "auto",
@@ -344,6 +353,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             const isSelected = idx === selectedIndex;
             return (
               <div
+                id={`cmd-item-${item.id}`}
+                role="option"
+                aria-selected={isSelected}
                 key={item.id}
                 onMouseEnter={() => setSelectedIndex(idx)}
                 onClick={item.action}

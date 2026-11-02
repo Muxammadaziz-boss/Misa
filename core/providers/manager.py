@@ -116,8 +116,20 @@ class ProviderSystem:
             key = getattr(p, "api_key", "")
             has_key = bool(key and str(key).strip())
 
+            # Maxfiylik: Faqat custom kalit bo'lsagina qisman maskalab ko'rsatiladi, tizim/default tokeni esa aslo oshkor qilinmaydi
+            has_custom = False
+            try:
+                from core.v8.ai_key_manager import get_ai_key_manager
+                ai_mgr = get_ai_key_manager()
+                for u_keys in ai_mgr._user_keys.values():
+                    if u_keys.get(p_name) == key:
+                        has_custom = True
+                        break
+            except Exception:
+                pass
+
             masked_key = ""
-            if has_key and len(key) > 8:
+            if has_custom and has_key and len(key) > 8:
                 masked_key = key[:4] + "..." + key[-4:]
 
             models = [m.model for m in self.registry.get_models_for_provider(p_name, only_enabled=True)]
@@ -125,6 +137,8 @@ class ProviderSystem:
             providers_status[p_name] = {
                 "name": p_name,
                 "configured": has_key,
+                "has_custom_key": has_custom,
+                "is_default": (has_key and not has_custom),
                 "enabled": cfg_enabled,
                 "available": available,
                 "priority": cfg_prio,

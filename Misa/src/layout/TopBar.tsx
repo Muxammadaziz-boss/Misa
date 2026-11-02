@@ -10,7 +10,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onLogoClick }) => {
   return (
     <header
       data-tauri-drag-region
-      className="mikasa-topbar"
+      className="misa-topbar"
       style={{
         display: "flex",
         alignItems: "center",

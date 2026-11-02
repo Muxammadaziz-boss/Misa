@@ -450,6 +450,35 @@ export const MemoryPage: React.FC<MemoryPageProps> = () => {
     showToast("Kalit so'z bo'yicha xotiralar o'chirildi");
   };
 
+  const handleExportMemory = () => {
+    try {
+      const dataStr = JSON.stringify(
+        {
+          exported_at: new Date().toISOString(),
+          version: "9.3",
+          memory_cards: memoryCards,
+          facts: memory.facts,
+          profile: memory.profile,
+          conversations_count: memory.conversations?.length || 0,
+        },
+        null,
+        2
+      );
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `misa_xotira_eksport_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast("Xotira JSON fayl sifatida muvaffaqiyatli yuklab olindi");
+    } catch {
+      showToast("Eksport qilishda xatolik yuz berdi");
+    }
+  };
+
   const totalSavedCount = memoryCards.length + (memory.conversations?.length || 0);
 
   return (
@@ -584,6 +613,27 @@ export const MemoryPage: React.FC<MemoryPageProps> = () => {
             <span style={{ color: "rgba(255,255,255,0.2)" }}>|</span>
             <span style={{ color: "var(--text-secondary)" }}>{totalSavedCount} / 500 ta saqlangan</span>
           </div>
+
+          {/* Export Button (MISA-ROOT-027) */}
+          <button
+            type="button"
+            onClick={handleExportMemory}
+            title="Xotirani JSON fayl sifatida yuklab olish"
+            className="misa-glass-card"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "9px 16px",
+              borderRadius: "9999px",
+              fontSize: "12.5px",
+              fontWeight: 600,
+              color: "#E8B3FF",
+              cursor: "pointer",
+            }}
+          >
+            <span>📥 Eksport</span>
+          </button>
 
           {/* + Yangi xotira Button */}
           <button

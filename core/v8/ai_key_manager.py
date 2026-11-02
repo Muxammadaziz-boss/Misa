@@ -35,9 +35,69 @@ DEFAULT_BUILTIN_KEYS: Dict[str, List[str]] = {
 }
 
 
+import sys
+import base64
+import ctypes
+from ctypes import wintypes
+
+class _DATA_BLOB(ctypes.Structure):
+    _fields_ = [
+        ("cbData", wintypes.DWORD),
+        ("pbData", ctypes.POINTER(ctypes.c_byte)),
+    ]
+
+
+def _encrypt_bytes(raw: bytes) -> str:
+    """Windows DPAPI yordamida shifrlash (Windows) yoki base64 (boshqa OTlar)"""
+    if sys.platform == "win32":
+        try:
+            blob_in = _DATA_BLOB(len(raw), ctypes.cast(ctypes.create_string_buffer(raw), ctypes.POINTER(ctypes.c_byte)))
+            blob_out = _DATA_BLOB()
+            desc = "MisaAICache"
+            if ctypes.windll.crypt32.CryptProtectData(
+                ctypes.byref(blob_in),
+                desc,
+                None,
+                None,
+                None,
+                0,
+                ctypes.byref(blob_out)
+            ):
+                ciphertext = ctypes.string_at(blob_out.pbData, blob_out.cbData)
+                ctypes.windll.kernel32.LocalFree(blob_out.pbData)
+                return base64.b64encode(ciphertext).decode("ascii")
+        except Exception as e:
+            logger.debug(f"DPAPI CryptProtectData xatolik: {e}")
+    return base64.b64encode(raw).decode("ascii")
+
+
+def _decrypt_bytes(enc_str: str) -> bytes:
+    """Windows DPAPI orqali shifrdan chiqarish"""
+    raw_cipher = base64.b64decode(enc_str)
+    if sys.platform == "win32":
+        try:
+            blob_in = _DATA_BLOB(len(raw_cipher), ctypes.cast(ctypes.create_string_buffer(raw_cipher), ctypes.POINTER(ctypes.c_byte)))
+            blob_out = _DATA_BLOB()
+            if ctypes.windll.crypt32.CryptUnprotectData(
+                ctypes.byref(blob_in),
+                None,
+                None,
+                None,
+                None,
+                0,
+                ctypes.byref(blob_out)
+            ):
+                plaintext = ctypes.string_at(blob_out.pbData, blob_out.cbData)
+                ctypes.windll.kernel32.LocalFree(blob_out.pbData)
+                return plaintext
+        except Exception as e:
+            logger.debug(f"DPAPI CryptUnprotectData xatolik: {e}")
+    return raw_cipher
+
+
 class AIKeyManager:
     """Markazlashgan dinamik AI kalitlari boshqaruvchisi.
-    Kalitlarni Supabase bazasida, bulut backendda va mahalliy keshda saqlaydi hamda
+    Kalitlarni Supabase bazasida, bulut backendda va mahalliy shifrlangan keshda saqlaydi hamda
     foydalanuvchi akkaunti bilan kirganda avtomatik faollashtiradi.
     """
 
@@ -70,11 +130,30 @@ class AIKeyManager:
         return cls._instance
 
     def _load_cache(self):
-        """Mahalliy keshdan saqlangan kalitlarni yuklash"""
+        """Mahalliy DPAPI shifrlangan keshdan saqlangan kalitlarni yuklash"""
+        needs_migration = False
         try:
             if CACHE_FILE.exists():
                 with open(CACHE_FILE, "r", encoding="utf-8") as f:
-                    data = json.load(f)
+                    file_content = f.read().strip()
+                if file_content:
+                    try:
+                        raw_json = json.loads(file_content)
+                    except Exception:
+                        raw_json = {}
+
+                    if isinstance(raw_json, dict) and "_encrypted" in raw_json:
+                        try:
+                            dec = _decrypt_bytes(raw_json["_encrypted"])
+                            data = json.loads(dec.decode("utf-8"))
+                        except Exception as e:
+                            logger.warning(f"DPAPI keshini shifrdan ochishda xatolik: {e}")
+                            data = {}
+                    else:
+                        # Legacy plaintext cache — darhol DPAPI shifriga ko'chirish
+                        data = raw_json if isinstance(raw_json, dict) else {}
+                        needs_migration = True
+
                     for prov in ("gemini", "openrouter", "groq", "cerebras", "nvidia"):
                         keys = data.get(prov, [])
                         if isinstance(keys, list):
@@ -99,8 +178,11 @@ class AIKeyManager:
                     if dk and dk not in self._system_keys[prov]:
                         self._system_keys[prov].append(dk)
 
+        if needs_migration:
+            self._save_cache()
+
     def _save_cache(self):
-        """Kalitlarni xavfsiz mahalliy keshga saqlash"""
+        """Kalitlarni Windows DPAPI bilan shifrlangan holda mahalliy keshga saqlash"""
         try:
             CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
             data = {
@@ -112,8 +194,15 @@ class AIKeyManager:
                 "active_models": self._active_models,
                 "updated_at": time.time(),
             }
+            json_bytes = json.dumps(data, indent=2).encode("utf-8")
+            enc_payload = _encrypt_bytes(json_bytes)
+            secure_record = {
+                "_format": "misa_dpapi_v1",
+                "_encrypted": enc_payload,
+                "updated_at": time.time(),
+            }
             with open(CACHE_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
+                json.dump(secure_record, f, indent=2)
         except Exception as e:
             logger.warning(f"AI kalitlari keshini saqlashda xatolik: {e}")
 
@@ -310,43 +399,45 @@ class AIKeyManager:
         """Joriy afzal ko'rilgan AI modelini olish"""
         return self._active_models.get(provider.lower(), "gemini-2.0-flash")
 
-    def get_status_summary(self) -> Dict[str, Any]:
-        """Tizim va UI uchun kalitlar holatini xavfsiz qaytarish (kalitlar maskalangan)"""
-        active_gemini = self.get_active_gemini_key()
+    def get_status_summary(self, user_id: Optional[str] = None) -> Dict[str, Any]:
+        """Tizim va UI uchun kalitlar holatini xavfsiz qaytarish (default kalitlar aslo oshkor qilinmaydi)"""
+        active_gemini = self.get_active_gemini_key(user_id=user_id)
         has_gemini = bool(active_gemini)
-        masked_gemini = (active_gemini[:8] + "..." + active_gemini[-4:]) if has_gemini and len(active_gemini) > 12 else ""
+        gemini_custom = self._user_keys.get(user_id, {}).get("gemini") if user_id else ""
+        masked_gemini = (gemini_custom[:6] + "..." + gemini_custom[-4:]) if gemini_custom and len(gemini_custom) > 10 else ""
 
         providers_status = {}
         for prov in ("gemini", "groq", "cerebras", "openrouter", "nvidia"):
-            k = self.get_active_key(prov)
+            k = self.get_active_key(prov, user_id=user_id)
             has_k = bool(k)
-            masked_k = (k[:4] + "..." + k[-4:]) if has_k and len(k) > 8 else ""
+            custom_k = self._user_keys.get(user_id, {}).get(prov) if user_id else ""
+            has_custom = bool(custom_k)
+            is_default = has_k and not has_custom
+            masked_k = (custom_k[:4] + "..." + custom_k[-4:]) if has_custom and len(custom_k) > 8 else ""
             providers_status[prov] = {
                 "configured": has_k,
+                "has_custom_key": has_custom,
+                "is_default": is_default,
                 "masked_key": masked_k,
                 "preferred_model": self.get_preferred_model(prov),
                 "system_keys_count": len(self._system_keys.get(prov, [])),
             }
 
         any_configured = any(p["configured"] for p in providers_status.values())
-        active_keys = {
-            prov: self.get_active_key(prov)
-            for prov in ("gemini", "groq", "cerebras", "openrouter", "nvidia")
-        }
 
         return {
             "gemini_configured": has_gemini,
-            "groq_configured": bool(self.get_active_groq_key()),
-            "cerebras_configured": bool(self.get_active_cerebras_key()),
-            "openrouter_configured": bool(self.get_active_openrouter_key()),
-            "nvidia_configured": bool(self.get_active_nvidia_key()),
+            "groq_configured": bool(self.get_active_groq_key(user_id=user_id)),
+            "cerebras_configured": bool(self.get_active_cerebras_key(user_id=user_id)),
+            "openrouter_configured": bool(self.get_active_openrouter_key(user_id=user_id)),
+            "nvidia_configured": bool(self.get_active_nvidia_key(user_id=user_id)),
             "masked_key": masked_gemini,
+            "has_custom_key": bool(gemini_custom),
             "system_keys_count": len(self._system_keys.get("gemini", [])),
             "preferred_model": self.get_preferred_model("gemini"),
             "supported_models": DEFAULT_GEMINI_MODELS,
             "last_sync": self._last_sync_time,
             "status": "ready" if any_configured else "missing_key",
-            "active_keys": active_keys,
             "providers": providers_status,
         }
 

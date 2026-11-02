@@ -28,6 +28,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const pollingRef = useRef<number | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isOpen && updateInfo?.update_available) {
@@ -46,13 +47,51 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
+
+    // Focus order & initial focus (WCAG 2.4.3 / MISA-ROOT-010)
+    const timer = setTimeout(() => {
+      const focusables = modalRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusables && focusables.length > 0) {
+        focusables[0].focus();
+      }
+    }, 50);
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !isProcessing) {
         onClose();
+        return;
+      }
+
+      if (e.key === "Tab" && modalRef.current) {
+        const focusables = Array.from(
+          modalRef.current.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
   }, [isOpen, isProcessing, onClose]);
 
   const startStatusPolling = () => {
@@ -147,6 +186,11 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
       }}
     >
       <div
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="update-modal-title"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         style={{
           width: "100%",
@@ -189,7 +233,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
               </svg>
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#F8FAFC" }}>
+              <h3 id="update-modal-title" style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#F8FAFC" }}>
                 Yangi Versiya Mavjud
               </h3>
               <span style={{ fontSize: 11.5, color: "#94A3B8" }}>

@@ -1069,24 +1069,7 @@ fn run_worker_lifecycle(model_arc: Arc<Mutex<PreflightUiModel>>) {
     startup_log("WORKER", "Worker lifecycle thread started");
 
     loop {
-        // 0. Tarmoq tekshiruvi
-        let net_ok = check_network_connectivity();
-        startup_log("WORKER", &format!("Network connectivity check: {}", if net_ok { "Connected" } else { "Disconnected" }));
-        if let Ok(mut m) = model_arc.lock() {
-            m.diagnostics.network = if net_ok { "Ulangan".to_string() } else { "Ulanmagan".to_string() };
-        }
-
-        // 1. Initial Detection
-        startup_log("WORKER", "State = Detecting, target_percent = 10%");
-        if let Ok(mut m) = model_arc.lock() {
-            m.state = PreflightState::Detecting;
-            m.target_percent = 10.0;
-            m.headline = "WebView2 Runtime tekshirilmoqda...".to_string();
-            m.diagnostics.status_text = "Tekshirilmoqda".to_string();
-            m.diagnostics.status_color = rgb(168, 85, 247);
-        }
-        std::thread::sleep(Duration::from_millis(350));
-
+        // 1. Initial Local Detection (Instant check via registry)
         startup_log("WEBVIEW2", "Checking installed version via registry and directories...");
         let ver_opt = check_webview2_installed_version();
         if let Some(ver) = ver_opt {
@@ -1100,8 +1083,7 @@ fn run_worker_lifecycle(model_arc: Arc<Mutex<PreflightUiModel>>) {
                 m.diagnostics.status_color = rgb(16, 185, 129);
                 m.diagnostics.version = ver;
             }
-            startup_log("WORKER", "Displaying READY state for 500ms before closing...");
-            std::thread::sleep(Duration::from_millis(500));
+            std::thread::sleep(Duration::from_millis(300));
             if let Ok(mut m) = model_arc.lock() {
                 m.state = PreflightState::Ready;
                 m.success = true;
@@ -1110,6 +1092,19 @@ fn run_worker_lifecycle(model_arc: Arc<Mutex<PreflightUiModel>>) {
             startup_log("WORKER", "Preflight success signaled (should_close=true). Worker exiting.");
             return;
         }
+
+        // 2. Tarmoq tekshiruvi (faqat WebView2 o'rnatilmagan bo'lsagina kerak)
+        let net_ok = check_network_connectivity();
+        startup_log("WORKER", &format!("Network connectivity check: {}", if net_ok { "Connected" } else { "Disconnected" }));
+        if let Ok(mut m) = model_arc.lock() {
+            m.diagnostics.network = if net_ok { "Ulangan".to_string() } else { "Ulanmagan".to_string() };
+            m.state = PreflightState::Detecting;
+            m.target_percent = 10.0;
+            m.headline = "WebView2 Runtime tekshirilmoqda...".to_string();
+            m.diagnostics.status_text = "Tekshirilmoqda".to_string();
+            m.diagnostics.status_color = rgb(168, 85, 247);
+        }
+        std::thread::sleep(Duration::from_millis(350));
 
         // 2. Searching Bootstrapper
         startup_log("WEBVIEW2", "WebView2 NOT found in system! Starting bootstrapper search...");

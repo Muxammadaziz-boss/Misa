@@ -1,0 +1,139 @@
+OriginalFile,OriginalID,OriginalTitle,OriginalStatus,FinalStatus,MasterID,DeduplicationReason,EvidenceSource,VerificationLevel
+01_desktop_windows_install.md,WIN-001,PyInstaller onedir _internal missing in Inno Setup,OPEN,CONFIRMED,MISA-ROOT-002,Installer script packaging root cause,Misa/src-tauri/tauri.conf.json:L37,HIGH
+01_desktop_windows_install.md,WIN-002,lib.rs backend candidates list lacks release/v9.3 path,OPEN,PARTIALLY_CONFIRMED,MISA-ROOT-007,Dev runtime path resolution fallback,Misa/src-tauri/src/lib.rs:L290,MEDIUM
+01_desktop_windows_install.md,WIN-003,ShellExecuteW launches external URLs without scheme check,OPEN,CONFIRMED,MISA-ROOT-003,Native shell execution root cause,Misa/src-tauri/src/lib.rs:L681,HIGH
+01_desktop_windows_install.md,WIN-004,Hardcoded localhost port 18420 collision risk,OPEN,PARTIALLY_CONFIRMED,MISA-ROOT-001,IPC port allocation risk,core/api_server.py:L7328,MEDIUM
+01_desktop_windows_install.md,WIN-005,Uninstaller leaves user config and database behind,OPEN,CONFIRMED,MISA-ROOT-027,Data cleanup and backup gap,installer.iss:L88,MEDIUM
+02_tauri_frontend_architecture.md,FE-001,Global outline none suppresses keyboard focus ring,OPEN,CONFIRMED,MISA-ROOT-008,WCAG SC 2.4.7 AA non-conformance,Misa/src/App.css:L91,HIGH
+02_tauri_frontend_architecture.md,FE-002,Modal dialogs lack focus trap and initial focus,OPEN,CONFIRMED,MISA-ROOT-010,WCAG SC 2.4.3 focus order defect,Misa/src/components/UpdateModal.tsx:L150,HIGH
+02_tauri_frontend_architecture.md,FE-003,Login form double click causes race condition,OPEN,CONFIRMED,MISA-ROOT-017,Form submission race condition,Misa/src/pages/AuthPage.tsx:L1824,HIGH
+02_tauri_frontend_architecture.md,FE-004,Infinite reconnect loop in WebSocket client on close,OPEN,CONFIRMED,MISA-ROOT-017,IPC connection leak defect,Misa/src/services/backendService.ts:L4900,HIGH
+02_tauri_frontend_architecture.md,FE-005,Accessible name missing on icon buttons,OPEN,CONFIRMED,MISA-ROOT-025,WCAG SC 4.1.2 Level A non-conformance,Misa/src/components/IconButton.tsx:L12,HIGH
+03_backend_python_api.md,API-001,Port 18420 API lacks authentication and CORS wildcard,OPEN,CONFIRMED,MISA-ROOT-001,Core API network exposure root cause,core/api_server.py:L7351,HIGH
+03_backend_python_api.md,API-002,Missing authentication token on command endpoints,OPEN,DUPLICATE,MISA-ROOT-001,Duplicate of local API auth bypass,core/api_server.py:L7328,HIGH
+03_backend_python_api.md,API-003,PowerShell execution without command sanitization,OPEN,CONFIRMED,MISA-ROOT-004,Core command injection root cause,core/agent_tools.py:L514,HIGH
+03_backend_python_api.md,API-004,Synchronous blocking operations in async route handler,OPEN,CONFIRMED,MISA-ROOT-030,Monolithic server technical debt,core/api_server.py:L7920,HIGH
+03_backend_python_api.md,API-005,Unhandled exception drops connection on invalid JSON payload,OPEN,CONFIRMED,MISA-ROOT-020,API error handling and resilience debt,core/api_server.py:L240,MEDIUM
+04_ai_agents_orchestration.md,AI-001,Agent execution plan hidden from user (Black box execution),OPEN,CONFIRMED,MISA-ROOT-013,Agent transparency and observability gap,core/agents/manager_agent.py:L10,HIGH
+04_ai_agents_orchestration.md,AI-002,Destructive tool execution lacks Human-in-the-Loop dialog,OPEN,CONFIRMED,MISA-ROOT-006,OWASP LLM06 Excessive Agency root cause,Misa/src/pages/ChatPage.tsx:L100,HIGH
+04_ai_agents_orchestration.md,AI-003,Prompt injection through untrusted system prompt context,OPEN,CONFIRMED,MISA-ROOT-016,Indirect prompt injection vulnerability,core/gui/controller.py:L50,HIGH
+04_ai_agents_orchestration.md,AI-004,Offline local LLM provider missing fallback handling,OPEN,CONFIRMED,MISA-ROOT-028,Provider fallback observability gap,core/providers/manager.py:L40,MEDIUM
+04_ai_agents_orchestration.md,AI-005,Context truncation without token budget tracking,OPEN,CONFIRMED,MISA-ROOT-030,Context window technical debt,core/agents/manager_agent.py:L150,MEDIUM
+05_security_authentication_secrets.md,SEC-001,PowerShell argument injection in open_app tool,OPEN,DUPLICATE,MISA-ROOT-004,Duplicate of PowerShell execution injection,core/agent_tools.py:L514,HIGH
+05_security_authentication_secrets.md,SEC-002,Plaintext API keys stored in ai_keys_cache.json,OPEN,CONFIRMED,MISA-ROOT-005,Credential storage root cause,core/v8/ai_key_manager.py:L115,HIGH
+05_security_authentication_secrets.md,SEC-003,Arbitrary URL open via Windows ShellExecuteW,OPEN,DUPLICATE,MISA-ROOT-003,Duplicate of ShellExecuteW URL risk,Misa/src-tauri/src/lib.rs:L681,HIGH
+05_security_authentication_secrets.md,SEC-004,Hardcoded production secrets in sample configuration,OPEN,FALSE_POSITIVE,MISA-ROOT-005,Only sample placeholder dummy strings present,core/v8/ai_key_manager.py:L30,HIGH
+05_security_authentication_secrets.md,SEC-005,Rate limiting absent on local loopback interface,OPEN,FALSE_POSITIVE,MISA-ROOT-001,Rate limiting local IPC degrades responsiveness,core/api_server.py:L7351,HIGH
+06_ui_ux_usability.md,UX-001,Mandatory 800ms intro video and audio playback on launch,OPEN,CONFIRMED,MISA-ROOT-031,Startup UX friction root cause,Misa/src/components/MisaIntroSplash.tsx:L1,HIGH
+06_ui_ux_usability.md,UX-002,Missing Stop button to abort agent generation immediately,OPEN,CONFIRMED,MISA-ROOT-012,Agent control feature gap root cause,Misa/src/pages/ChatPage.tsx:L250,HIGH
+06_ui_ux_usability.md,UX-003,Microphone active status lacks clear visual indicator,OPEN,CONFIRMED,MISA-ROOT-014,Audio visual feedback gap,Misa/src/pages/VoicePage.tsx:L80,HIGH
+06_ui_ux_usability.md,UX-004,Global outline removal prevents keyboard accessibility,OPEN,DUPLICATE,MISA-ROOT-008,Duplicate of Focus Visible SC 2.4.7,Misa/src/App.css:L91,HIGH
+06_ui_ux_usability.md,UX-005,Settings scattered across 5 separate pages,OPEN,CONFIRMED,MISA-ROOT-020,Navigation fragmentation UX debt,Misa/src/App.tsx:L45,MEDIUM
+07_database_sqlite_memory.md,DATA-001,Chat history stored without encryption at rest,OPEN,PARTIALLY_CONFIRMED,MISA-ROOT-027,Windows user profile ACL restricts access,core/agent_memory.py:L60,MEDIUM
+07_database_sqlite_memory.md,DATA-002,Multi-user profile isolation claim in desktop app,OPEN,FALSE_POSITIVE,MISA-ROOT-023,Personal desktop assistant single-user scope,core/agent_memory.py:L20,HIGH
+07_database_sqlite_memory.md,DATA-003,User cannot edit or delete long-term memory items,OPEN,CONFIRMED,MISA-ROOT-027,Memory management feature gap,Misa/src/pages/MemoryPage.tsx:L40,HIGH
+07_database_sqlite_memory.md,DATA-004,SQLite database lock under 50 concurrent agent threads,OPEN,UNVERIFIED,MISA-ROOT-027,No multi-threaded stress test performed,core/agent_memory.py:L110,LOW
+07_database_sqlite_memory.md,DATA-005,No automated backup and export tool for conversation logs,OPEN,CONFIRMED,MISA-ROOT-027,Backup and export feature gap,Misa/src/pages/MemoryPage.tsx:L120,MEDIUM
+08_performance_concurrency_leaks.md,PERF-001,Background process leaks 200MB memory per hour claim,OPEN,UNVERIFIED,MISA-ROOT-030,No heap snapshot or profiling log available,core/api_server.py:L1,LOW
+08_performance_concurrency_leaks.md,PERF-002,CPU spike during continuous audio speech recognition,OPEN,CONFIRMED,MISA-ROOT-014,Audio thread CPU contention,core/audio_service.py:L95,HIGH
+08_performance_concurrency_leaks.md,PERF-003,DOM node accumulation in unbounded chat message list,OPEN,CONFIRMED,MISA-ROOT-018,Virtual scrolling missing in chat,Misa/src/pages/ChatPage.tsx:L320,HIGH
+08_performance_concurrency_leaks.md,PERF-004,Synchronous disk logging blocks event loop,OPEN,PARTIALLY_CONFIRMED,MISA-ROOT-030,Logging overhead in development,core/api_server.py:L80,MEDIUM
+08_performance_concurrency_leaks.md,PERF-005,Slow startup time due to synchronous model check,OPEN,CONFIRMED,MISA-ROOT-021,Empty state and startup loader gap,core/api_server.py:L120,MEDIUM
+09_cross_platform_scalability.md,XPLAT-001,Path separators hardcoded for Windows environment,OPEN,PARTIALLY_CONFIRMED,MISA-ROOT-007,Tauri build targets Windows exclusively,Misa/src-tauri/src/lib.rs:L310,MEDIUM
+09_cross_platform_scalability.md,XPLAT-002,Windows registry keys used directly without platform guard,OPEN,CONFIRMED,MISA-ROOT-007,Platform specific logic encapsulation,Misa/src-tauri/src/diag.rs:L50,MEDIUM
+09_cross_platform_scalability.md,XPLAT-003,Windows notification toast API incompatibility,OPEN,PARTIALLY_CONFIRMED,MISA-ROOT-020,Toast fallback notification styling,Misa/src/services/backendService.ts:L300,MEDIUM
+09_cross_platform_scalability.md,XPLAT-004,PowerShell dependency limits portability to non-Windows,OPEN,CONFIRMED,MISA-ROOT-004,Shell runner abstraction gap,core/agent_tools.py:L514,HIGH
+09_cross_platform_scalability.md,XPLAT-005,Inno Setup build script cannot run in cross-compilation,OPEN,CONFIRMED,MISA-ROOT-002,Installer packaging toolchain dependency,installer.iss:L1,MEDIUM
+10_code_quality_refactoring.md,ARC-001,Monolithic God files api_server.py and backendService.ts,OPEN,CONFIRMED,MISA-ROOT-030,Architecture modularity technical debt,core/api_server.py:L7920,HIGH
+10_code_quality_refactoring.md,ARC-002,Circular import risk in core providers manager,OPEN,CONFIRMED,MISA-ROOT-030,Code hygiene and dependency layering,core/providers/manager.py:L15,MEDIUM
+10_code_quality_refactoring.md,ARC-003,Global state mutation across agent execution loops,OPEN,CONFIRMED,MISA-ROOT-013,Agent state predictability debt,core/agents/manager_agent.py:L80,HIGH
+10_code_quality_refactoring.md,ARC-004,Inconsistent error payload schema between endpoints,OPEN,CONFIRMED,MISA-ROOT-020,API contract consistency debt,core/api_server.py:L350,MEDIUM
+10_code_quality_refactoring.md,ARC-005,Hardcoded string literals without localization bundle,OPEN,CONFIRMED,MISA-ROOT-022,Design token and i18n technical debt,Misa/src/pages/AuthPage.tsx:L100,MEDIUM
+11_audio_voice_devices.md,AUD-001,Neural wake-word .onnx model missing for Salom Misa,OPEN,CONFIRMED,MISA-ROOT-015,Wake-word model asset gap,models/wake_word/:L1,HIGH
+11_audio_voice_devices.md,AUD-002,Acoustic feedback and ducking absence in voice duplex,OPEN,UNVERIFIED,MISA-ROOT-014,No acoustic physical measurement conducted,core/audio_service.py:L1,LOW
+11_audio_voice_devices.md,AUD-003,Audio recording blocks indefinitely with static 5s sleep,OPEN,FALSE_POSITIVE,MISA-ROOT-014,Dynamic VAD with 1.2s silence timeout exists,core/audio_service.py:L70,HIGH
+11_audio_voice_devices.md,AUD-004,Sample rate mismatch between PyAudio input and Vosk,OPEN,CONFIRMED,MISA-ROOT-009,Audio format conversion pipeline,core/audio_service.py:L115,HIGH
+11_audio_voice_devices.md,AUD-005,Parallel audio streams cause PyAudio device lock,OPEN,CONFIRMED,MISA-ROOT-014,Concurrency blocking in audio thread,core/audio_service.py:L160,HIGH
+12_testing_qa_coverage.md,QA-001,Unit test coverage under 25 percent across core,OPEN,CONFIRMED,MISA-ROOT-030,Test suite coverage technical debt,tests/:L1,HIGH
+12_testing_qa_coverage.md,QA-002,Missing voice pipeline end-to-end integration tests,OPEN,PARTIALLY_CONFIRMED,MISA-ROOT-030,Helper tests exist but full voice e2e absent,tests/voice:L1,MEDIUM
+12_testing_qa_coverage.md,QA-003,No automated regression tests for installer artifact,OPEN,CONFIRMED,MISA-ROOT-002,CI/CD release verification gap,packaging/build_backend.py:L1,MEDIUM
+12_testing_qa_coverage.md,QA-004,Mocking framework absent for external LLM API failures,OPEN,CONFIRMED,MISA-ROOT-030,Test harness isolation technical debt,tests/mocks:L1,MEDIUM
+12_testing_qa_coverage.md,QA-005,Race conditions in IPC not tested under stress load,OPEN,CONFIRMED,MISA-ROOT-017,IPC concurrency testing debt,tests/ipc:L1,MEDIUM
+01_USER_CENTRIC_JOURNEYS.md,UX-JRN-001,First-run auth wall blocks local assistant functionality,OPEN,CONFIRMED,MISA-ROOT-020,Onboarding user journey friction,Misa/src/pages/AuthPage.tsx:L50,HIGH
+01_USER_CENTRIC_JOURNEYS.md,UX-JRN-002,Agent task execution lacks step-by-step progress visibility,OPEN,DUPLICATE,MISA-ROOT-013,Duplicate of Black box execution,core/agents/manager_agent.py:L10,HIGH
+01_USER_CENTRIC_JOURNEYS.md,UX-JRN-003,Acoustic feedback loop during full-duplex speech interaction,OPEN,UNVERIFIED,MISA-ROOT-014,Subjective claim without physical lab test,core/audio_service.py:L1,LOW
+01_USER_CENTRIC_JOURNEYS.md,UX-JRN-004,Settings panel lacks undo and reset options,OPEN,CONFIRMED,MISA-ROOT-020,Configuration management UX debt,Misa/src/pages/AccountPage.tsx:L80,MEDIUM
+01_USER_CENTRIC_JOURNEYS.md,UX-JRN-005,Settings scattered across 5 separate pages,OPEN,DUPLICATE,MISA-ROOT-020,Duplicate of Navigation fragmentation,Misa/src/App.tsx:L45,MEDIUM
+02_VISUAL_DESIGN_EXCELLENCE.md,VIS-001,Residual Mikasa branding in CSS classes and icons,OPEN,CONFIRMED,MISA-ROOT-032,Brand identity debt root cause,Misa/src/styles/globals.css:L40,HIGH
+02_VISUAL_DESIGN_EXCELLENCE.md,VIS-002,Missing 256x256 icon resolution for Windows desktop,OPEN,CONFIRMED,MISA-ROOT-002,Installer visual asset packaging gap,Misa/src-tauri/icons/:L1,MEDIUM
+02_VISUAL_DESIGN_EXCELLENCE.md,VIS-003,Ghost tokens like --glass-bg used in buttons,OPEN,DUPLICATE,MISA-ROOT-018,Duplicate of Button ghost tokens,Misa/src/components/Button.tsx:L47,HIGH
+02_VISUAL_DESIGN_EXCELLENCE.md,VIS-004,Inconsistent modal drop shadows and corner radius,OPEN,CONFIRMED,MISA-ROOT-022,Design system elevation tokens,Misa/src/styles/tokens.css:L80,MEDIUM
+02_VISUAL_DESIGN_EXCELLENCE.md,VIS-005,White text on white background in light theme,OPEN,CONFIRMED,MISA-ROOT-019,WCAG SC 1.4.3 light theme contrast failure,Misa/src/styles/tokens.css:L101,HIGH
+03_ACCESSIBILITY_AUDIT.md,A11Y-001,AuthPage input fields lack programmatic label associations,OPEN,DUPLICATE,MISA-ROOT-009,Duplicate of Label association SC 1.3.1,Misa/src/pages/AuthPage.tsx:L1824,HIGH
+03_ACCESSIBILITY_AUDIT.md,A11Y-002,Global focus outline removal breaks WCAG 2.4.7 AA,OPEN,DUPLICATE,MISA-ROOT-008,Duplicate of Focus Visible SC 2.4.7,Misa/src/App.css:L91,HIGH
+03_ACCESSIBILITY_AUDIT.md,A11Y-003,Modal lacks role dialog and focus trap,OPEN,DUPLICATE,MISA-ROOT-010,Duplicate of Focus Trap SC 2.4.3,Misa/src/components/UpdateModal.tsx:L150,HIGH
+03_ACCESSIBILITY_AUDIT.md,A11Y-004,Icon buttons violate minimum target size WCAG 2.5.8,OPEN,DUPLICATE,MISA-ROOT-025,Duplicate of Target Size SC 2.5.8,Misa/src/components/IconButton.tsx:L12,HIGH
+03_ACCESSIBILITY_AUDIT.md,A11Y-005,Non-semantic div containers lack landmark roles,OPEN,CONFIRMED,MISA-ROOT-008,WCAG SC 1.3.1 landmark defect,Misa/index.html:L20,HIGH
+04_ENGINEERING_UI_STATES.md,UI-001,MemoryPage lacks rich empty state illustrations,OPEN,DUPLICATE,MISA-ROOT-021,Duplicate of Memory empty states,Misa/src/pages/MemoryPage.tsx:L10,MEDIUM
+04_ENGINEERING_UI_STATES.md,UI-002,RemoteControlPage blank screen flicker on load,OPEN,PARTIALLY_CONFIRMED,MISA-ROOT-021,Occurs only during slow backend startup,Misa/src/pages/RemoteControlPage.tsx:L15,MEDIUM
+04_ENGINEERING_UI_STATES.md,UI-003,High-DPI 150% scaling clips window bottom at 800px,OPEN,DUPLICATE,MISA-ROOT-011,Duplicate of High-DPI window clipping,Misa/src-tauri/src/lib.rs:L1310,HIGH
+04_ENGINEERING_UI_STATES.md,UI-004,Skeleton loaders absent during initial model loading,OPEN,PARTIALLY_CONFIRMED,MISA-ROOT-021,Splash hides load but skeleton missing,Misa/src/components/MisaIntroSplash.tsx:L30,MEDIUM
+04_ENGINEERING_UI_STATES.md,UI-005,Double-click submission race on authentication form,OPEN,DUPLICATE,MISA-ROOT-017,Duplicate of Login form race condition,Misa/src/pages/AuthPage.tsx:L1824,HIGH
+05_APPLICATION_SECURITY_PRIVACY.md,SEC-APP-001,FastAPI framework vulnerabilities in Port 18420 server,OPEN,FALSE_POSITIVE,MISA-ROOT-001,Backend uses aiohttp.web not FastAPI,core/api_server.py:L15,HIGH
+05_APPLICATION_SECURITY_PRIVACY.md,SEC-APP-002,ShellExecuteW executes arbitrary local binaries,OPEN,DUPLICATE,MISA-ROOT-003,Duplicate of ShellExecuteW URL risk,Misa/src-tauri/src/lib.rs:L681,HIGH
+05_APPLICATION_SECURITY_PRIVACY.md,SEC-APP-003,Plaintext API keys stored in local JSON cache,OPEN,DUPLICATE,MISA-ROOT-005,Duplicate of Plaintext API key storage,core/v8/ai_key_manager.py:L115,HIGH
+05_APPLICATION_SECURITY_PRIVACY.md,SEC-APP-004,Plaintext telemetry payload transmitted over HTTP,OPEN,PARTIALLY_CONFIRMED,MISA-ROOT-026,Telemetry is disabled by default in config,core/api_server.py:L400,MEDIUM
+05_APPLICATION_SECURITY_PRIVACY.md,SEC-APP-005,Multi-megabyte payload denial of service on local IPC,OPEN,UNVERIFIED,MISA-ROOT-001,No fuzzing or payload stress test conducted,core/api_server.py:L7351,LOW
+06_AI_AGENT_SECURITY.md,AISEC-001,Indirect Prompt Injection via active window title,OPEN,DUPLICATE,MISA-ROOT-016,Duplicate of Prompt Injection context,core/gui/controller.py:L50,HIGH
+06_AI_AGENT_SECURITY.md,AISEC-002,Destructive tool execution lacks Human-in-the-Loop dialog,OPEN,DUPLICATE,MISA-ROOT-006,Duplicate of Human-in-the-Loop gap,Misa/src/pages/ChatPage.tsx:L100,HIGH
+06_AI_AGENT_SECURITY.md,AISEC-003,Self-verification loophole in autonomous agent execution,OPEN,CONFIRMED,MISA-ROOT-006,Agent verification integrity defect,core/agents/manager_agent.py:L120,HIGH
+06_AI_AGENT_SECURITY.md,AISEC-004,Memory poisoning through unconstrained tool outputs,OPEN,CONFIRMED,MISA-ROOT-027,Long-term memory poisoning risk,core/agent_memory.py:L85,HIGH
+06_AI_AGENT_SECURITY.md,AISEC-005,Agent recursive loop consuming 100% CPU indefinitely,OPEN,UNVERIFIED,MISA-ROOT-006,Loop limits exist; infinite lock unverified,core/agents/manager_agent.py:L180,LOW
+01_APPLICATION_SECURITY.md,SEC-001,Port 18420 API lacks token authorization in desktop mode,OPEN,DUPLICATE,MISA-ROOT-001,Duplicate of Local API auth bypass,core/api_server.py:L7328,HIGH
+01_APPLICATION_SECURITY.md,SEC-002,Arbitrary URL open via Windows ShellExecuteW,OPEN,DUPLICATE,MISA-ROOT-003,Duplicate of ShellExecuteW URL risk,Misa/src-tauri/src/lib.rs:L681,HIGH
+01_APPLICATION_SECURITY.md,SEC-003,Command execution via unquoted PowerShell argument,OPEN,DUPLICATE,MISA-ROOT-004,Duplicate of PowerShell sanitization,core/agent_tools.py:L514,HIGH
+01_APPLICATION_SECURITY.md,SEC-004,API tokens stored in plaintext JSON without DPAPI,OPEN,DUPLICATE,MISA-ROOT-005,Duplicate of Plaintext API key storage,core/v8/ai_key_manager.py:L115,HIGH
+01_APPLICATION_SECURITY.md,SEC-005,Temporary files created in insecure temp folder,OPEN,PARTIALLY_CONFIRMED,MISA-ROOT-016,Temp files inherit user ACL,core/agent_tools.py:L310,MEDIUM
+01_APPLICATION_SECURITY.md,SEC-006,Session hijacking via predictable local token,OPEN,FALSE_POSITIVE,MISA-ROOT-001,No tokens currently exist to hijack,core/api_server.py:L7351,HIGH
+02_AI_AGENT_SECURITY.md,AISEC-001,Window titles injected into system prompt without delimiters,OPEN,DUPLICATE,MISA-ROOT-016,Duplicate of Prompt Injection context,core/gui/controller.py:L50,HIGH
+02_AI_AGENT_SECURITY.md,AISEC-002,Agent tools perform destructive actions without user prompt,OPEN,DUPLICATE,MISA-ROOT-006,Duplicate of Human-in-the-Loop gap,Misa/src/pages/ChatPage.tsx:L100,HIGH
+02_AI_AGENT_SECURITY.md,AISEC-003,Autonomous agent overrides safety policy via system role,OPEN,CONFIRMED,MISA-ROOT-006,OWASP LLM06 Excessive Agency root cause,core/agents/manager_agent.py:L140,HIGH
+02_AI_AGENT_SECURITY.md,AISEC-004,Memory poisoning through unconstrained tool outputs,OPEN,DUPLICATE,MISA-ROOT-027,Duplicate of Memory poisoning risk,core/agent_memory.py:L85,HIGH
+02_AI_AGENT_SECURITY.md,AISEC-005,Unbounded tool invocation recursion loop,OPEN,CONFIRMED,MISA-ROOT-006,Agent execution recursion control defect,core/agents/manager_agent.py:L200,HIGH
+03_PRIVACY_AUDIT.md,PRIV-001,Google Web Speech API sends audio data,OPEN,PARTIALLY_CONFIRMED,MISA-ROOT-026,Sends audio only when mic active,Misa/src/pages/VoicePage.tsx:L50,MEDIUM
+03_PRIVACY_AUDIT.md,PRIV-002,Window titles transmitted continuously over telemetry,OPEN,UNVERIFIED,MISA-ROOT-026,Sent only on active queries not continuously,core/gui/controller.py:L90,LOW
+03_PRIVACY_AUDIT.md,PRIV-003,Sensitive queries logged in plaintext log files,OPEN,CONFIRMED,MISA-ROOT-023,Log data exposure security risk,core/api_server.py:L150,HIGH
+03_PRIVACY_AUDIT.md,PRIV-004,No user-facing memory wipe or conversation wipe button,OPEN,DUPLICATE,MISA-ROOT-027,Duplicate of Memory wipe gap,Misa/src/pages/MemoryPage.tsx:L40,HIGH
+01_BRAND_IDENTITY.md,VIS-BRAND-001,Residual Mikasa branding in CSS classes and component names,OPEN,CONFIRMED,MISA-ROOT-032,Brand identity debt confirmed in design audit,Misa/src/styles/globals.css:L40,HIGH
+01_BRAND_IDENTITY.md,VIS-BRAND-002,Raster PNG logo used instead of scalable vector SVG,OPEN,PARTIALLY_CONFIRMED,MISA-ROOT-022,PNG logo works but degrades on 4K,Misa/src/components/MisaIntroSplash.tsx:L15,MEDIUM
+01_BRAND_IDENTITY.md,VIS-BRAND-003,Inconsistent brand accent colors between splash and theme,OPEN,CONFIRMED,MISA-ROOT-022,Brand color token inconsistency,Misa/src/styles/tokens.css:L38,HIGH
+02_COLOR_AND_TYPOGRAPHY.md,VIS-CLR-001,White text on white background in light theme mode,OPEN,CONFIRMED,MISA-ROOT-019,Light theme contrast failure confirmed in design audit,Misa/src/styles/tokens.css:L101,HIGH
+02_COLOR_AND_TYPOGRAPHY.md,VIS-CLR-002,Light theme contrast on secondary labels below 4.5:1,OPEN,PARTIALLY_CONFIRMED,MISA-ROOT-019,WCAG SC 1.4.3 AA contrast failure,Misa/src/styles/tokens.css:L105,HIGH
+02_COLOR_AND_TYPOGRAPHY.md,VIS-TYPO-001,Typography scale mixes raw px and rem units without base,OPEN,CONFIRMED,MISA-ROOT-022,Design system typography token debt,Misa/src/styles/tokens.css:L50,MEDIUM
+03_DESIGN_SYSTEM.md,VIS-DS-001,Ghost tokens like --glass-bg used in Button.tsx,OPEN,CONFIRMED,MISA-ROOT-018,Ghost CSS variable reference root cause,Misa/src/components/Button.tsx:L47,HIGH
+03_DESIGN_SYSTEM.md,VIS-DS-002,Inconsistent drop shadow elevations across cards,OPEN,DUPLICATE,MISA-ROOT-022,Duplicate of Shadow elevation tokens,Misa/src/styles/tokens.css:L80,MEDIUM
+03_DESIGN_SYSTEM.md,VIS-DS-003,Blue glow shadow hardcoded on purple accent buttons,OPEN,CONFIRMED,MISA-ROOT-022,Visual token chromatic mismatch,Misa/src/components/Button.tsx:L60,MEDIUM
+03_DESIGN_SYSTEM.md,VIS-DS-004,Mixed border-radius values across cards and modals,OPEN,PARTIALLY_CONFIRMED,MISA-ROOT-022,Radius tokenization inconsistency,Misa/src/styles/tokens.css:L70,MEDIUM
+04_LAYOUT_AND_COMPONENT_VISUALS.md,VIS-LAY-001,High-DPI 150% scaling clips window bottom at 800px,OPEN,CONFIRMED,MISA-ROOT-011,High-DPI window clipping root cause,Misa/src-tauri/src/lib.rs:L1310,HIGH
+04_LAYOUT_AND_COMPONENT_VISUALS.md,VIS-LAY-002,Inline JS hover styles bypass CSS transition timing,OPEN,CONFIRMED,MISA-ROOT-021,Micro-interaction transition defect,Misa/src/components/Button.tsx:L30,MEDIUM
+04_LAYOUT_AND_COMPONENT_VISUALS.md,VIS-LAY-003,Heavy 24px backdrop blur causes GPU lag on low-end,OPEN,PARTIALLY_CONFIRMED,MISA-ROOT-022,Blur performance on integrated GPU,Misa/src/styles/globals.css:L15,MEDIUM
+04_LAYOUT_AND_COMPONENT_VISUALS.md,VIS-LAY-004,Z-index collisions between toast notifications and modals,OPEN,CONFIRMED,MISA-ROOT-022,Z-index layer hierarchy defect,Misa/src/styles/tokens.css:L90,MEDIUM
+02_USABILITY_AUDIT.md,UX-HEUR-001,System status and auth state ambiguous on connection failure,OPEN,CONFIRMED,MISA-ROOT-020,Nielsen Heuristic 1 Visibility of status,Misa/src/pages/AuthPage.tsx:L120,HIGH
+02_USABILITY_AUDIT.md,UX-HEUR-002,Missing Stop button to abort agent generation immediately,OPEN,CONFIRMED,MISA-ROOT-012,Stop button feature gap confirmed in heuristic audit,Misa/src/pages/ChatPage.tsx:L250,HIGH
+02_USABILITY_AUDIT.md,UX-HEUR-003,Missing starter prompt chips for first-time users,OPEN,CONFIRMED,MISA-ROOT-022,Empty state onboarding affordance,Misa/src/pages/ChatPage.tsx:L80,MEDIUM
+02_USABILITY_AUDIT.md,UX-HEUR-004,Missing retry button when AI provider returns error,OPEN,CONFIRMED,MISA-ROOT-029,Error recovery Nielsen Heuristic 9,Misa/src/pages/ChatPage.tsx:L310,HIGH
+03_UI_FUNCTIONAL_STATES.md,UI-STATE-001,MemoryPage lacks rich empty state illustration,OPEN,CONFIRMED,MISA-ROOT-021,UI empty state design defect root cause,Misa/src/pages/MemoryPage.tsx:L10,MEDIUM
+03_UI_FUNCTIONAL_STATES.md,UI-STATE-002,RemoteControlPage blank screen flicker on initial load,OPEN,DUPLICATE,MISA-ROOT-021,Duplicate of Loading flicker defect,Misa/src/pages/RemoteControlPage.tsx:L15,MEDIUM
+03_UI_FUNCTIONAL_STATES.md,UI-STATE-003,Double-click submission race condition on login button,OPEN,CONFIRMED,MISA-ROOT-017,Login form race condition confirmed in state audit,Misa/src/pages/AuthPage.tsx:L1824,HIGH
+03_UI_FUNCTIONAL_STATES.md,UI-STATE-004,Send message button double-click race condition,OPEN,PARTIALLY_CONFIRMED,MISA-ROOT-017,Debounce window exists on chat send,Misa/src/pages/ChatPage.tsx:L190,MEDIUM
+04_AI_AGENT_EXPERIENCE.md,AI-UX-001,Agent execution plan hidden from user (Black box execution),OPEN,DUPLICATE,MISA-ROOT-013,Duplicate of Black box execution,core/agents/manager_agent.py:L10,HIGH
+04_AI_AGENT_EXPERIENCE.md,AI-UX-002,Destructive actions lack Human-in-the-Loop dialog,OPEN,PARTIALLY_CONFIRMED,MISA-ROOT-006,UI dialog missing backend-enforced token,Misa/src/pages/ChatPage.tsx:L100,HIGH
+04_AI_AGENT_EXPERIENCE.md,AI-UX-003,User cannot edit or delete long-term memory items,OPEN,DUPLICATE,MISA-ROOT-027,Duplicate of Memory management gap,Misa/src/pages/MemoryPage.tsx:L40,HIGH
+04_AI_AGENT_EXPERIENCE.md,AI-UX-004,AI Provider fallback model switch invisible to user,OPEN,CONFIRMED,MISA-ROOT-028,Provider fallback observability root cause,Misa/src/pages/ChatPage.tsx:L140,MEDIUM
+05_ACCESSIBILITY_AUDIT.md,A11Y-UX-001,AuthPage input fields lack programmatic label associations,OPEN,CONFIRMED,MISA-ROOT-009,WCAG SC 1.3.1 Level A non-conformance,Misa/src/pages/AuthPage.tsx:L1824,HIGH
+05_ACCESSIBILITY_AUDIT.md,A11Y-UX-002,Global focus outline removal breaks WCAG 2.4.7 AA,OPEN,CONFIRMED,MISA-ROOT-008,Focus Visible SC 2.4.7 confirmed in a11y audit,Misa/src/App.css:L91,HIGH
+05_ACCESSIBILITY_AUDIT.md,A11Y-UX-003,Modal lacks role dialog and focus trap,OPEN,CONFIRMED,MISA-ROOT-010,WCAG SC 2.4.3 Focus Order Level A defect,Misa/src/components/UpdateModal.tsx:L150,HIGH
+05_ACCESSIBILITY_AUDIT.md,A11Y-UX-004,IconButton target size 34px vs WCAG 2.5.8 AA,OPEN,PARTIALLY_CONFIRMED,MISA-ROOT-025,Passes 24px minimum but fails 44px AAA,Misa/src/components/IconButton.tsx:L12,MEDIUM
+05_ACCESSIBILITY_AUDIT.md,A11Y-UX-005,Command Palette lacks WAI-ARIA Combobox semantics,OPEN,CONFIRMED,MISA-ROOT-024,WCAG SC 4.1.2 Combobox accessibility,Misa/src/components/CommandPalette.tsx:L332,HIGH
+05_ACCESSIBILITY_AUDIT.md,A11Y-UX-006,prefers-reduced-motion OS media query unlinked,OPEN,PARTIALLY_CONFIRMED,MISA-ROOT-022,html.no-animations manual toggle exists,Misa/src/styles/tokens.css:L116,MEDIUM
+05_ACCESSIBILITY_AUDIT.md,A11Y-UX-007,Voice input lacks text fallback for hearing-impaired,OPEN,UNVERIFIED,MISA-ROOT-014,ChatPage text input serves as fallback,Misa/src/pages/ChatPage.tsx:L50,LOW

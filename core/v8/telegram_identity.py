@@ -696,6 +696,10 @@ class TelegramIdentityManager:
         req.status = "VERIFIED"
         req.telegram_user_id = tg_int
         req.used_at = now
+        if username:
+            req.metadata["telegram_username"] = str(username)
+        if first_name:
+            req.metadata["telegram_first_name"] = str(first_name)
 
         # Revoke any prior active link for this Misa user or Telegram user (clean 1:1 mapping)
         self._revoke_existing_links(req.misa_user_id, tg_int)
@@ -825,6 +829,10 @@ class TelegramIdentityManager:
         req.status = "VERIFIED"
         req.telegram_user_id = tg_int
         req.used_at = now
+        if username:
+            req.metadata["telegram_username"] = str(username)
+        if first_name:
+            req.metadata["telegram_first_name"] = str(first_name)
 
         self._revoke_existing_links(req.misa_user_id, tg_int)
 

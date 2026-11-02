@@ -24,6 +24,7 @@ import {
   EyeIcon,
   EyeOffIcon,
   GlobeIcon,
+  CopyIcon,
 } from "../components/icons/Icons";
 import { MisaLogo } from "../components/MisaLogo";
 import { WindowControls } from "../components/WindowControls";
@@ -34,6 +35,40 @@ interface AuthPageProps {
 }
 
 type AuthTab = "login" | "register" | "forgot" | "reset" | "verify";
+
+const inputBoxStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  width: "100%",
+  minWidth: 0,
+  maxWidth: "100%",
+  height: "50px",
+  minHeight: "50px",
+  background: "rgba(10, 15, 30, 0.88)",
+  border: "1.5px solid rgba(192, 76, 253, 0.45)",
+  borderRadius: "14px",
+  padding: "0 12px",
+  boxSizing: "border-box",
+  boxShadow: "inset 0 2px 6px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.2)",
+  transition: "all 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
+};
+
+const inputInnerStyle: React.CSSProperties = {
+  flex: 1,
+  width: "100%",
+  minWidth: 0,
+  height: "100%",
+  boxSizing: "border-box",
+  background: "transparent",
+  border: "none",
+  outline: "none",
+  boxShadow: "none",
+  color: "#FFFFFF",
+  fontSize: "14.5px",
+  padding: "0 6px",
+  margin: 0,
+  fontFamily: "inherit",
+};
 
 export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
   const [activeTab, setActiveTab] = useState<AuthTab>("login");
@@ -61,10 +96,21 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [diagModalOpen, setDiagModalOpen] = useState(false);
 
-  // Telegram modal state
+  // Telegram 2FA / OTP Login state
   const [telegramModalOpen, setTelegramModalOpen] = useState(false);
-  const [telegramInput, setTelegramInput] = useState("");
-  const [telegramLoading, setTelegramLoading] = useState(false);
+  const [telegramOtp, setTelegramOtp] = useState<string>("");
+  const [telegramDeepLink, setTelegramDeepLink] = useState<string>("");
+  const [telegramRequestId, setTelegramRequestId] = useState<string>("");
+  const [telegramOtpLoading, setTelegramOtpLoading] = useState<boolean>(false);
+  const [telegramOtpCopied, setTelegramOtpCopied] = useState<boolean>(false);
+  const [telegramVerifiedData, setTelegramVerifiedData] = useState<{
+    id: number;
+    username: string;
+    first_name?: string;
+    last_name?: string;
+  } | null>(null);
+  const [telegramUserNotFound, setTelegramUserNotFound] = useState(false);
+  const [telegramCreatingAccount, setTelegramCreatingAccount] = useState(false);
 
   // OTP Login state
   const [loginMethod, setLoginMethod] = useState<"password" | "otp">("password");
@@ -89,12 +135,22 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
     setOauthWaiting(false);
     setOauthState(null);
     setTelegramModalOpen(false);
+    setTelegramUserNotFound(false);
+    setTelegramVerifiedData(null);
+    setTelegramOtp("");
+    setTelegramDeepLink("");
+    setTelegramRequestId("");
     setOtpSent(false);
     setOtpCode("");
   };
 
   // Check on mount if opened with recovery URL or type=recovery
   useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data?.session) {
+        backendService.setAuthToken(null);
+      }
+    }).catch(() => {});
     const hash = window.location.hash || "";
     const search = window.location.search || "";
     if (hash.includes("type=recovery") || search.includes("type=recovery") || hash.includes("recovery_token=")) {
@@ -296,6 +352,21 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
     const providerName = provider === "google" ? "Google" : "GitHub";
 
     try {
+      // Pre-check if GitHub is enabled in Supabase
+      if (provider === "github") {
+        try {
+          const probe = await fetch("https://vdcssmzguxfknqkfxbed.supabase.co/auth/v1/authorize?provider=github", { method: "GET" });
+          if (!probe.ok && probe.status === 400) {
+            const probeJson = await probe.json().catch(() => null);
+            if (probeJson?.msg?.includes("not enabled") || probeJson?.error_code === "validation_failed") {
+              setErrorMsg("GitHub orqali kirish Supabase konsolida hali faollashtirilmagan. Iltimos, hozircha Google yoki Email orqali kiring.");
+              setOauthLoading(false);
+              return;
+            }
+          }
+        } catch {}
+      }
+
       const res = await backendService.signInWithOAuthProvider(provider);
       if (!res.ok) {
         setErrorMsg(res.error || `${providerName} orqali kirishda xatolik yuz berdi`);
@@ -319,42 +390,209 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
 
   // Telegram Quick Link / Bot Open
   const handleOpenTelegramBot = async () => {
+    const targetUrl = telegramDeepLink || "https://t.me/Misa_ai_agent_bot?start=auth";
     try {
-      await backendService.openExternalUrl("https://t.me/Misa_ai_agent_bot?start=auth");
+      await backendService.openExternalUrl(targetUrl);
       setSuccessMsg("Telegram bot (@Misa_ai_agent_bot) ochildi. Bot orqali tasdiqlang.");
     } catch {
-      window.open("https://t.me/Misa_ai_agent_bot?start=auth", "_blank");
+      window.open(targetUrl, "_blank");
     }
   };
 
-  // Telegram Quick Sign-In by Username or ID
-  const handleTelegramSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!telegramInput.trim()) {
-      setErrorMsg("Telegram @username yoki telefon raqamingizni kiriting");
-      return;
-    }
-    setTelegramLoading(true);
+  // 1. Start Telegram OTP Login Session (Zero-trust 2FA)
+  const handleOpenTelegramLogin = async () => {
+    setTelegramModalOpen(true);
+    setTelegramOtpLoading(true);
+    setTelegramOtpCopied(false);
+    setTelegramUserNotFound(false);
+    setTelegramVerifiedData(null);
     setErrorMsg(null);
+    setSuccessMsg(null);
 
     try {
-      const res = await backendService.loginWithTelegram({
-        username: telegramInput.trim(),
-        first_name: firstName.trim() || undefined,
-      });
+      let res = await backendService.startTelegramLink();
+      if (!res?.ok && (res?.error?.includes("Token yaroqsiz") || res?.error?.includes("Avtorizatsiyadan"))) {
+        backendService.setAuthToken(null);
+        res = await backendService.startTelegramLink();
+      }
+      if (res && res.ok && res.otp) {
+        setTelegramOtp(res.otp);
+        const link =
+          res.deep_link ||
+          `https://t.me/${res.bot_username || "Misa_ai_agent_bot"}?start=${res.link_token || ""}`;
+        setTelegramDeepLink(link);
+        setTelegramRequestId(res.request_id || "");
+      } else {
+        setErrorMsg(res?.error || "Telegram serveri bilan bog'lanishda xatolik. Iltimos, qayta urinib ko'ring.");
+        setTelegramOtp("");
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Telegram serveriga ulanib bo'lmadi");
+      setTelegramOtp("");
+    } finally {
+      setTelegramOtpLoading(false);
+    }
+  };
 
+  // 2. Real-time bot verification listener for Telegram Login
+  useEffect(() => {
+    if (!telegramModalOpen) return;
+    let isSubscribed = true;
+
+    const processVerifiedTelegramUser = async (verifiedId: number, verifiedUsername: string, extraData?: any) => {
+      if (!isSubscribed) return;
+      try {
+        setTelegramOtpLoading(true);
+
+        // 1. Supabase telegram_links tekshiruvi (user_id va profile bog'langanmi?)
+        let foundProfile: any = null;
+        if (verifiedId) {
+          const { data: linkRecord } = await supabase
+            .from("telegram_links")
+            .select("user_id, profiles(*)")
+            .eq("telegram_user_id", verifiedId)
+            .maybeSingle();
+          if (linkRecord?.profiles) {
+            foundProfile = linkRecord.profiles;
+          }
+        }
+        if (!foundProfile && verifiedUsername) {
+          const { data: linkRecord } = await supabase
+            .from("telegram_links")
+            .select("user_id, profiles(*)")
+            .ilike("telegram_username", verifiedUsername)
+            .maybeSingle();
+          if (linkRecord?.profiles) {
+            foundProfile = linkRecord.profiles;
+          }
+        }
+
+        // 2. Lokal saqlangan sessiyani tekshirish
+        if (!foundProfile && verifiedUsername) {
+          const storedUserStr = localStorage.getItem("misa_user_data");
+          const storedLinkedTg = localStorage.getItem("misa_linked_telegram");
+          if (storedUserStr && storedLinkedTg && storedLinkedTg.toLowerCase() === verifiedUsername.toLowerCase()) {
+            try {
+              foundProfile = JSON.parse(storedUserStr);
+            } catch {}
+          }
+        }
+
+        // Agar mavjud hisob topilsa — kirishga ruxsat beramiz!
+        if (foundProfile) {
+          const p = foundProfile;
+          const u: MikasaAuthUser = {
+            id: p.id || `tg_${verifiedId}`,
+            username: p.display_name || p.username || verifiedUsername || "Foydalanuvchi",
+            email: p.email || `${verifiedUsername || verifiedId}@telegram.misa.local`,
+            avatar_url: p.avatar_url || undefined,
+            is_active: true,
+            is_verified: true,
+            created_at: Date.now() / 1000,
+            provider: "telegram",
+          };
+          const sessionToken = `tg_verified_${verifiedId}_${Date.now()}`;
+          backendService.setAuthToken(sessionToken);
+          try {
+            localStorage.setItem("misa_user_name", u.username);
+            localStorage.setItem("misa_auth_token", sessionToken);
+            localStorage.setItem("misa_user_data", JSON.stringify(u));
+            localStorage.setItem("misa_linked_telegram", verifiedUsername);
+          } catch {}
+          setSuccessMsg(`Xush kelibsiz, ${u.username}! Telegram 2FA orqali muvaffaqiyatli tasdiqlandi.`);
+          setTimeout(() => {
+            onAuthSuccess(u);
+          }, 400);
+          return;
+        }
+
+        // Agar hisob topilmasa — userga yangi ochish yoki mavjud hisobga kirish taklif qilinadi
+        setTelegramVerifiedData({
+          id: verifiedId,
+          username: verifiedUsername,
+          first_name: extraData?.first_name,
+          last_name: extraData?.last_name,
+        });
+        setTelegramUserNotFound(true);
+      } catch (err: any) {
+        setErrorMsg(err.message || "Telegram tasdiqlashda xatolik yuz berdi");
+      } finally {
+        setTelegramOtpLoading(false);
+      }
+    };
+
+    // WebSocket orqali jonli bildirishnoma
+    const unsub = backendService.onWsMessage(async (msg: any) => {
+      if (!isSubscribed) return;
+      const type = msg?.type;
+      if (type === "PAIRING_VERIFIED" || type === "TELEGRAM_CONNECTED") {
+        const verifiedUsername = (msg.telegram_username || msg.username || "").replace(/^@/, "");
+        const verifiedId = Number(msg.telegram_user_id) || Date.now();
+        await processVerifiedTelegramUser(verifiedId, verifiedUsername, msg);
+      }
+    });
+
+    // 2.5 soniyada bir marta fallback polling
+    const pollInterval = setInterval(async () => {
+      if (!isSubscribed || !telegramRequestId) return;
+      try {
+        const st = await backendService.getTelegramLinkStatus(telegramRequestId);
+        if (st && st.ok && (st.status === "VERIFIED" || st.is_linked)) {
+          const verifiedUsername = (st.link?.telegram_username || (st as any).telegram_username || "").replace(/^@/, "");
+          const verifiedId = Number(st.telegram_user_id || st.link?.telegram_user_id) || Date.now();
+          clearInterval(pollInterval);
+          await processVerifiedTelegramUser(verifiedId, verifiedUsername, st);
+        }
+      } catch {}
+    }, 2500);
+
+    return () => {
+      isSubscribed = false;
+      unsub();
+      clearInterval(pollInterval);
+    };
+  }, [telegramModalOpen, telegramRequestId, onAuthSuccess]);
+
+  // 3. Confirm creating a new standalone Telegram account (Only after OTP verification!)
+  const confirmCreateTelegramAccount = async () => {
+    if (!telegramVerifiedData) return;
+    setTelegramCreatingAccount(true);
+    setErrorMsg(null);
+    try {
+      const res = await backendService.loginWithTelegram({
+        telegram_id: telegramVerifiedData.id,
+        username: telegramVerifiedData.username,
+        first_name: telegramVerifiedData.first_name || firstName.trim() || undefined,
+      });
       if (res.ok && res.user) {
-        setSuccessMsg("Telegram orqali muvaffaqiyatli kirildi!");
+        // Supabase telegram_links ga saqlash
+        try {
+          await supabase.from("telegram_links").upsert(
+            {
+              user_id: res.user.id,
+              telegram_user_id: telegramVerifiedData.id,
+              telegram_username: telegramVerifiedData.username,
+              first_name: telegramVerifiedData.first_name || undefined,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "telegram_user_id" }
+          );
+        } catch {}
+
+        try {
+          localStorage.setItem("misa_linked_telegram", telegramVerifiedData.username);
+        } catch {}
+        setSuccessMsg("Telegram orqali yangi hisob yaratildi!");
         setTimeout(() => {
           onAuthSuccess(res.user!);
         }, 400);
       } else {
-        setErrorMsg(res.error || "Telegram orqali kirishda xatolik");
+        setErrorMsg(res.error || "Telegram hisob yaratishda xatolik");
       }
     } catch (err: any) {
-      setErrorMsg(err.message || "Telegram bilan bog'lanishda xatolik");
+      setErrorMsg(err.message || "Xatolik yuz berdi");
     } finally {
-      setTelegramLoading(false);
+      setTelegramCreatingAccount(false);
     }
   };
 
@@ -682,6 +920,54 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
         @keyframes authSpin {
           to { transform: rotate(360deg); }
         }
+        /* Hide native Edge/WebKit password reveal eye and clear icons */
+        input::-ms-reveal { display: none !important; }
+        input::-ms-clear { display: none !important; }
+        input::-webkit-contacts-auto-fill-button { display: none !important; }
+        input::-webkit-credentials-auto-fill-button { display: none !important; }
+
+        /* Unified input box with icon and controls inside */
+        .misa-input-box {
+          display: flex;
+          align-items: center;
+          width: 100%;
+          height: 50px;
+          min-height: 50px;
+          background: rgba(11, 16, 32, 0.95);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1.5px solid rgba(192, 76, 253, 0.45);
+          border-radius: 12px;
+          padding: 0 14px;
+          box-sizing: border-box;
+          transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .misa-input-box:hover {
+          border-color: rgba(192, 76, 253, 0.78);
+          background: rgba(16, 22, 44, 0.98);
+        }
+        .misa-input-box:focus-within {
+          border-color: #C04CFD !important;
+          background: rgba(20, 26, 52, 1) !important;
+          box-shadow: 0 0 0 3px rgba(192, 76, 253, 0.32), 0 0 22px rgba(147, 3, 197, 0.38) !important;
+        }
+        .misa-input-inner {
+          flex: 1;
+          height: 100%;
+          background: transparent !important;
+          border: none !important;
+          outline: none !important;
+          box-shadow: none !important;
+          color: #FFFFFF !important;
+          font-size: 14.5px;
+          padding: 0 10px !important;
+          margin: 0 !important;
+          font-family: inherit;
+        }
+        .misa-input-inner::placeholder {
+          color: #64748B;
+          font-size: 13.5px;
+        }
         .misa-auth-input {
           width: 100%;
           height: 48px;
@@ -814,6 +1100,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
         style={{
           width: "100%",
           maxWidth: "470px",
+          boxSizing: "border-box",
           background: "rgba(16, 20, 32, 0.68)",
           backdropFilter: "blur(36px) saturate(190%)",
           WebkitBackdropFilter: "blur(36px) saturate(190%)",
@@ -1101,113 +1388,266 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
             </div>
           </div>
         ) : telegramModalOpen ? (
-          /* ═══ TELEGRAM QUICK LOGIN DRAWER ═══ */
+          /* ═══ TELEGRAM 2FA / OTP LOGIN DRAWER ═══ */
           <div style={{ display: "flex", flexDirection: "column", gap: "16px", animation: "authEntrance 0.3s ease" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "10px", paddingBottom: "10px", borderBottom: "1px solid rgba(255, 255, 255, 0.1)" }}>
               <TelegramColorIcon size={24} />
               <div style={{ flex: 1 }}>
-                <h4 style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "#FFFFFF" }}>Telegram orqali kirish</h4>
-                <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#94A3B8" }}>Bot yoki Telegram @username orqali tezkor kirish</p>
+                <h4 style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "#FFFFFF" }}>Telegram orqali xavfsiz kirish</h4>
+                <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#94A3B8" }}>2FA / OTP orqali begona shaxslar kirishidan to'liq himoyalangan</p>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleOpenTelegramBot}
-              style={{
-                width: "100%",
-                padding: "12px 16px",
-                background: "linear-gradient(135deg, #24A1DE 0%, #1D88BE 100%)",
-                border: "none",
-                borderRadius: "12px",
-                color: "#FFFFFF",
-                fontSize: "13.5px",
-                fontWeight: 600,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "8px",
-                boxShadow: "0 4px 18px rgba(36, 161, 222, 0.4)",
-                transition: "all 0.2s ease",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-1.5px)")}
-              onMouseLeave={(e) => (e.currentTarget.style.transform = "translateY(0)")}
-            >
-              <span>🤖 @Misa_ai_agent_bot orqali ochish</span>
-            </button>
-
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#64748B", fontSize: "12px" }}>
-              <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.08)" }} />
-              <span>yoki Telegram @username kiriting</span>
-              <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.08)" }} />
-            </div>
-
-            <form onSubmit={handleTelegramSubmit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              <div style={{ position: "relative", width: "100%", height: "48px" }}>
-                <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#38BDF8", pointerEvents: "none", zIndex: 2 }}>
-                  <TelegramColorIcon size={19} />
+            {telegramUserNotFound && telegramVerifiedData ? (
+              /* Verified but account not linked yet */
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "12px",
+                  background: "rgba(245, 158, 11, 0.12)",
+                  border: "1px solid rgba(245, 158, 11, 0.4)",
+                  borderRadius: "14px",
+                  padding: "16px",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#FCD34D", fontWeight: 700, fontSize: "13.5px" }}>
+                  <span>⚠️</span>
+                  <span>Telegram hisobingiz tasdiqlandi, lekin Misa akkauntingiz topilmadi</span>
                 </div>
-                <input
-                  type="text"
-                  value={telegramInput}
-                  onChange={(e) => setTelegramInput(e.target.value)}
-                  placeholder="@sherzod_dev yoki ID"
-                  className="misa-auth-input"
-                  style={{ padding: "0 16px 0 46px" }}
-                  required
-                />
+                <p style={{ margin: 0, fontSize: "12.5px", color: "#E2E8F0", lineHeight: 1.5 }}>
+                  Hurmatli <strong>@{telegramVerifiedData.username}</strong>, sizning Telegram hisobingiz xavfsiz tasdiqlandi. Ammo u hali hech qaysi Misa akkauntiga ulanmagan.
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "4px" }}>
+                  <button
+                    type="button"
+                    onClick={confirmCreateTelegramAccount}
+                    disabled={telegramCreatingAccount}
+                    style={{
+                      width: "100%",
+                      padding: "11px",
+                      background: "linear-gradient(135deg, #24A1DE 0%, #1D88BE 100%)",
+                      border: "none",
+                      borderRadius: "10px",
+                      color: "#FFFFFF",
+                      fontSize: "13px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      boxShadow: "0 4px 14px rgba(36, 161, 222, 0.4)",
+                    }}
+                  >
+                    {telegramCreatingAccount ? "Yaratilmoqda..." : "✨ Ushbu Telegram bilan yangi hisob ochish"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTelegramUserNotFound(false);
+                      setTelegramVerifiedData(null);
+                      setTelegramModalOpen(false);
+                      setActiveTab("login");
+                    }}
+                    style={{
+                      width: "100%",
+                      padding: "10px",
+                      background: "rgba(255, 255, 255, 0.08)",
+                      border: "1px solid rgba(255, 255, 255, 0.15)",
+                      borderRadius: "10px",
+                      color: "#CBD5E1",
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    🔑 Mavjud hisobimga kirish (Google / Email)
+                  </button>
+                </div>
               </div>
+            ) : (
+              /* OTP Display and Bot action */
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                {/* Security Reassurance Badge */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "8px 12px",
+                    background: "rgba(16, 185, 129, 0.1)",
+                    border: "1px solid rgba(16, 185, 129, 0.3)",
+                    borderRadius: "10px",
+                    color: "#34D399",
+                    fontSize: "11.5px",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  <ShieldIcon size={16} />
+                  <span>Hech kim boshqa birovning username orqali kira olmaydi — faqat botda tasdiqlash bilan.</span>
+                </div>
 
-              <div style={{ display: "flex", gap: "10px" }}>
+                {/* 6-digit OTP Box with Copy button */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "14px 18px",
+                    borderRadius: "14px",
+                    background: "rgba(56, 189, 248, 0.08)",
+                    border: "1.5px solid rgba(56, 189, 248, 0.45)",
+                    boxShadow: "0 0 25px rgba(56, 189, 248, 0.15)",
+                  }}
+                >
+                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                    <span style={{ fontSize: "11px", color: "#38BDF8", fontWeight: 600, textTransform: "uppercase" }}>
+                      Bir martalik tasdiqlash kodi (OTP):
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "26px",
+                        fontWeight: 800,
+                        letterSpacing: "6px",
+                        color: "#FFFFFF",
+                        fontFamily: "monospace",
+                      }}
+                    >
+                      {telegramOtpLoading ? "Yuklanmoqda..." : telegramOtp || "------"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (telegramOtp) {
+                        navigator.clipboard.writeText(telegramOtp);
+                        setTelegramOtpCopied(true);
+                        setTimeout(() => setTelegramOtpCopied(false), 2000);
+                        setSuccessMsg("Kod nusxalandi!");
+                      }
+                    }}
+                    disabled={telegramOtpLoading || !telegramOtp}
+                    style={{
+                      padding: "8px 14px",
+                      borderRadius: "10px",
+                      background: telegramOtpCopied ? "rgba(16, 185, 129, 0.25)" : "rgba(255, 255, 255, 0.1)",
+                      border: telegramOtpCopied ? "1px solid #10B981" : "1px solid rgba(255, 255, 255, 0.2)",
+                      color: telegramOtpCopied ? "#34D399" : "#F1F5F9",
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <CopyIcon size={14} />
+                    <span>{telegramOtpCopied ? "✓ Nusxalandi" : "Nusxalash"}</span>
+                  </button>
+                </div>
+
+                {/* Primary Action Button */}
                 <button
                   type="button"
-                  onClick={() => setTelegramModalOpen(false)}
+                  onClick={handleOpenTelegramBot}
                   style={{
-                    flex: 1,
-                    padding: "11px 16px",
-                    background: "rgba(255, 255, 255, 0.08)",
-                    border: "1px solid rgba(255, 255, 255, 0.14)",
-                    borderRadius: "11px",
-                    color: "#94A3B8",
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    transition: "all 0.15s ease",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255, 255, 255, 0.14)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)")}
-                >
-                  Ortga
-                </button>
-                <button
-                  type="submit"
-                  disabled={telegramLoading}
-                  style={{
-                    flex: 2,
-                    padding: "11px 16px",
-                    background: "linear-gradient(135deg, #24A1DE 0%, #1D88BE 100%)",
+                    width: "100%",
+                    padding: "13px 20px",
+                    background: "linear-gradient(135deg, #24A1DE 0%, #0284C7 100%)",
                     border: "none",
-                    borderRadius: "11px",
+                    borderRadius: "14px",
                     color: "#FFFFFF",
-                    fontSize: "13px",
+                    fontSize: "13.5px",
                     fontWeight: 700,
-                    cursor: telegramLoading ? "default" : "pointer",
-                    boxShadow: "0 4px 16px rgba(36, 161, 222, 0.35)",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "10px",
+                    boxShadow: "0 4px 20px rgba(36, 161, 222, 0.4)",
                     transition: "all 0.15s ease",
-                    opacity: telegramLoading ? 0.7 : 1,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-1.5px)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.transform = "translateY(0)")}
+                >
+                  <TelegramColorIcon size={20} />
+                  <span>🤖 @Misa_ai_agent_bot da tasdiqlash</span>
+                </button>
+
+                {/* Live Waiting Radar */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                    padding: "8px",
+                    fontSize: "12px",
+                    color: "#94A3B8",
                   }}
                 >
-                  {telegramLoading ? "Tekshirilmoqda..." : "Kirish"}
-                </button>
+                  <span
+                    style={{
+                      width: "8px",
+                      height: "8px",
+                      borderRadius: "50%",
+                      background: "#38BDF8",
+                      boxShadow: "0 0 10px #38BDF8",
+                      animation: "pulse 1.5s infinite",
+                    }}
+                  />
+                  <span>Botda 'Boshlash' (/start) yoki kodni yuborishingiz kutilmoqda...</span>
+                </div>
+
+                <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTelegramModalOpen(false);
+                      setTelegramUserNotFound(false);
+                      setTelegramVerifiedData(null);
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: "11px 16px",
+                      background: "rgba(255, 255, 255, 0.08)",
+                      border: "1px solid rgba(255, 255, 255, 0.14)",
+                      borderRadius: "11px",
+                      color: "#94A3B8",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    Ortga
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenTelegramLogin}
+                    disabled={telegramOtpLoading}
+                    style={{
+                      flex: 1,
+                      padding: "11px 16px",
+                      background: "rgba(56, 189, 248, 0.12)",
+                      border: "1px solid rgba(56, 189, 248, 0.3)",
+                      borderRadius: "11px",
+                      color: "#38BDF8",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    {telegramOtpLoading ? "Yangilanmoqda..." : "Yangi kod olish"}
+                  </button>
+                </div>
               </div>
-            </form>
+            )}
           </div>
         ) : (
           <>
             {/* ═══ SOCIAL LOGINS (Google, GitHub, Telegram) ═══ */}
-            <div style={{ marginBottom: "18px" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+            <div style={{ marginBottom: "18px", width: "100%", boxSizing: "border-box" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "10px", width: "100%", boxSizing: "border-box" }}>
                 {/* Google */}
                 <button
                   type="button"
@@ -1217,6 +1657,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                   disabled={loading || oauthLoading || oauthWaiting}
                   className="misa-social-btn"
                   title="Google orqali kirish"
+                  style={{ minWidth: 0, width: "100%" }}
                 >
                   <GoogleIcon size={18} />
                   <span>Google</span>
@@ -1231,6 +1672,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                   disabled={loading || oauthLoading || oauthWaiting}
                   className="misa-social-btn"
                   title="GitHub orqali kirish"
+                  style={{ minWidth: 0, width: "100%" }}
                 >
                   <GithubIcon size={18} color="#FFFFFF" />
                   <span>GitHub</span>
@@ -1241,10 +1683,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                   type="button"
                   role="button"
                   aria-label="Telegram orqali kirish"
-                  onClick={() => setTelegramModalOpen(true)}
+                  onClick={handleOpenTelegramLogin}
                   disabled={loading || oauthLoading || oauthWaiting}
                   className="misa-social-btn"
                   title="Telegram orqali kirish"
+                  style={{ minWidth: 0, width: "100%" }}
                 >
                   <TelegramColorIcon size={18} />
                   <span>Telegram</span>
@@ -1332,22 +1775,23 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                   <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
                     {/* Email Address (Pure Email, No Username) */}
                     <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                      <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
+                      <label htmlFor="login-email" style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
                         Email manzil
                       </label>
-                      <div style={{ position: "relative", width: "100%", height: "48px" }}>
-                        <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#C084FC", pointerEvents: "none", zIndex: 2 }}>
+                      <div className="misa-input-box" style={inputBoxStyle}>
+                        <div style={{ display: "flex", alignItems: "center", color: "#C084FC", flexShrink: 0 }}>
                           <MailIcon size={18} />
                         </div>
                         <input
+                          id="login-email"
                           type="email"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           placeholder="user@example.com"
                           autoComplete="email"
                           required
-                          className="misa-auth-input"
-                          style={{ padding: "0 16px 0 46px" }}
+                          className="misa-input-inner"
+                          style={inputInnerStyle}
                         />
                       </div>
                     </div>
@@ -1355,7 +1799,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                     {/* Password with Eye Visibility Toggle */}
                     <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
+                        <label htmlFor="login-password" style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
                           Parol
                         </label>
                         <button
@@ -1374,37 +1818,34 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                           Parolni unutdingizmi?
                         </button>
                       </div>
-                      <div style={{ position: "relative", width: "100%", height: "48px" }}>
-                        <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#C084FC", pointerEvents: "none", zIndex: 2 }}>
+                      <div className="misa-input-box" style={inputBoxStyle}>
+                        <div style={{ display: "flex", alignItems: "center", color: "#C084FC", flexShrink: 0 }}>
                           <LockIcon size={18} />
                         </div>
                         <input
+                          id="login-password"
                           type={showPassword ? "text" : "password"}
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           placeholder="••••••••"
                           autoComplete="current-password"
                           required
-                          className="misa-auth-input"
-                          style={{ padding: "0 46px 0 46px" }}
+                          className="misa-input-inner"
+                          style={inputInnerStyle}
                         />
                         <button
                           type="button"
                           onClick={() => setShowPassword(!showPassword)}
                           style={{
-                            position: "absolute",
-                            right: "12px",
-                            top: "50%",
-                            transform: "translateY(-50%)",
                             background: "none",
                             border: "none",
                             color: showPassword ? "#C04CFD" : "#94A3B8",
                             cursor: "pointer",
-                            padding: "6px",
+                            padding: "4px",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            zIndex: 2,
+                            flexShrink: 0,
                           }}
                           title={showPassword ? "Parolni yashirish" : "Parolni ko'rsatish"}
                         >
@@ -1471,22 +1912,23 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                   /* OTP Step 1: Enter email & request code */
                   <form onSubmit={handleSendOtp} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
                     <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                      <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
+                      <label htmlFor="otp-email" style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
                         Email manzilingiz
                       </label>
-                      <div style={{ position: "relative", width: "100%", height: "48px" }}>
-                        <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#C084FC", pointerEvents: "none", zIndex: 2 }}>
+                      <div className="misa-input-box" style={inputBoxStyle}>
+                        <div style={{ display: "flex", alignItems: "center", color: "#C084FC", flexShrink: 0 }}>
                           <MailIcon size={18} />
                         </div>
                         <input
+                          id="otp-email"
                           type="email"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           placeholder="user@example.com"
                           autoComplete="email"
                           required
-                          className="misa-auth-input"
-                          style={{ padding: "0 16px 0 46px" }}
+                          className="misa-input-inner"
+                          style={inputInnerStyle}
                         />
                       </div>
                       <span style={{ fontSize: "12px", color: "#64748B", lineHeight: 1.4 }}>
@@ -1571,11 +2013,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                     </div>
 
                     <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                      <label style={{ fontSize: "13px", color: "#E2E8F0", fontWeight: 600, textAlign: "center" }}>
+                      <label htmlFor="otp-code-input" style={{ fontSize: "13px", color: "#E2E8F0", fontWeight: 600, textAlign: "center" }}>
                         Pochtaga kelgan 6 xonali tasdiqlash kodi
                       </label>
                       <div style={{ position: "relative", width: "100%", height: "52px" }}>
                         <input
+                          id="otp-code-input"
                           type="text"
                           inputMode="numeric"
                           maxLength={8}
@@ -1683,96 +2126,100 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
             {activeTab === "register" && (
               <form onSubmit={handleRegister} style={{ display: "flex", flexDirection: "column", gap: "13px" }}>
                 {/* Ism va Familiya */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-                    <label style={{ fontSize: "12px", color: "#94A3B8", fontWeight: 500 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "10px", width: "100%", boxSizing: "border-box" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "5px", minWidth: 0, overflow: "hidden" }}>
+                    <label htmlFor="reg-first-name" style={{ fontSize: "12px", color: "#94A3B8", fontWeight: 500 }}>
                       Ism
                     </label>
-                    <input
-                      type="text"
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
-                      placeholder="Ismingiz"
-                      autoComplete="given-name"
-                      className="misa-auth-input"
-                      style={{ padding: "0 16px" }}
-                    />
+                    <div className="misa-input-box" style={inputBoxStyle}>
+                      <input
+                        id="reg-first-name"
+                        type="text"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        placeholder="Ismingiz"
+                        autoComplete="given-name"
+                        className="misa-input-inner"
+                        style={inputInnerStyle}
+                      />
+                    </div>
                   </div>
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-                    <label style={{ fontSize: "12px", color: "#94A3B8", fontWeight: 500 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "5px", minWidth: 0, overflow: "hidden" }}>
+                    <label htmlFor="reg-last-name" style={{ fontSize: "12px", color: "#94A3B8", fontWeight: 500 }}>
                       Familiya
                     </label>
-                    <input
-                      type="text"
-                      value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
-                      placeholder="Familiyangiz"
-                      autoComplete="family-name"
-                      className="misa-auth-input"
-                      style={{ padding: "0 16px" }}
-                    />
+                    <div className="misa-input-box" style={inputBoxStyle}>
+                      <input
+                        id="reg-last-name"
+                        type="text"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        placeholder="Familiyangiz"
+                        autoComplete="family-name"
+                        className="misa-input-inner"
+                        style={inputInnerStyle}
+                      />
+                    </div>
                   </div>
                 </div>
 
                 {/* Email Address */}
                 <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-                  <label style={{ fontSize: "12px", color: "#94A3B8", fontWeight: 500 }}>
+                  <label htmlFor="reg-email" style={{ fontSize: "12px", color: "#94A3B8", fontWeight: 500 }}>
                     Email manzil
                   </label>
-                  <div style={{ position: "relative", width: "100%", height: "48px" }}>
-                    <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#C084FC", pointerEvents: "none", zIndex: 2 }}>
+                  <div className="misa-input-box" style={inputBoxStyle}>
+                    <div style={{ display: "flex", alignItems: "center", color: "#C084FC", flexShrink: 0 }}>
                       <MailIcon size={18} />
                     </div>
                     <input
+                      id="reg-email"
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="user@example.com"
                       autoComplete="email"
                       required
-                      className="misa-auth-input"
-                      style={{ padding: "0 16px 0 46px" }}
+                      className="misa-input-inner"
+                      style={inputInnerStyle}
                     />
                   </div>
                 </div>
 
                 {/* Password */}
                 <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-                  <label style={{ fontSize: "12px", color: "#94A3B8", fontWeight: 500 }}>
+                  <label htmlFor="reg-password" style={{ fontSize: "12px", color: "#94A3B8", fontWeight: 500 }}>
                     Parol (kamida 8 belgi, harf va raqam)
                   </label>
-                  <div style={{ position: "relative", width: "100%", height: "48px" }}>
-                    <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#C084FC", pointerEvents: "none", zIndex: 2 }}>
+                  <div className="misa-input-box" style={inputBoxStyle}>
+                    <div style={{ display: "flex", alignItems: "center", color: "#C084FC", flexShrink: 0 }}>
                       <LockIcon size={18} />
                     </div>
                     <input
+                      id="reg-password"
                       type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
                       autoComplete="new-password"
                       required
-                      className="misa-auth-input"
-                      style={{ padding: "0 46px 0 46px" }}
+                      className="misa-input-inner"
+                      style={inputInnerStyle}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       style={{
-                        position: "absolute",
-                        right: "12px",
-                        top: "50%",
-                        transform: "translateY(-50%)",
                         background: "none",
                         border: "none",
                         color: showPassword ? "#C04CFD" : "#94A3B8",
                         cursor: "pointer",
-                        padding: "6px",
+                        padding: "4px",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        zIndex: 2,
+                        flexShrink: 0,
                       }}
                       title={showPassword ? "Parolni yashirish" : "Parolni ko'rsatish"}
                     >
@@ -1783,40 +2230,37 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
 
                 {/* Confirm Password */}
                 <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-                  <label style={{ fontSize: "12px", color: "#94A3B8", fontWeight: 500 }}>
+                  <label htmlFor="reg-confirm-password" style={{ fontSize: "12px", color: "#94A3B8", fontWeight: 500 }}>
                     Parolni tasdiqlang
                   </label>
-                  <div style={{ position: "relative", width: "100%", height: "48px" }}>
-                    <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#C084FC", pointerEvents: "none", zIndex: 2 }}>
+                  <div className="misa-input-box" style={inputBoxStyle}>
+                    <div style={{ display: "flex", alignItems: "center", color: "#C084FC", flexShrink: 0 }}>
                       <LockIcon size={18} />
                     </div>
                     <input
+                      id="reg-confirm-password"
                       type={showConfirmPassword ? "text" : "password"}
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="••••••••"
                       autoComplete="new-password"
                       required
-                      className="misa-auth-input"
-                      style={{ padding: "0 46px 0 46px" }}
+                      className="misa-input-inner"
+                      style={inputInnerStyle}
                     />
                     <button
                       type="button"
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                       style={{
-                        position: "absolute",
-                        right: "12px",
-                        top: "50%",
-                        transform: "translateY(-50%)",
                         background: "none",
                         border: "none",
                         color: showConfirmPassword ? "#C04CFD" : "#94A3B8",
                         cursor: "pointer",
-                        padding: "6px",
+                        padding: "4px",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        zIndex: 2,
+                        flexShrink: 0,
                       }}
                       title={showConfirmPassword ? "Parolni yashirish" : "Parolni ko'rsatish"}
                     >
@@ -1870,8 +2314,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                   <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
                     Email manzil
                   </label>
-                  <div style={{ position: "relative", width: "100%", height: "48px" }}>
-                    <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#C084FC", pointerEvents: "none", zIndex: 2 }}>
+                  <div className="misa-input-box" style={inputBoxStyle}>
+                    <div style={{ display: "flex", alignItems: "center", color: "#C084FC", flexShrink: 0 }}>
                       <MailIcon size={18} />
                     </div>
                     <input
@@ -1880,8 +2324,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="user@example.com"
                       required
-                      className="misa-auth-input"
-                      style={{ padding: "0 16px 0 46px" }}
+                      className="misa-input-inner"
+                      style={inputInnerStyle}
                     />
                   </div>
                 </div>
@@ -1907,7 +2351,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                   {loading ? "Yuborilmoqda..." : "Tiklash havolasini yuborish"}
                 </button>
 
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px" }}>
+                <div style={{ display: "flex", justifyContent: "center", marginTop: "8px" }}>
                   <button
                     type="button"
                     onClick={() => handleTabChange("login")}
@@ -1924,23 +2368,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                   >
                     ← Kirishga qaytish
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => handleTabChange("reset")}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "#34D399",
-                      fontSize: "12.5px",
-                      cursor: "pointer",
-                      fontWeight: 600,
-                      transition: "color 0.15s ease",
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = "#6EE7B7")}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = "#34D399")}
-                  >
-                    Parolni tiklash sahifasi →
-                  </button>
                 </div>
               </form>
             )}
@@ -1956,8 +2383,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                   <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
                     Yangi parol (kamida 8 belgi, harf va raqam)
                   </label>
-                  <div style={{ position: "relative", width: "100%", height: "48px" }}>
-                    <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#C084FC", pointerEvents: "none", zIndex: 2 }}>
+                  <div className="misa-input-box" style={inputBoxStyle}>
+                    <div style={{ display: "flex", alignItems: "center", color: "#C084FC", flexShrink: 0 }}>
                       <LockIcon size={18} />
                     </div>
                     <input
@@ -1966,26 +2393,22 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
                       required
-                      className="misa-auth-input"
-                      style={{ padding: "0 46px 0 46px" }}
+                      className="misa-input-inner"
+                      style={inputInnerStyle}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       style={{
-                        position: "absolute",
-                        right: "12px",
-                        top: "50%",
-                        transform: "translateY(-50%)",
                         background: "none",
                         border: "none",
                         color: showPassword ? "#C04CFD" : "#94A3B8",
                         cursor: "pointer",
-                        padding: "6px",
+                        padding: "4px",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        zIndex: 2,
+                        flexShrink: 0,
                       }}
                       title={showPassword ? "Parolni yashirish" : "Parolni ko'rsatish"}
                     >
@@ -1998,8 +2421,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                   <label style={{ fontSize: "12.5px", color: "#94A3B8", fontWeight: 500 }}>
                     Yangi parolni tasdiqlang
                   </label>
-                  <div style={{ position: "relative", width: "100%", height: "48px" }}>
-                    <div style={{ position: "absolute", left: "15px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#C084FC", pointerEvents: "none", zIndex: 2 }}>
+                  <div className="misa-input-box" style={inputBoxStyle}>
+                    <div style={{ display: "flex", alignItems: "center", color: "#C084FC", flexShrink: 0 }}>
                       <LockIcon size={18} />
                     </div>
                     <input
@@ -2008,26 +2431,22 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="••••••••"
                       required
-                      className="misa-auth-input"
-                      style={{ padding: "0 46px 0 46px" }}
+                      className="misa-input-inner"
+                      style={inputInnerStyle}
                     />
                     <button
                       type="button"
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                       style={{
-                        position: "absolute",
-                        right: "12px",
-                        top: "50%",
-                        transform: "translateY(-50%)",
                         background: "none",
                         border: "none",
                         color: showConfirmPassword ? "#C04CFD" : "#94A3B8",
                         cursor: "pointer",
-                        padding: "6px",
+                        padding: "4px",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        zIndex: 2,
+                        flexShrink: 0,
                       }}
                       title={showConfirmPassword ? "Parolni yashirish" : "Parolni ko'rsatish"}
                     >
