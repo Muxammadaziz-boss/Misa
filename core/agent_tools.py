@@ -3,28 +3,26 @@
 # Har bir tool — agent chaqira oladigan funksiya
 
 import os
+import sys
 import re
 import json
-import math
 import logging
 import datetime
 import webbrowser
 import subprocess
 import base64
 from urllib.parse import quote_plus
-from dataclasses import dataclass, field, fields
-from typing import Any, Callable, Dict, List, Optional, Tuple, Set
+from dataclasses import dataclass, fields
+from typing import Any, Dict, List, Optional, Tuple
 
 from core.intelligence.types import RiskLevel
 from core.tools.contract import (
     ToolContract2,
     ToolErrorCode,
-    ToolHealth,
     ToolResult,
 )
 from core.tools.discovery import CapabilityRegistry
 from core.tools.selector import SmartToolSelector, ToolSelectionResult
-from core.tools.runner import get_tool_runner
 
 logger = logging.getLogger(__name__)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Loyiha ildizi
@@ -342,7 +340,7 @@ def _calculator(expression: str) -> dict:
         elif isinstance(node, ast.UnaryOp) and type(node.op) in SAFE_OPS:
             return SAFE_OPS[type(node.op)](_safe_eval(node.operand))
         else:
-            raise ValueError(f"Ruxsat etilmagan ifoda")
+            raise ValueError("Ruxsat etilmagan ifoda")
 
     try:
         tree = ast.parse(expression.strip(), mode="eval")
@@ -433,7 +431,6 @@ def _system_control(action: str, value: str = "") -> dict:
                 if is_running:
                     # Ishlayapti — oynani fokusga olish
                     try:
-                        import ctypes
                         from ctypes import wintypes
 
                         user32 = ctypes.windll.user32
@@ -762,7 +759,7 @@ def _reminder(action: str, text: str = "", number: int = 0) -> dict:
         if not os.path.exists(fayl):
             return {"message": "Eslatmalar yo'q", "reminders": []}
         with open(fayl, "r", encoding="utf-8") as f:
-            lines = [l.strip() for l in f.readlines() if l.strip()]
+            lines = [line_text.strip() for line_text in f.readlines() if line_text.strip()]
         return {"message": f"{len(lines)} ta eslatma", "reminders": lines[-10:]}
 
     elif action == "delete":
@@ -1071,7 +1068,7 @@ def _scheduler_tool(action: str, text: str = "", time_expr: str = "") -> dict:
     elif action == "delete":
         if text:
             ok = scheduler.remove(text)
-            return {"message": f"O'chirildi" if ok else "Topilmadi"}
+            return {"message": "O'chirildi" if ok else "Topilmadi"}
         return {"error": "Vazifa ID kerak"}
 
     else:
@@ -2243,7 +2240,7 @@ def _clipboard(action: str = "get", text: str = "") -> dict:
                     "message": data[:500] if data else "Clipboard bo'sh",
                     "content": data or "",
                 }
-            except:
+            except Exception:
                 win32clipboard.CloseClipboard()
                 return {"message": "Clipboard bo'sh", "content": ""}
         elif action == "set":
@@ -2313,7 +2310,7 @@ def _process_manager(action: str = "list", name: str = "", pid: int = 0) -> dict
                     "memory": p.memory_info().rss // (1024**2),
                     "status": p.status(),
                 }
-            except:
+            except Exception:
                 return {"error": f"PID {pid} topilmadi"}
         else:
             return {"error": "action: 'list', 'kill', yoki 'info'"}
@@ -2547,7 +2544,6 @@ def _window_manager(
     """Oynalarni boshqarish"""
     try:
         import ctypes
-        from ctypes import wintypes
 
         EnumWindows = ctypes.windll.user32.EnumWindows
         EnumWindowsProc = ctypes.WINFUNCTYPE(
@@ -2654,7 +2650,6 @@ def _notification(
             notification.notify(title=title, message=message, timeout=duration)
             return {"message": f"Eslatma yuborildi: {title}"}
         except ImportError:
-            import base64
             b64_title = base64.b64encode(str(title).encode("utf-8")).decode("ascii")
             b64_msg = base64.b64encode(str(message).encode("utf-8")).decode("ascii")
             ps = (
@@ -2949,6 +2944,7 @@ def _stitch_designer_tool(prompt: str, project_title: str = "", save_to_desktop:
     except Exception as e:
         logger.error(f"stitch_ui_designer xatolik: {e}")
         return f"❌ Stitch vositasi xatoligi: {e}"
+
 
 TOOL_STITCH_DESIGNER = Tool(
     name="stitch_ui_designer",

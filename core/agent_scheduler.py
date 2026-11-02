@@ -9,9 +9,9 @@ import logging
 import datetime
 import threading
 from typing import Callable, Optional
+from core.common_paths import get_data_path, get_base_dir
 
 logger = logging.getLogger(__name__)
-from core.common_paths import get_data_path, get_base_dir
 BASE_DIR = get_base_dir()
 
 
