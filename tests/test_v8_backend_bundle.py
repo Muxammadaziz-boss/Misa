@@ -220,7 +220,8 @@ class TestPortableZipArchive(unittest.TestCase):
             names = set(zf.namelist())
 
         has_exe = any(
-            n.endswith("Misa-AI-v9.3.exe")
+            n.endswith("Misa.exe")
+            or n.endswith("Misa-AI-v9.3.exe")
             or n.endswith("Misa-AI-v9.2.exe")
             or n.endswith("Misa-AI-v9.2.0.exe")
             or n.endswith("Misa-AI-v9.0.2.exe")

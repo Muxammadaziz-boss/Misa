@@ -64,7 +64,7 @@ for (const cand of candidateExes) {
     break;
   }
 }
-const exeTarget = path.join(releaseVersionDir, `Misa-AI-${versionName}.exe`);
+const exeTarget = path.join(releaseVersionDir, "Misa.exe");
 
 const manifest = {
   app: "Misa AI",
@@ -109,9 +109,19 @@ function copyFileWithLog(src, dest, friendlyName) {
   }
 }
 
-// 4. Copy Standalone Executable
-copyFileWithLog(exeSource, exeTarget, "Mustaqil (.exe)");
-copyFileWithLog(exeSource, path.join(releaseVersionDir, "Misa.exe"), "Mustaqil (Misa.exe)");
+// 4. Copy Standalone Executable (Rasmiy Misa.exe)
+copyFileWithLog(exeSource, exeTarget, "Rasmiy Ilova (Misa.exe)");
+
+// Clean up any legacy versioned executables in root release directory
+const legacyVersionedExes = [
+  path.join(releaseVersionDir, `Misa-AI-${versionName}.exe`),
+  path.join(releaseVersionDir, `Misa-AI-Setup-${versionName}.exe`),
+];
+for (const leg of legacyVersionedExes) {
+  if (fs.existsSync(leg)) {
+    try { fs.unlinkSync(leg); } catch {}
+  }
+}
 
 // 4.1 Copy WebView2Loader.dll (required for native Windows execution on MinGW)
 const dllSource = fs.existsSync(path.join(tauriReleaseDir, "WebView2Loader.dll"))
@@ -226,7 +236,7 @@ echo   MISA AI ${versionName} - Launching Portable Desktop...
 echo ========================================================
 
 REM Launch Desktop App (Native Misa Preflight handles WebView2 detection, installation & verification)
-start "" "Misa-AI-${versionName}.exe"
+start "" "Misa.exe"
 `;
 
 const batPath = path.join(releaseVersionDir, "run_portable.bat");
@@ -254,7 +264,11 @@ if (!fs.existsSync(releaseWvDir)) {
 if (webview2Source) {
   const wvTarget = path.join(releaseWvDir, "MicrosoftEdgeWebview2Setup.exe");
   copyFileWithLog(webview2Source, wvTarget, "WebView2 Bootstrapper (webview2/)");
-  copyFileWithLog(webview2Source, path.join(releaseVersionDir, "MicrosoftEdgeWebview2Setup.exe"), "WebView2 Bootstrapper (root)");
+  // Clean up any extra webview installer from root release folder
+  const rootWv = path.join(releaseVersionDir, "MicrosoftEdgeWebview2Setup.exe");
+  if (fs.existsSync(rootWv)) {
+    try { fs.unlinkSync(rootWv); } catch {}
+  }
 }
 
 // 7.2 Create Dedicated Portable Directory: release/v<version>/portable/
@@ -263,8 +277,11 @@ if (!fs.existsSync(portableDir)) {
   fs.mkdirSync(portableDir, { recursive: true });
 }
 if (fs.existsSync(exeTarget)) {
-  fs.copyFileSync(exeTarget, path.join(portableDir, `Misa-AI-${versionName}.exe`));
   fs.copyFileSync(exeTarget, path.join(portableDir, "Misa.exe"));
+  const portLegacyExe = path.join(portableDir, `Misa-AI-${versionName}.exe`);
+  if (fs.existsSync(portLegacyExe)) {
+    try { fs.unlinkSync(portLegacyExe); } catch {}
+  }
 }
 if (fs.existsSync(dllTarget)) {
   fs.copyFileSync(dllTarget, path.join(portableDir, "WebView2Loader.dll"));
@@ -279,7 +296,10 @@ if (webview2Source) {
   const portableWvDir = path.join(portableDir, "webview2");
   if (!fs.existsSync(portableWvDir)) fs.mkdirSync(portableWvDir, { recursive: true });
   fs.copyFileSync(webview2Source, path.join(portableWvDir, "MicrosoftEdgeWebview2Setup.exe"));
-  fs.copyFileSync(webview2Source, path.join(portableDir, "MicrosoftEdgeWebview2Setup.exe"));
+  const rootPortWv = path.join(portableDir, "MicrosoftEdgeWebview2Setup.exe");
+  if (fs.existsSync(rootPortWv)) {
+    try { fs.unlinkSync(rootPortWv); } catch {}
+  }
 }
 
 const introMp4Candidates = ["Misa.mp4", "Misa1.mp4", "misa_intro.mp4"];
@@ -387,7 +407,7 @@ console.log(`✔ Versiya manifesti: version_manifest.json`);
 // 8.1 Write SHA256SUMS.txt
 const sumsLines = [];
 const primaryFiles = [
-  `Misa-AI-${versionName}.exe`,
+  "Misa.exe",
   ...(includeInstallers ? [`Misa-AI-Setup-${versionName}.exe`, `Misa-AI-${versionName}.msi`] : []),
   `Misa-AI-${versionName}-Portable.zip`
 ];
@@ -411,7 +431,7 @@ if (fs.existsSync(releasesMdPath)) {
 }
 
 const releaseEntry = `### [${versionName}] — ${new Date().toLocaleDateString("uz-UZ")}
-- **Desktop Ilova (Portativ)**: \`${versionName}/Misa-AI-${versionName}.exe\`
+- **Desktop Ilova (Rasmiy)**: \`${versionName}/Misa.exe\`
 - **Portativ Arxiv (.zip)**: \`${versionName}/Misa-AI-${versionName}-Portable.zip\`
 - **Manifest**: \`${versionName}/version_manifest.json\`
 - **Backend**: Python API Server (\`http://127.0.0.1:18420\`)

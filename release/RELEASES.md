@@ -4,8 +4,8 @@
 - **Rasmiy GitHub Reliz**: [Misa AI v9.3 Release](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.3)
 - **To'liq Portativ Paket (Backend + Python Runtime + RVC HuBERT bilan)**: `v9.3/Misa-AI-v9.3-Portable.zip` (470.45 MB) — [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3/Misa-AI-v9.3-Portable.zip)  
   *SHA-256:* `8f198725f92e3d7172cea3a6880adb6f4160e33ec8e31fb2ff604a2e09c5effc`
-- **Desktop Ilova (Portativ Executable)**: `v9.3/Misa-AI-v9.3.exe` (5.24 MB) — [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3/Misa-AI-v9.3.exe)  
-  *SHA-256:* `f481f21f227594add572f97d57e2cf8bc0a2dc7db7de254f9b942b4f741f050d`
+- **Desktop Ilova (Rasmiy Standalone)**: `v9.3/Misa.exe` (10.16 MB) — [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3/Misa.exe)  
+  *SHA-256:* `a07b4723b946d77e05b508ff847a21da82a21c3a206484657015e8719b1b44af`
 - **Native WebView2 Yuklagich**: `v9.3/WebView2Loader.dll` (0.15 MB)  
   *SHA-256:* `8427b1fc58ec707813e5c0a51eb5d69397bb333250a7b891be4d3b123f1e0f1c`
 - **Kriptografik SHA-256 Summalar**: `v9.3/SHA256SUMS.txt` — [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3/SHA256SUMS.txt)

@@ -21,7 +21,7 @@ Ushbu relizda dastur to'liq qayta yig'ildi va quyidagi muhim yangilanishlar kiri
    - Ilovaning barcha UI oynalari (Chat, Profil/Sozlamalar, Buyruqlar paneli, Rejalashtiruvchi, Brend nishonlari) va backend konfiguratsiyalari to'liq **v9.3** (`9.3.0`) ga o'tkazildi.
 
 4. **Portativ Binar Paketlar:**
-   - Rust Tauri frontend-desktop executable (`Misa-AI-v9.3.exe`) eng so'nggi `dist/` bilan to'liq qayta kompilyatsiya qilindi.
+   - Rust Tauri frontend-desktop executable rasmiy **`Misa.exe`** sifatida eng so'nggi `dist/` bilan to'liq qayta kompilyatsiya qilindi.
    - Yangi Python muhiti, eng so'nggi `core/` kodlari va HuBERT modeli bilan boyitilgan to'liq `Misa-AI-v9.3-Portable.zip` qayta shakllantirildi.
 
 ---
@@ -30,13 +30,13 @@ Ushbu relizda dastur to'liq qayta yig'ildi va quyidagi muhim yangilanishlar kiri
 
 | Fayl nomi | Hajmi | Turi | SHA-256 Nazorat Yig'indisi |
 | :--- | :--- | :--- | :--- |
-| **`Misa-AI-v9.3-Portable.zip`** | **515.78 MB** | To'liq Portativ Paket (Backend + Python Runtime + RVC HuBERT bilan) | `3c6415a58379130ac2b72f3f5de2a689631078adefa148e055e32e921c7c17b4` |
-| **`Misa-AI-v9.3.exe`** | **10.15 MB** | Mustaqil Standalone Desktop Executable | `46501a7574bb9d2915fa0f20c128d1d668dad27f99f2ac779cb4ff0d019d832c` |
+| **`Misa-AI-v9.3-Portable.zip`** | **506.76 MB** | To'liq Portativ Paket (Backend + Python Runtime + RVC HuBERT bilan) | `ad465d010e43ef1df51b9127d095238eec1a364bdedceb3f65fc07eb3974e050` |
+| **`Misa.exe`** | **10.16 MB** | Rasmiy Standalone Desktop Ilova | `a07b4723b946d77e05b508ff847a21da82a21c3a206484657015e8719b1b44af` |
 | **`WebView2Loader.dll`** | **0.15 MB** | Native Windows WebView2 yuklagich | `8427b1fc58ec707813e5c0a51eb5d69397bb333250a7b891be4d3b123f1e0f1c` |
-| **`MicrosoftEdgeWebview2Setup.exe`** | **1.77 MB** | Offline WebView2 Bootstrapper | `87ad3fe4e3faa1b48bad79de1b9269e5eb30574545bb6f5f7c37d51035748caf` |
-| **`run_portable.bat`** | **360 B** | Bir bosishda ishga tushiruvchi skript | — |
-| **`SHA256SUMS.txt`** | **175 B** | Kriptografik Nazorat Summalari | — |
-| **`version_manifest.json`** | **1.00 KB** | Versiya Manifesti | — |
+| **`webview2/MicrosoftEdgeWebview2Setup.exe`** | **1.77 MB** | Offline WebView2 Bootstrapper | `87ad3fe4e3faa1b48bad79de1b9269e5eb30574545bb6f5f7c37d51035748caf` |
+| **`run_portable.bat`** | **422 B** | Bir bosishda ishga tushiruvchi skript | — |
+| **`SHA256SUMS.txt`** | **167 B** | Kriptografik Nazorat Summalari | — |
+| **`version_manifest.json`** | **999 B** | Versiya Manifesti | — |
 
 Barcha fayllar mahalliy ravishda quyidagi papkada tayyor:
 📂 `yordamchi_9.0.0/release/v9.3/`
