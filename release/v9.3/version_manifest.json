@@ -2,19 +2,19 @@
   "app": "Misa AI",
   "version": "9.3.0",
   "version_name": "v9.3",
-  "release_date": "2026-11-02T15:34:44.768Z",
+  "release_date": "2026-11-02T17:01:57.659Z",
   "files": [
     {
       "name": "Misa-AI-v9.3.exe",
-      "size_bytes": 10653696,
+      "size_bytes": 10654720,
       "size_mb": 10.16,
-      "sha256": "3af8bac4d32c44ce5d5e3376e7ef03c9203d53306f659941b3134fd52a1cf3d5"
+      "sha256": "a07b4723b946d77e05b508ff847a21da82a21c3a206484657015e8719b1b44af"
     },
     {
       "name": "Misa.exe",
-      "size_bytes": 10653696,
+      "size_bytes": 10654720,
       "size_mb": 10.16,
-      "sha256": "3af8bac4d32c44ce5d5e3376e7ef03c9203d53306f659941b3134fd52a1cf3d5"
+      "sha256": "a07b4723b946d77e05b508ff847a21da82a21c3a206484657015e8719b1b44af"
     },
     {
       "name": "WebView2Loader.dll",
@@ -30,9 +30,9 @@
     },
     {
       "name": "Misa-AI-v9.3-Portable.zip",
-      "size_bytes": 540878651,
-      "size_mb": 515.82,
-      "sha256": "1470bcd71788f13b29bc6ac5843bedbc244f2140dab3165056dc685a36938640"
+      "size_bytes": 540883936,
+      "size_mb": 515.83,
+      "sha256": "dda71b3c8cde6b8d2b62cc60b0c2e1481897388be910df983c0800556695c7c4"
     }
   ],
   "backend": {

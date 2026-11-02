@@ -2,7 +2,7 @@
 // Misa AI v9.3 — Multi-Provider Authentication & Ultra Glass Portal
 // Support for Google, GitHub, Telegram & Direct Email Auth with Fluid Micro-Animations
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   backendService,
   MikasaAuthUser,
@@ -70,6 +70,149 @@ const inputInnerStyle: React.CSSProperties = {
   fontFamily: "inherit",
 };
 
+interface OtpCodeInputProps {
+  value: string;
+  onChange: (val: string) => void;
+  onComplete?: (val: string) => void;
+  disabled?: boolean;
+}
+
+const OtpCodeInput: React.FC<OtpCodeInputProps> = ({
+  value,
+  onChange,
+  onComplete,
+  disabled,
+}) => {
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const digits = Array.from({ length: 6 }, (_, i) => value[i] || "");
+
+  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace") {
+      if (!digits[index] && index > 0) {
+        const newDigits = [...digits];
+        newDigits[index - 1] = "";
+        onChange(newDigits.join(""));
+        inputRefs.current[index - 1]?.focus();
+      }
+    } else if (e.key === "ArrowLeft" && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    } else if (e.key === "ArrowRight" && index < 5) {
+      inputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handlePasteString = (pasted: string) => {
+    const digitsOnly = pasted.replace(/[^0-9]/g, "").slice(0, 6);
+    if (!digitsOnly) return;
+    onChange(digitsOnly);
+    const focusIdx = Math.min(digitsOnly.length, 5);
+    inputRefs.current[focusIdx]?.focus();
+    if (digitsOnly.length === 6 && onComplete) {
+      onComplete(digitsOnly);
+    }
+  };
+
+  const handleChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value;
+    const cleanDigits = rawVal.replace(/[^0-9]/g, "");
+
+    if (!cleanDigits) {
+      const newDigits = [...digits];
+      newDigits[index] = "";
+      onChange(newDigits.join(""));
+      return;
+    }
+
+    if (cleanDigits.length > 1) {
+      handlePasteString(cleanDigits);
+      return;
+    }
+
+    const newDigits = [...digits];
+    newDigits[index] = cleanDigits;
+    const newVal = newDigits.join("");
+    onChange(newVal);
+
+    if (index < 5) {
+      inputRefs.current[index + 1]?.focus();
+    }
+
+    if (newVal.length === 6 && onComplete) {
+      onComplete(newVal);
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData("text");
+    handlePasteString(pasted);
+  };
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "10px",
+        margin: "16px 0 12px",
+      }}
+      onPaste={handlePaste}
+    >
+      {digits.map((digit, idx) => (
+        <React.Fragment key={idx}>
+          {idx === 3 && (
+            <div
+              style={{
+                width: "8px",
+                height: "2px",
+                background: "rgba(192, 76, 253, 0.4)",
+                borderRadius: "2px",
+                margin: "0 2px",
+              }}
+            />
+          )}
+          <input
+            ref={(el) => {
+              inputRefs.current[idx] = el;
+            }}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={6}
+            value={digit}
+            autoFocus={idx === 0}
+            disabled={disabled}
+            onChange={(e) => handleChange(idx, e)}
+            onKeyDown={(e) => handleKeyDown(idx, e)}
+            onFocus={(e) => e.target.select()}
+            className="misa-otp-slot"
+            style={{
+              width: "48px",
+              height: "56px",
+              boxSizing: "border-box",
+              textAlign: "center",
+              fontSize: "24px",
+              fontWeight: 800,
+              fontFamily: "'SF Mono', Consolas, Monaco, monospace",
+              color: "#FFFFFF",
+              background: digit ? "rgba(192, 76, 253, 0.16)" : "rgba(10, 15, 30, 0.88)",
+              border: digit
+                ? "1.5px solid rgba(192, 76, 253, 0.7)"
+                : "1.5px solid rgba(255, 255, 255, 0.14)",
+              borderRadius: "14px",
+              outline: "none",
+              transition: "all 0.18s cubic-bezier(0.16, 1, 0.3, 1)",
+              boxShadow: digit ? "0 0 16px rgba(192, 76, 253, 0.35)" : "none",
+              cursor: disabled ? "not-allowed" : "text",
+            }}
+          />
+        </React.Fragment>
+      ))}
+    </div>
+  );
+};
+
 export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
   const [activeTab, setActiveTab] = useState<AuthTab>("login");
 
@@ -119,6 +262,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
   const [otpCooldown, setOtpCooldown] = useState(0);
   const [otpSending, setOtpSending] = useState(false);
   const [otpVerifying, setOtpVerifying] = useState(false);
+  const isOtpVerificationMode = activeTab === "login" && loginMethod === "otp" && otpSent;
 
   // OTP cooldown timer
   useEffect(() => {
@@ -631,11 +775,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
   };
 
   // OTP: Verify 6-digit Code & Sign In
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleVerifyOtp = async (e?: React.FormEvent, customCode?: string) => {
+    if (e) e.preventDefault();
     if (loading || otpVerifying) return;
     const cleanEmail = email.trim();
-    const cleanCode = otpCode.trim().replace(/\s+/g, "");
+    const cleanCode = (customCode || otpCode).trim().replace(/\s+/g, "");
     if (!cleanEmail) {
       setErrorMsg("Email manzili kiritilmagan");
       return;
@@ -1025,6 +1169,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
         .misa-social-btn:active {
           transform: translateY(0);
         }
+        .misa-otp-slot:hover:not(:disabled) {
+          border-color: rgba(192, 76, 253, 0.6) !important;
+          background: rgba(192, 76, 253, 0.1) !important;
+        }
+        .misa-otp-slot:focus {
+          border-color: #C04CFD !important;
+          background: rgba(192, 76, 253, 0.22) !important;
+          box-shadow: 0 0 0 3px rgba(192, 76, 253, 0.35), 0 0 22px rgba(147, 3, 197, 0.5) !important;
+          transform: translateY(-2px);
+        }
       `}</style>
 
       {/* Misa v9.3 Canvas & Grid Backdrop */}
@@ -1125,57 +1279,59 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
         </div>
 
         {/* Tab Navigation Segmented Glass Control */}
-        <div
-          style={{
-            display: "flex",
-            background: "rgba(6, 10, 22, 0.65)",
-            backdropFilter: "blur(16px)",
-            WebkitBackdropFilter: "blur(16px)",
-            borderRadius: "14px",
-            padding: "4px",
-            marginBottom: "22px",
-            border: "1px solid rgba(255, 255, 255, 0.08)",
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => handleTabChange("login")}
+        {!isOtpVerificationMode && (
+          <div
             style={{
-              flex: 1,
-              padding: "10px 0",
-              border: activeTab === "login" ? "1px solid rgba(192, 76, 253, 0.45)" : "1px solid transparent",
-              borderRadius: "11px",
-              background: activeTab === "login" ? "linear-gradient(135deg, rgba(147, 3, 197, 0.4) 0%, rgba(192, 76, 253, 0.25) 100%)" : "transparent",
-              color: activeTab === "login" ? "#FFFFFF" : "#94A3B8",
-              fontSize: "13.5px",
-              fontWeight: activeTab === "login" ? 700 : 500,
-              cursor: "pointer",
-              transition: "all 0.22s ease",
-              boxShadow: activeTab === "login" ? "0 2px 14px rgba(147, 3, 197, 0.32)" : "none",
+              display: "flex",
+              background: "rgba(6, 10, 22, 0.65)",
+              backdropFilter: "blur(16px)",
+              WebkitBackdropFilter: "blur(16px)",
+              borderRadius: "14px",
+              padding: "4px",
+              marginBottom: "22px",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
             }}
           >
-            Kirish
-          </button>
-          <button
-            type="button"
-            onClick={() => handleTabChange("register")}
-            style={{
-              flex: 1,
-              padding: "10px 0",
-              border: activeTab === "register" ? "1px solid rgba(192, 76, 253, 0.45)" : "1px solid transparent",
-              borderRadius: "11px",
-              background: activeTab === "register" ? "linear-gradient(135deg, rgba(147, 3, 197, 0.4) 0%, rgba(192, 76, 253, 0.25) 100%)" : "transparent",
-              color: activeTab === "register" ? "#FFFFFF" : "#94A3B8",
-              fontSize: "13.5px",
-              fontWeight: activeTab === "register" ? 700 : 500,
-              cursor: "pointer",
-              transition: "all 0.22s ease",
-              boxShadow: activeTab === "register" ? "0 2px 14px rgba(147, 3, 197, 0.32)" : "none",
-            }}
-          >
-            Ro'yxatdan o'tish
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => handleTabChange("login")}
+              style={{
+                flex: 1,
+                padding: "10px 0",
+                border: activeTab === "login" ? "1px solid rgba(192, 76, 253, 0.45)" : "1px solid transparent",
+                borderRadius: "11px",
+                background: activeTab === "login" ? "linear-gradient(135deg, rgba(147, 3, 197, 0.4) 0%, rgba(192, 76, 253, 0.25) 100%)" : "transparent",
+                color: activeTab === "login" ? "#FFFFFF" : "#94A3B8",
+                fontSize: "13.5px",
+                fontWeight: activeTab === "login" ? 700 : 500,
+                cursor: "pointer",
+                transition: "all 0.22s ease",
+                boxShadow: activeTab === "login" ? "0 2px 14px rgba(147, 3, 197, 0.32)" : "none",
+              }}
+            >
+              Kirish
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTabChange("register")}
+              style={{
+                flex: 1,
+                padding: "10px 0",
+                border: activeTab === "register" ? "1px solid rgba(192, 76, 253, 0.45)" : "1px solid transparent",
+                borderRadius: "11px",
+                background: activeTab === "register" ? "linear-gradient(135deg, rgba(147, 3, 197, 0.4) 0%, rgba(192, 76, 253, 0.25) 100%)" : "transparent",
+                color: activeTab === "register" ? "#FFFFFF" : "#94A3B8",
+                fontSize: "13.5px",
+                fontWeight: activeTab === "register" ? 700 : 500,
+                cursor: "pointer",
+                transition: "all 0.22s ease",
+                boxShadow: activeTab === "register" ? "0 2px 14px rgba(147, 3, 197, 0.32)" : "none",
+              }}
+            >
+              Ro'yxatdan o'tish
+            </button>
+          </div>
+        )}
 
         {/* Supabase Unconfigured Warning Banner */}
         {!isSupabaseConfigured && (
@@ -1255,7 +1411,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
           </div>
         )}
 
-        {successMsg && (
+        {successMsg && !isOtpVerificationMode && (
           <div
             style={{
               display: "flex",
@@ -1643,6 +1799,282 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               </div>
             )}
           </div>
+        ) : isOtpVerificationMode ? (
+          /* ═══ DEDICATED OTP VERIFICATION VIEW (Ultra Modern & Focused) ═══ */
+          <div style={{ display: "flex", flexDirection: "column", animation: "authEntrance 0.35s ease" }}>
+            {/* Top Navigation & Step Indicator */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: "20px",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setOtpSent(false);
+                  setOtpCode("");
+                  setErrorMsg(null);
+                }}
+                style={{
+                  background: "rgba(255, 255, 255, 0.06)",
+                  border: "1px solid rgba(255, 255, 255, 0.12)",
+                  borderRadius: "10px",
+                  padding: "7px 14px",
+                  color: "#CBD5E1",
+                  fontSize: "12.5px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  transition: "all 0.18s ease",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "rgba(192, 76, 253, 0.16)";
+                  e.currentTarget.style.borderColor = "rgba(192, 76, 253, 0.4)";
+                  e.currentTarget.style.color = "#FFFFFF";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.06)";
+                  e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.12)";
+                  e.currentTarget.style.color = "#CBD5E1";
+                }}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="19" y1="12" x2="5" y2="12"></line>
+                  <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+                <span>Ortga</span>
+              </button>
+
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "5px 12px",
+                  borderRadius: "20px",
+                  background: "rgba(192, 76, 253, 0.12)",
+                  border: "1px solid rgba(192, 76, 253, 0.28)",
+                  fontSize: "11.5px",
+                  fontWeight: 600,
+                  color: "#D8B4FE",
+                }}
+              >
+                <span
+                  style={{
+                    width: "6px",
+                    height: "6px",
+                    borderRadius: "50%",
+                    background: "#C04CFD",
+                    boxShadow: "0 0 8px #C04CFD",
+                  }}
+                />
+                2-qadam: Tasdiqlash
+              </div>
+            </div>
+
+            {/* Glowing Envelope & Header */}
+            <div style={{ textAlign: "center", marginBottom: "18px" }}>
+              <div
+                style={{
+                  width: "56px",
+                  height: "56px",
+                  margin: "0 auto 12px",
+                  borderRadius: "16px",
+                  background: "linear-gradient(135deg, rgba(147, 3, 197, 0.35) 0%, rgba(192, 76, 253, 0.2) 100%)",
+                  border: "1px solid rgba(192, 76, 253, 0.4)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxShadow: "0 8px 24px rgba(147, 3, 197, 0.35)",
+                }}
+              >
+                <MailIcon size={26} color="#E879F9" />
+              </div>
+              <h2
+                style={{
+                  margin: "0 0 6px 0",
+                  fontSize: "18px",
+                  fontWeight: 700,
+                  color: "#FFFFFF",
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                Tasdiqlash kodi yuborildi
+              </h2>
+              <p style={{ margin: 0, fontSize: "12.5px", color: "#94A3B8" }}>
+                6 xonali bir martalik kod quyidagi email manziliga yuborildi:
+              </p>
+            </div>
+
+            {/* Email Address Pill with Edit action */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "9px 14px",
+                background: "rgba(10, 15, 30, 0.7)",
+                border: "1px solid rgba(192, 76, 253, 0.32)",
+                borderRadius: "12px",
+                marginBottom: "22px",
+                boxShadow: "inset 0 1px 4px rgba(0,0,0,0.4)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", overflow: "hidden" }}>
+                <MailIcon size={15} color="#C084FC" />
+                <span
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    color: "#F1F5F9",
+                    textOverflow: "ellipsis",
+                    overflow: "hidden",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {email}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setOtpSent(false);
+                  setOtpCode("");
+                  setErrorMsg(null);
+                }}
+                style={{
+                  background: "rgba(192, 76, 253, 0.15)",
+                  border: "none",
+                  color: "#E879F9",
+                  fontSize: "11.5px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  padding: "4px 8px",
+                  borderRadius: "6px",
+                  transition: "all 0.15s ease",
+                  flexShrink: 0,
+                }}
+              >
+                O'zgartirish
+              </button>
+            </div>
+
+            {/* Form for OTP verification */}
+            <form onSubmit={handleVerifyOtp} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px", alignItems: "center" }}>
+                <label
+                  style={{
+                    fontSize: "12.5px",
+                    color: "#CBD5E1",
+                    fontWeight: 600,
+                    textAlign: "center",
+                  }}
+                >
+                  6 xonali tasdiqlash kodini kiriting
+                </label>
+
+                {/* 6-slot OtpCodeInput with Auto-advance, Paste, and Auto-complete */}
+                <OtpCodeInput
+                  value={otpCode}
+                  onChange={setOtpCode}
+                  onComplete={(val) => handleVerifyOtp(undefined, val)}
+                  disabled={otpVerifying}
+                />
+
+                <span style={{ fontSize: "11px", color: "#64748B", textAlign: "center", lineHeight: 1.4 }}>
+                  💡 Nusxalangan kodni to'g'ridan-to'g'ri joylashtirishingiz mumkin (Ctrl+V)
+                </span>
+              </div>
+
+              {/* Verify & Enter Button */}
+              <button
+                type="submit"
+                disabled={otpVerifying || otpCode.length < 6}
+                style={{
+                  marginTop: "6px",
+                  padding: "13px 20px",
+                  background: "linear-gradient(135deg, #9303C5 0%, #C04CFD 60%, #7C3AED 100%)",
+                  border: "none",
+                  borderRadius: "12px",
+                  color: "#FFFFFF",
+                  fontSize: "14.5px",
+                  fontWeight: 700,
+                  cursor: otpVerifying || otpCode.length < 6 ? "default" : "pointer",
+                  boxShadow: "0 4px 22px rgba(147, 3, 197, 0.45)",
+                  transition: "all 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
+                  opacity: otpVerifying || otpCode.length < 6 ? 0.6 : 1,
+                }}
+                onMouseEnter={(e) => {
+                  if (!otpVerifying && otpCode.length === 6) {
+                    e.currentTarget.style.transform = "translateY(-1.5px)";
+                    e.currentTarget.style.boxShadow = "0 6px 26px rgba(192, 76, 253, 0.58)";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = "translateY(0)";
+                  e.currentTarget.style.boxShadow = "0 4px 22px rgba(147, 3, 197, 0.45)";
+                }}
+              >
+                {otpVerifying ? "Tekshirilmoqda..." : "🚀 Tizimga kirish"}
+              </button>
+
+              {/* Action Links */}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginTop: "4px",
+                  paddingTop: "6px",
+                  borderTop: "1px solid rgba(255, 255, 255, 0.06)",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => handleSendOtp()}
+                  disabled={otpCooldown > 0 || otpSending}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: otpCooldown > 0 ? "#64748B" : "#C084FC",
+                    fontSize: "12px",
+                    fontWeight: 500,
+                    cursor: otpCooldown > 0 ? "default" : "pointer",
+                    padding: 0,
+                    transition: "color 0.15s ease",
+                  }}
+                >
+                  {otpCooldown > 0 ? `Qayta yuborish (${otpCooldown}s)` : "🔄 Yangi kod olish"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoginMethod("password");
+                    setOtpSent(false);
+                    setErrorMsg(null);
+                  }}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "#94A3B8",
+                    fontSize: "12px",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    padding: 0,
+                    transition: "color 0.15s ease",
+                  }}
+                >
+                  🔑 Parol orqali kirish
+                </button>
+              </div>
+            </form>
+          </div>
         ) : (
           <>
             {/* ═══ SOCIAL LOGINS (Google, GitHub, Telegram) ═══ */}
@@ -1908,7 +2340,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                       </button>
                     </div>
                   </form>
-                ) : !otpSent ? (
+                ) : (
                   /* OTP Step 1: Enter email & request code */
                   <form onSubmit={handleSendOtp} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
                     <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -1932,7 +2364,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                         />
                       </div>
                       <span style={{ fontSize: "12px", color: "#64748B", lineHeight: 1.4 }}>
-                        Emailingizga bir martalik 6 xonali tasdiqlash kodi va tezkor kirish havolasi yuboriladi.
+                        Emailingizga bir martalik 6 xonali tasdiqlash kodi yuboriladi.
                       </span>
                     </div>
 
@@ -1966,142 +2398,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                     >
                       {otpSending ? "Yuborilmoqda..." : "✉️ Tasdiqlash kodini yuborish"}
                     </button>
-                  </form>
-                ) : (
-                  /* OTP Step 2: Enter 6-digit code received in email */
-                  <form onSubmit={handleVerifyOtp} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        padding: "10px 14px",
-                        background: "rgba(192, 76, 253, 0.12)",
-                        border: "1px solid rgba(192, 76, 253, 0.35)",
-                        borderRadius: "12px",
-                        fontSize: "12.5px",
-                        color: "#E2E8F0",
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", overflow: "hidden" }}>
-                        <MailIcon size={16} color="#C084FC" />
-                        <span style={{ fontWeight: 600, textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
-                          {email}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOtpSent(false);
-                          setOtpCode("");
-                          setErrorMsg(null);
-                        }}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: "#C084FC",
-                          fontSize: "12px",
-                          fontWeight: 600,
-                          cursor: "pointer",
-                          padding: "2px 6px",
-                          borderRadius: "4px",
-                          textDecoration: "underline",
-                        }}
-                      >
-                        O'zgartirish
-                      </button>
-                    </div>
 
-                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                      <label htmlFor="otp-code-input" style={{ fontSize: "13px", color: "#E2E8F0", fontWeight: 600, textAlign: "center" }}>
-                        Pochtaga kelgan 6 xonali tasdiqlash kodi
-                      </label>
-                      <div style={{ position: "relative", width: "100%", height: "52px" }}>
-                        <input
-                          id="otp-code-input"
-                          type="text"
-                          inputMode="numeric"
-                          maxLength={8}
-                          autoFocus
-                          value={otpCode}
-                          onChange={(e) => {
-                            const val = e.target.value.replace(/[^0-9]/g, "");
-                            setOtpCode(val);
-                          }}
-                          placeholder="123456"
-                          required
-                          className="misa-auth-input"
-                          style={{
-                            height: "52px",
-                            textAlign: "center",
-                            fontSize: "26px",
-                            fontWeight: 800,
-                            letterSpacing: "10px",
-                            fontFamily: "'SF Mono', Consolas, Monaco, monospace",
-                            color: "#F5D0FE",
-                            padding: "0 16px",
-                          }}
-                        />
-                      </div>
-                      <span style={{ fontSize: "11.5px", color: "#64748B", textAlign: "center" }}>
-                        💡 Xatdagi "Kodni nusxalash" tugmasini bosib, bu yerga joylashtirishingiz mumkin (Ctrl+V)
-                      </span>
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={otpVerifying || !otpCode.trim()}
-                      style={{
-                        marginTop: "2px",
-                        padding: "13px 20px",
-                        background: "linear-gradient(135deg, #9303C5 0%, #C04CFD 60%, #7C3AED 100%)",
-                        border: "none",
-                        borderRadius: "12px",
-                        color: "#FFFFFF",
-                        fontSize: "14.5px",
-                        fontWeight: 700,
-                        cursor: otpVerifying || !otpCode.trim() ? "default" : "pointer",
-                        boxShadow: "0 4px 22px rgba(147, 3, 197, 0.45)",
-                        transition: "all 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
-                        opacity: otpVerifying || !otpCode.trim() ? 0.6 : 1,
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!otpVerifying && otpCode.trim()) {
-                          e.currentTarget.style.transform = "translateY(-1.5px)";
-                          e.currentTarget.style.boxShadow = "0 6px 26px rgba(192, 76, 253, 0.58)";
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = "translateY(0)";
-                        e.currentTarget.style.boxShadow = "0 4px 22px rgba(147, 3, 197, 0.45)";
-                      }}
-                    >
-                      {otpVerifying ? "Tekshirilmoqda..." : "🚀 Tizimga kirish"}
-                    </button>
-
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "2px" }}>
-                      <button
-                        type="button"
-                        onClick={() => handleSendOtp()}
-                        disabled={otpCooldown > 0 || otpSending}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: otpCooldown > 0 ? "#64748B" : "#C084FC",
-                          fontSize: "12px",
-                          fontWeight: 500,
-                          cursor: otpCooldown > 0 ? "default" : "pointer",
-                          padding: 0,
-                        }}
-                      >
-                        {otpCooldown > 0 ? `Qayta yuborish (${otpCooldown}s)` : "Kodni qayta yuborish"}
-                      </button>
-
+                    <div style={{ textAlign: "center", marginTop: "2px" }}>
                       <button
                         type="button"
                         onClick={() => {
                           setLoginMethod("password");
-                          setOtpSent(false);
                           setErrorMsg(null);
                         }}
                         style={{
@@ -2109,12 +2411,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                           border: "none",
                           color: "#94A3B8",
                           fontSize: "12px",
+                          fontWeight: 500,
                           cursor: "pointer",
                           padding: 0,
                           textDecoration: "underline",
                         }}
                       >
-                        Parol orqali kirish
+                        🔑 Parol orqali kirishga qaytish
                       </button>
                     </div>
                   </form>
