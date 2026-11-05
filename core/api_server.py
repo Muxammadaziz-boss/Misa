@@ -7538,6 +7538,20 @@ def create_app():
     app.router.add_post("/api/agent/abort", handle_agent_abort)
     app.router.add_get("/api/agent/state", handle_agent_state)
 
+    # Multi-Agent Native Ecosystem (MISA Native Multi-Agent Platform)
+    try:
+        from core.multi_agent.api_handlers import register_multi_agent_routes
+        register_multi_agent_routes(app)
+    except Exception as _ma_ex:
+        logger.error(f"Failed to register Native Multi-Agent routes: {_ma_ex}")
+
+    # Native Workspace Execution Engine
+    try:
+        from core.multi_agent.workspace import register_workspace_routes
+        register_workspace_routes(app)
+    except Exception as _ws_ex:
+        logger.error(f"Failed to register Workspace Execution routes: {_ws_ex}")
+
     # Rejalashtiruvchi (Scheduler)
     app.router.add_get("/api/scheduler", handle_scheduler_list)
     app.router.add_post("/api/scheduler/add", handle_scheduler_add)

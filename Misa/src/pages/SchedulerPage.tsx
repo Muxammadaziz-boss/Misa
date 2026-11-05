@@ -100,45 +100,26 @@ export const SchedulerPage: React.FC<SchedulerPageProps> = ({ onAskMisa }) => {
       const raw = localStorage.getItem("misa_planner_tasks");
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          // Filter out any legacy test values
+          const clean = parsed.filter(
+            (t: any) =>
+              t &&
+              t.id !== "plan_1" &&
+              t.id !== "plan_2" &&
+              t.id !== "plan_3" &&
+              !t.title?.includes("Ultra Glass tizim arxitekturasi") &&
+              !t.title?.includes("Backend API va Neyron javob tezligini") &&
+              !t.title?.includes("Haftalik loyiha natijalari tahlili")
+          );
+          if (clean.length !== parsed.length) {
+            localStorage.setItem("misa_planner_tasks", JSON.stringify(clean));
+          }
+          return clean;
+        }
       }
     } catch {}
-    const todayStr = toIsoDateStr(new Date());
-    return [
-      {
-        id: "plan_1",
-        title: "Misa AI v9.3 Ultra Glass tizim arxitekturasini ko'rib chiqish",
-        description: "Asosiy oynalar, suzuvchi navigatsiya va xotira markazi integratsiyasini tekshirish.",
-        date: todayStr,
-        startTime: "10:00",
-        endTime: "11:30",
-        priority: "high",
-        category: "Dizayn",
-        completed: true,
-      },
-      {
-        id: "plan_2",
-        title: "Backend API va Neyron javob tezligini optimallashtirish",
-        description: "Kontekst oynasi va tezkor xotira qidiruv algoritmini sinovdan o'tkazish.",
-        date: todayStr,
-        startTime: "14:00",
-        endTime: "15:30",
-        priority: "high",
-        category: "Ishlab chiqish",
-        completed: false,
-      },
-      {
-        id: "plan_3",
-        title: "Haftalik loyiha natijalari tahlili va hisobot",
-        description: "Bajarilgan vazifalar ko'rsatkichlarini jamlash va keyingi sprint rejasini tuzish.",
-        date: todayStr,
-        startTime: "17:00",
-        endTime: "18:00",
-        priority: "medium",
-        category: "Boshqaruv",
-        completed: false,
-      },
-    ];
+    return [];
   });
 
   // Create Plan Modal State
@@ -835,7 +816,7 @@ export const SchedulerPage: React.FC<SchedulerPageProps> = ({ onAskMisa }) => {
                       color: "var(--text-secondary)",
                     }}
                   >
-                    Ushbu filtr bo'yicha rejalar topilmadi. "+ Yangi reja" tugmasi orqali vazifa qo'shing.
+                    Hozircha vazifalar mavjud emas. Yuqoridagi "+ Yangi reja" tugmasi orqali reja qo'shishingiz yoki Misa ga ovoz/chat orqali buyurishingiz mumkin.
                   </div>
                 ) : (
                   displayedTasks.map((task) => {

@@ -262,10 +262,26 @@ export const MemoryPage: React.FC<MemoryPageProps> = () => {
       });
     }
 
-    // 3. Profile items (supports both Array<StructuredMemoryItem> and Record<string, any>)
+    // 3. Profile items: Ignore default system boilerplate keys and empty values.
+    // Real user memories are populated when AI identifies meaningful user preferences/facts.
+    const SYSTEM_PROFILE_KEYS = new Set([
+      "ovoz_turi",
+      "til",
+      "qiziqishlar",
+      "yoqtirgan_platformalar",
+      "yaratilgan",
+      "ism",
+      "avatar",
+      "token",
+      "user_id",
+      "id",
+    ]);
+
     if (Array.isArray(memory.profile)) {
       memory.profile.forEach((item: StructuredMemoryItem) => {
-        if (!item || !item.key) return;
+        if (!item || !item.key || SYSTEM_PROFILE_KEYS.has(item.key.toLowerCase())) return;
+        const valStr = String(item.value ?? "").trim();
+        if (!valStr || valStr === "[]" || valStr === "{}") return;
         const pKey = `prof_${item.key}`;
         if (seenKeys.has(pKey)) return;
         seenKeys.add(pKey);
@@ -274,7 +290,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = () => {
           id: item.id || pKey,
           key: item.key,
           title: meta.title || `Profil: ${item.key.replace(/_/g, " ")}`,
-          content: String(item.value ?? ""),
+          content: valStr,
           category: meta.category || "Shaxsiy",
           pinned: meta.pinned ?? true,
           updatedAt: item.updated_at ? item.updated_at.slice(0, 10) : "Doimiy",
@@ -284,17 +300,19 @@ export const MemoryPage: React.FC<MemoryPageProps> = () => {
       });
     } else if (memory.profile && typeof memory.profile === "object") {
       Object.entries(memory.profile).forEach(([k, v]) => {
-        if (!k || v === undefined || v === null || v === "") return;
-        const pKey = `prof_${k}`;
-        if (seenKeys.has(pKey)) return;
-        seenKeys.add(pKey);
-        const meta = cardMetadata[pKey] || {};
+        if (!k || SYSTEM_PROFILE_KEYS.has(k.toLowerCase()) || v === undefined || v === null || v === "") return;
         const rawVal =
           typeof v === "object" && v !== null && "value" in (v as any)
             ? (v as any).value
             : typeof v === "object"
             ? JSON.stringify(v)
             : v;
+        const valStr = String(rawVal ?? "").trim();
+        if (!valStr || valStr === "[]" || valStr === "{}") return;
+        const pKey = `prof_${k}`;
+        if (seenKeys.has(pKey)) return;
+        seenKeys.add(pKey);
+        const meta = cardMetadata[pKey] || {};
         const updatedAt =
           typeof v === "object" && v !== null && "updated_at" in (v as any) && (v as any).updated_at
             ? String((v as any).updated_at).slice(0, 10)
@@ -303,7 +321,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = () => {
           id: pKey,
           key: k,
           title: meta.title || `Profil: ${k.replace(/_/g, " ")}`,
-          content: String(rawVal ?? ""),
+          content: valStr,
           category: meta.category || "Shaxsiy",
           pinned: meta.pinned ?? true,
           updatedAt,

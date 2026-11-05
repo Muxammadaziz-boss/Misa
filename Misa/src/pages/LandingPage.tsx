@@ -33,12 +33,6 @@ interface LandingPageProps {
 
 const QUICK_SUGGESTIONS = [
   {
-    id: "voice",
-    label: "Ovozli suhbat",
-    query: "__VOICE__",
-    icon: "eq",
-  },
-  {
     id: "code",
     label: "Kod va tahlil",
     query: "Python dasturlash tilida samarali arxitektura va kod tahlili bo'yicha yordam ber",

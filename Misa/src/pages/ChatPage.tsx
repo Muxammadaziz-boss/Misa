@@ -5,7 +5,6 @@ import React, { useState, useEffect, useRef } from "react";
 import { MisaAperture } from "../components/MisaAperture";
 import { MarkdownView } from "../components/MarkdownView";
 import {
-  MicIcon,
   ArrowUpIcon,
   SparklesIcon,
   VolumeIcon,
@@ -45,7 +44,6 @@ interface ChatPageProps {
   userName?: string;
   initialQuery?: string;
   onNavigateHome: () => void;
-  onNavigateVoice: () => void;
   onNavigate?: (path: string) => void;
 }
 
@@ -64,7 +62,6 @@ const saveSessionsToStorage = (sessions: ChatSession[], activeId?: string) => {
 export const ChatPage: React.FC<ChatPageProps> = ({
   userName = "Ustoz",
   initialQuery,
-  onNavigateVoice,
   onNavigate,
 }) => {
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
@@ -674,34 +671,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 
           {/* Quick Workspace Mode Navigation */}
           <div style={{ display: "flex", flexDirection: "column", gap: "4px", flexShrink: 0 }}>
-            <button
-              type="button"
-              onClick={onNavigateVoice}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                padding: "9px 12px",
-                borderRadius: "14px",
-                color: "var(--text-secondary)",
-                fontSize: "13px",
-                fontWeight: 500,
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-                textAlign: "left",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)";
-                e.currentTarget.style.color = "#FFFFFF";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "transparent";
-                e.currentTarget.style.color = "var(--text-secondary)";
-              }}
-            >
-              <MicIcon size={16} color="#E8B3FF" />
-              <span>Ovozli rejim</span>
-            </button>
 
             <button
               type="button"

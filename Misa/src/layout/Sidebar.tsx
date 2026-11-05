@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import {
   HomeIcon,
   ChatIcon,
-  CommandsIcon,
   MemoryIcon,
   SchedulerIcon,
   PluginsIcon,
@@ -12,6 +11,8 @@ import {
   CollapseSidebarIcon,
   ExpandSidebarIcon,
   SearchIcon,
+  CpuIcon,
+  TerminalIcon,
 } from "../components/icons/Icons";
 import { MikasaLogo } from "../components/MikasaLogo";
 import { AccountRow } from "./AccountRow";
@@ -40,7 +41,8 @@ export const NAV_SECTIONS: NavSectionDef[] = [
   {
     title: "INTELLIGENCE",
     items: [
-      { id: "commands", path: "/commands", label: "Buyruqlar", icon: CommandsIcon },
+      { id: "agents", path: "/agents", label: "Multi-Agent Hub", icon: CpuIcon },
+      { id: "workspace", path: "/workspace", label: "Ishchi Muhit", icon: TerminalIcon },
       { id: "memory", path: "/memory", label: "Xotira", icon: MemoryIcon },
     ],
   },

@@ -6,7 +6,6 @@ import {
   SearchIcon,
   HomeIcon,
   ChatIcon,
-  CommandsIcon,
   DatabaseIcon,
   SchedulerIcon,
   PluginsIcon,
@@ -111,18 +110,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           onClose();
         },
       },
-      {
-        id: "nav_commands",
-        title: "Buyruqlar Markazi",
-        subtitle: "Tizim va avtomatlashtirish buyruqlari katalogi",
-        category: "Navigatsiya",
-        shortcut: "Ctrl+5",
-        icon: <CommandsIcon size={15} />,
-        action: () => {
-          onNavigate("/commands");
-          onClose();
-        },
-      },
+
       {
         id: "nav_plugins",
         title: "Plaginlar Katalogi",

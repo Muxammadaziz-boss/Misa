@@ -72,3 +72,13 @@ nul
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Modellar va og'ir binar fayllar (LLM weights)
+*.gguf
+models/
+
+# Multi-Agent runtime snapshots & private storage
+data/workspace_snapshots/
+data/agent_private_memory/
+data/multi_agent_audit.jsonl
+release/**/data/

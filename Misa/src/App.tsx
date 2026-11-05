@@ -3,8 +3,6 @@ import { AppShell } from "./layout/AppShell";
 
 const LandingPage = lazy(() => import("./pages/LandingPage").then(m => ({ default: m.LandingPage })));
 const ChatPage = lazy(() => import("./pages/ChatPage").then(m => ({ default: m.ChatPage })));
-const VoicePage = lazy(() => import("./pages/VoicePage").then(m => ({ default: m.VoicePage })));
-const CommandsPage = lazy(() => import("./pages/CommandsPage").then(m => ({ default: m.CommandsPage })));
 const MemoryPage = lazy(() => import("./pages/MemoryPage").then(m => ({ default: m.MemoryPage })));
 const SchedulerPage = lazy(() => import("./pages/SchedulerPage").then(m => ({ default: m.SchedulerPage })));
 const PluginsPage = lazy(() => import("./pages/PluginsPage").then(m => ({ default: m.PluginsPage })));
@@ -13,6 +11,8 @@ const RemoteControlPage = lazy(() => import("./pages/RemoteControlPage").then(m 
 const DevicesPage = lazy(() => import("./pages/DevicesPage").then(m => ({ default: m.DevicesPage })));
 const TelegramIntegrationPage = lazy(() => import("./pages/TelegramIntegrationPage").then(m => ({ default: m.TelegramIntegrationPage })));
 const AuthPage = lazy(() => import("./pages/AuthPage").then(m => ({ default: m.AuthPage })));
+const AgentsPage = lazy(() => import("./pages/AgentsPage").then(m => ({ default: m.AgentsPage })));
+const WorkspacePage = lazy(() => import("./pages/WorkspacePage").then(m => ({ default: m.WorkspacePage })));
 import { CommandPalette } from "./components/CommandPalette";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { UpdateModal } from "./components/UpdateModal";
@@ -383,20 +383,31 @@ function App() {
             userName={userName}
             initialQuery={initialChatQuery}
             onNavigateHome={() => handleNavigate("/")}
-            onNavigateVoice={() => handleNavigate("/voice")}
             onNavigate={handleNavigate}
           />
         );
       case "/voice":
         return (
-          <VoicePage
+          <LandingPage
             userName={userName}
-            onNavigateHome={() => handleNavigate("/")}
-            onNavigateChat={() => handleNavigate("/chat")}
+            onStartChat={handleStartChatWithQuery}
+            onStartVoice={() => handleNavigate("/")}
+            onNavigate={handleNavigate}
           />
         );
+      case "/agents":
+        return <AgentsPage onNavigateHome={() => handleNavigate("/")} />;
+      case "/workspace":
+        return <WorkspacePage onNavigateHome={() => handleNavigate("/")} />;
       case "/commands":
-        return <CommandsPage onNavigateHome={() => handleNavigate("/")} />;
+        return (
+          <LandingPage
+            userName={userName}
+            onStartChat={handleStartChatWithQuery}
+            onStartVoice={() => handleNavigate("/")}
+            onNavigate={handleNavigate}
+          />
+        );
       case "/memory":
         return <MemoryPage onNavigateHome={() => handleNavigate("/")} />;
       case "/scheduler":

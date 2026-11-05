@@ -34,7 +34,6 @@ const PRIMARY_NAV_ITEMS = [
 ];
 
 const EXTRA_NAV_ITEMS = [
-  { path: "/commands", label: "Buyruqlar Markazi", desc: "29+ tizim va AI vositalari", icon: CommandsIcon },
   { path: "/plugins", label: "Plaginlar Katalogi", desc: "Kengaytmalar va integratsiyalar", icon: PluginsIcon },
   { path: "/devices", label: "Qurilmalar", desc: "Ulangan kompyuterlar boshqaruvi", icon: LaptopIcon },
   { path: "/remote", label: "Masofaviy Boshqaruv", desc: "Ruxsatlar va xavfsizlik markazi", icon: RemoteControlIcon },
