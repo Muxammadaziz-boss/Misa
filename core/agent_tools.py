@@ -744,37 +744,51 @@ TOOL_WEATHER = Tool(
 
 # --- 6. REMINDER ---
 def _reminder(action: str, text: str = "", number: int = 0) -> dict:
-    """Eslatmalar boshqaruvi"""
-    fayl = os.path.join(BASE_DIR, "eslatmalar.txt")
+    """Eslatmalar boshqaruvi (Data directorydagi JSON faylda saqlanadi)"""
+    from core.common_paths import get_data_path
+    fayl = get_data_path("eslatmalar.json")
+
+    reminders = []
+    if os.path.exists(fayl):
+        try:
+            with open(fayl, "r", encoding="utf-8") as f:
+                reminders = json.load(f)
+            if not isinstance(reminders, list):
+                reminders = []
+        except Exception:
+            reminders = []
 
     if action == "add":
         if not text:
             return {"error": "Eslatma matni kerak"}
         sana = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        with open(fayl, "a", encoding="utf-8") as f:
-            f.write(f"[{sana}] {text}\n")
-        return {"message": f"Eslatma saqlandi: {text}"}
+        entry = {"id": len(reminders) + 1, "text": text, "created_at": sana}
+        reminders.append(entry)
+        try:
+            with open(fayl, "w", encoding="utf-8") as f:
+                json.dump(reminders, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.warning(f"Eslatmani yozishda xatolik: {e}")
+        return {"message": f"Eslatma saqlandi: {text}", "id": entry["id"]}
 
     elif action == "list":
-        if not os.path.exists(fayl):
+        if not reminders:
             return {"message": "Eslatmalar yo'q", "reminders": []}
-        with open(fayl, "r", encoding="utf-8") as f:
-            lines = [line_text.strip() for line_text in f.readlines() if line_text.strip()]
-        return {"message": f"{len(lines)} ta eslatma", "reminders": lines[-10:]}
+        return {"message": f"{len(reminders)} ta eslatma", "reminders": reminders[-10:]}
 
     elif action == "delete":
-        if not os.path.exists(fayl):
+        if not reminders:
             return {"error": "Eslatmalar yo'q"}
-        with open(fayl, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-        if not lines:
-            return {"error": "Eslatmalar yo'q"}
-
-        idx = (number - 1) if number > 0 else -1
-        removed = lines.pop(idx).strip()
-        with open(fayl, "w", encoding="utf-8") as f:
-            f.writelines(lines)
-        return {"message": f"O'chirildi: {removed}"}
+        idx = (number - 1) if number > 0 else (len(reminders) - 1)
+        if 0 <= idx < len(reminders):
+            removed = reminders.pop(idx)
+            try:
+                with open(fayl, "w", encoding="utf-8") as f:
+                    json.dump(reminders, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                logger.warning(f"Eslatmani o'chirishda xatolik: {e}")
+            return {"message": f"O'chirildi: {removed.get('text', '')}"}
+        return {"error": "Noto'g'ri eslatma raqami"}
 
     else:
         return {"error": f"Noma'lum: {action}", "available": ["add", "list", "delete"]}

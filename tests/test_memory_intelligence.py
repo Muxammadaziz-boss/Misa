@@ -332,6 +332,27 @@ class TestMemoryIntelligence(unittest.TestCase):
         self.assertIn("sevimli_klub", req.memory["knowledge"])
         self.assertEqual(req.metadata["user_name"], "Aziz")
 
+    # 26. MemoryExtractor autonomous regex patterns
+    def test_26_memory_extractor_patterns(self):
+        from core.intelligence.memory_extractor import MemoryExtractor
+
+        facts = MemoryExtractor.extract_from_text("Salom, mening ismim Bobur va men Toshkentda yashayman.")
+        keys = {f["key"]: f["content"] for f in facts}
+        self.assertIn("foydalanuvchi_ismi", keys)
+        self.assertEqual(keys["foydalanuvchi_ismi"], "Bobur")
+        self.assertIn("foydalanuvchi_shahri", keys)
+
+        # Note extraction
+        notes = MemoryExtractor.extract_from_text("Buni eslab qol: docker container porti 9000")
+        self.assertTrue(len(notes) > 0)
+        self.assertTrue(any("docker container" in n["content"].lower() for n in notes))
+
+    # 27. MemoryExtractor autonomous integration with AgentMemory
+    def test_27_memory_extractor_autonomous_save(self):
+        self.memory.add_conversation("Men backend dasturchisiman va mening loyiham Mikasa v9", "Tushundim, do'stim!")
+        knowledge = self.memory.get_knowledge()
+        self.assertTrue("foydalanuvchi_kasbi" in knowledge or "faol_loyiha" in knowledge)
+
 
 if __name__ == "__main__":
     unittest.main()

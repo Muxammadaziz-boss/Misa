@@ -141,3 +141,26 @@ def test_mcp_client_rpc_formatting():
         call_res = client.call_tool("create_screen", {"title": "Dashboard"})
         assert call_res.get("ok") is True
         assert call_res.get("data", {}).get("status") == "ok"
+
+
+def test_mcp_client_stdio_handshake_and_tool_call():
+    client = MCPClient(
+        server_id="test_stdio",
+        transport="stdio",
+        command="python",
+        args=["-c", "pass"]
+    )
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+    mock_proc.stdin = MagicMock()
+    mock_proc.stdout = MagicMock()
+    mock_proc.stdout.readline.side_effect = [
+        json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2024-11-05"}}) + "\n",
+        json.dumps({"jsonrpc": "2.0", "id": 2, "result": {"content": [{"text": "{\"result\": 42}"}]}}) + "\n"
+    ]
+
+    with patch("subprocess.Popen", return_value=mock_proc):
+        res = client.call_tool("calculate", {"x": 21, "y": 2})
+        assert res.get("ok") is True
+        assert res.get("data", {}).get("result") == 42
+        client.close()

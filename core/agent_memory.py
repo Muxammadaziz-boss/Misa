@@ -18,6 +18,7 @@ from core.intelligence.memory_types import (
 )
 from core.intelligence.memory_policy import MemoryPolicy
 from core.intelligence.memory_retriever import MemoryRetriever
+from core.intelligence.memory_extractor import MemoryExtractor
 from core.common_paths import get_data_path, get_base_dir
 
 logger = logging.getLogger(__name__)
@@ -113,6 +114,12 @@ class AgentMemory:
         # Fayl I/O — lock tashqarisida (boshqa threadlar bloklanmaydi)
         if should_save:
             self._save_conversations()
+
+        # Avtonom semantik xotira ajratish (faktlar, afzalliklar, eslatmalar)
+        try:
+            MemoryExtractor.process_and_save(self, user_input, agent_response)
+        except Exception as e:
+            logger.debug(f"Semantik xotira ajratishda xatolik: {e}")
 
     def get_conversations(self, last_n: int = 20) -> list:
         """Oxirgi N ta suhbat"""

@@ -94,7 +94,29 @@ def execute_system_info(params: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def execute_system_screenshot(params: Dict[str, Any]) -> Dict[str, Any]:
-    """Ekran tasvirini xavfsiz olish"""
+    """Ekran tasvirini xavfsiz va real olish"""
+    try:
+        from core.ai_engine import _capture_screen_pil
+        from core.common_paths import get_data_path
+        img = _capture_screen_pil()
+        if img:
+            out_dir = os.path.join(get_data_path("images"))
+            os.makedirs(out_dir, exist_ok=True)
+            out_file = os.path.join(out_dir, "remote_screenshot.png")
+            img.save(out_file, format="PNG")
+            file_size = os.path.getsize(out_file)
+            return {
+                "captured": True,
+                "format": "png",
+                "resolution": f"{img.width}x{img.height}",
+                "file_size_bytes": file_size,
+                "timestamp": time.time(),
+                "preview_url": "/api/remote/screenshot/preview",
+                "saved_path": out_file
+            }
+    except Exception as e:
+        logger.warning(f"Real screenshot olishda xatolik: {e}, fallback ishlatilmoqda")
+
     # Headless yoki CI muhitida sinov mock qaytaradi
     return {
         "captured": True,

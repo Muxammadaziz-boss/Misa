@@ -33,6 +33,8 @@ import {
   PluginItem,
   PluginsResponse,
   PluginStatus,
+  McpServerConfig,
+  McpToolItem,
 } from "../services/backendService";
 
 interface PluginsPageProps {
@@ -40,6 +42,7 @@ interface PluginsPageProps {
 }
 
 export const PluginsPage: React.FC<PluginsPageProps> = ({ onNavigateHome }) => {
+  const [activeSection, setActiveSection] = useState<"plugins" | "mcp">("plugins");
   const [plugins, setPlugins] = useState<PluginItem[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("Barchasi");
@@ -47,6 +50,20 @@ export const PluginsPage: React.FC<PluginsPageProps> = ({ onNavigateHome }) => {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [loading, setLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // MCP Holati
+  const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
+  const [mcpTools, setMcpTools] = useState<McpToolItem[]>([]);
+  const [isAddMcpModalOpen, setIsAddMcpModalOpen] = useState<boolean>(false);
+  const [mcpId, setMcpId] = useState<string>("");
+  const [mcpName, setMcpName] = useState<string>("");
+  const [mcpDesc, setMcpDesc] = useState<string>("");
+  const [mcpTransport, setMcpTransport] = useState<"http" | "stdio">("http");
+  const [mcpUrl, setMcpUrl] = useState<string>("");
+  const [mcpCommand, setMcpCommand] = useState<string>("");
+  const [mcpArgs, setMcpArgs] = useState<string>("");
+  const [mcpCategory, setMcpCategory] = useState<string>("Tashqi Servis");
+  const [isSavingMcp, setIsSavingMcp] = useState<boolean>(false);
 
   // Tool sinov modal holati
   const [selectedTool, setSelectedTool] = useState<PluginItem | null>(null);
@@ -86,13 +103,81 @@ export const PluginsPage: React.FC<PluginsPageProps> = ({ onNavigateHome }) => {
     }
   }, []);
 
+  const fetchMcpData = useCallback(async () => {
+    if (!mountedRef.current) return;
+    try {
+      const [sRes, tRes] = await Promise.all([
+        backendService.getMcpServers(),
+        backendService.getMcpTools(),
+      ]);
+      if (mountedRef.current) {
+        if (sRes.ok && sRes.servers) {
+          setMcpServers(sRes.servers);
+        }
+        if (tRes.ok && tRes.tools) {
+          setMcpTools(tRes.tools);
+        }
+      }
+    } catch (err: any) {
+      console.warn("MCP ma'lumotlarini yuklashda xatolik:", err);
+    }
+  }, []);
+
   useEffect(() => {
     mountedRef.current = true;
     fetchPlugins();
+    fetchMcpData();
     return () => {
       mountedRef.current = false;
     };
-  }, [fetchPlugins]);
+  }, [fetchPlugins, fetchMcpData]);
+
+  const handleToggleMcp = async (id: string, currentEnabled: boolean) => {
+    const res = await backendService.toggleMcpServer(id, !currentEnabled);
+    if (res.ok) {
+      await fetchMcpData();
+    }
+  };
+
+  const handleDeleteMcp = async (id: string) => {
+    if (!window.confirm(`'${id}' MCP serverini o'chirmoqchimisiz?`)) return;
+    const res = await backendService.deleteMcpServer(id);
+    if (res.ok) {
+      await fetchMcpData();
+    }
+  };
+
+  const handleSaveMcp = async () => {
+    if (!mcpId.trim() || !mcpName.trim() || isSavingMcp) return;
+    setIsSavingMcp(true);
+    const argsArray = mcpArgs.trim() ? mcpArgs.split(" ").filter(Boolean) : [];
+    const config: Partial<McpServerConfig> = {
+      id: mcpId.trim().toLowerCase(),
+      name: mcpName.trim(),
+      description: mcpDesc.trim() || undefined,
+      transport: mcpTransport,
+      url: mcpTransport === "http" ? mcpUrl.trim() : undefined,
+      command: mcpTransport === "stdio" ? mcpCommand.trim() : undefined,
+      args: mcpTransport === "stdio" ? argsArray : undefined,
+      category: mcpCategory.trim() || "Tashqi Servis",
+      enabled: true,
+    };
+
+    const res = await backendService.saveMcpServer(config);
+    if (res.ok) {
+      setMcpId("");
+      setMcpName("");
+      setMcpDesc("");
+      setMcpUrl("");
+      setMcpCommand("");
+      setMcpArgs("");
+      setIsAddMcpModalOpen(false);
+      await fetchMcpData();
+    } else {
+      alert("Xatolik: " + (res.error || "Serverni saqlab bo'lmadi"));
+    }
+    setIsSavingMcp(false);
+  };
 
   const handleToggle = async (plugin: PluginItem) => {
     const newStatus = !plugin.enabled;
@@ -400,27 +485,86 @@ export const PluginsPage: React.FC<PluginsPageProps> = ({ onNavigateHome }) => {
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        {/* Section Switcher: Plugins vs MCP Hub */}
+        <div style={{ display: "flex", gap: 4, background: "rgba(255, 255, 255, 0.04)", padding: 4, borderRadius: 10, border: "1px solid var(--border-subtle)" }}>
           <button
-            onClick={() => setIsInstallModalOpen(true)}
+            onClick={() => setActiveSection("plugins")}
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              background: "rgba(168, 85, 247, 0.15)",
-              border: "1px solid rgba(168, 85, 247, 0.3)",
-              color: "#c084fc",
-              padding: "8px 14px",
+              padding: "6px 14px",
               borderRadius: 8,
+              border: "none",
               fontSize: 12,
-              fontWeight: 500,
+              fontWeight: activeSection === "plugins" ? 600 : 400,
+              background: activeSection === "plugins" ? "rgba(168, 85, 247, 0.25)" : "transparent",
+              color: activeSection === "plugins" ? "#c084fc" : "var(--text-secondary)",
               cursor: "pointer",
               transition: "all 0.15s ease",
             }}
           >
-            <SparklesIcon size={14} color="#c084fc" />
-            <span>Yangi plagin qo'shish</span>
+            Plaginlar ({stats.total})
           </button>
+          <button
+            onClick={() => setActiveSection("mcp")}
+            style={{
+              padding: "6px 14px",
+              borderRadius: 8,
+              border: "none",
+              fontSize: 12,
+              fontWeight: activeSection === "mcp" ? 600 : 400,
+              background: activeSection === "mcp" ? "rgba(168, 85, 247, 0.25)" : "transparent",
+              color: activeSection === "mcp" ? "#c084fc" : "var(--text-secondary)",
+              cursor: "pointer",
+              transition: "all 0.15s ease",
+            }}
+          >
+            MCP Serverlar ({mcpServers.length})
+          </button>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {activeSection === "plugins" ? (
+            <button
+              onClick={() => setIsInstallModalOpen(true)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                background: "rgba(168, 85, 247, 0.15)",
+                border: "1px solid rgba(168, 85, 247, 0.3)",
+                color: "#c084fc",
+                padding: "8px 14px",
+                borderRadius: 8,
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <SparklesIcon size={14} color="#c084fc" />
+              <span>Yangi plagin qo'shish</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsAddMcpModalOpen(true)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                background: "rgba(168, 85, 247, 0.2)",
+                border: "1px solid rgba(168, 85, 247, 0.4)",
+                color: "#c084fc",
+                padding: "8px 14px",
+                borderRadius: 8,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <SparklesIcon size={14} color="#c084fc" />
+              <span>Yangi MCP Server ulash</span>
+            </button>
+          )}
 
           <button
             onClick={onNavigateHome}
@@ -456,8 +600,320 @@ export const PluginsPage: React.FC<PluginsPageProps> = ({ onNavigateHome }) => {
           gap: 20,
         }}
       >
-        {/* Status Tabs Bar */}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {activeSection === "mcp" ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+            {/* MCP Banner */}
+            <div
+              style={{
+                background: "linear-gradient(135deg, rgba(168, 85, 247, 0.12) 0%, rgba(59, 130, 246, 0.08) 100%)",
+                border: "1px solid rgba(168, 85, 247, 0.25)",
+                borderRadius: 12,
+                padding: "20px 24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 16,
+              }}
+            >
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <TerminalIcon size={18} color="#c084fc" />
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>
+                    Model Context Protocol (MCP) Markazi
+                  </h3>
+                  <span
+                    style={{
+                      background: "rgba(168, 85, 247, 0.2)",
+                      color: "#c084fc",
+                      fontSize: 10,
+                      fontWeight: 600,
+                      padding: "2px 8px",
+                      borderRadius: 12,
+                    }}
+                  >
+                    JSON-RPC 2.0
+                  </span>
+                </div>
+                <p style={{ margin: 0, fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5, maxWidth: 700 }}>
+                  Tashqi vositalar va CLI serverlarni (masalan: Filesystem, GitHub, SQLite, DevTools) HTTP yoki STDIO orqali Misa arxitekturasiga ulang. Agent bu vositalardan avtonom tarzda foydalana oladi.
+                </p>
+              </div>
+
+              <div style={{ display: "flex", gap: 10, flexShrink: 0 }}>
+                <button
+                  onClick={fetchMcpData}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    background: "rgba(255, 255, 255, 0.06)",
+                    border: "1px solid var(--border-subtle)",
+                    color: "var(--text-secondary)",
+                    padding: "8px 14px",
+                    borderRadius: 8,
+                    fontSize: 12,
+                    cursor: "pointer",
+                  }}
+                  title="Qayta tekshirish"
+                >
+                  <RefreshIcon size={14} />
+                  <span>Yangilash</span>
+                </button>
+                <button
+                  onClick={() => setIsAddMcpModalOpen(true)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    background: "linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)",
+                    border: "none",
+                    color: "#ffffff",
+                    padding: "8px 16px",
+                    borderRadius: 8,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    boxShadow: "0 2px 10px rgba(168, 85, 247, 0.3)",
+                  }}
+                >
+                  <SparklesIcon size={14} />
+                  <span>Server qo'shish</span>
+                </button>
+              </div>
+            </div>
+
+            {/* MCP Servers Grid */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
+                  Ulangan MCP Serverlar ({mcpServers.length})
+                </h4>
+              </div>
+
+              {mcpServers.length === 0 ? (
+                <div
+                  style={{
+                    padding: "48px 24px",
+                    textAlign: "center",
+                    background: "rgba(255, 255, 255, 0.02)",
+                    border: "1px dashed var(--border-subtle)",
+                    borderRadius: 12,
+                    color: "var(--text-muted)",
+                    fontSize: 13,
+                  }}
+                >
+                  Hozircha hech qanday MCP server ulanmagan. "Server qo'shish" tugmasi orqali STDIO yoki HTTP server ulang.
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+                    gap: 16,
+                  }}
+                >
+                  {mcpServers.map((srv) => (
+                    <div
+                      key={srv.id}
+                      style={{
+                        background: "rgba(255, 255, 255, 0.03)",
+                        border: srv.enabled
+                          ? "1px solid rgba(168, 85, 247, 0.3)"
+                          : "1px solid var(--border-subtle)",
+                        borderRadius: 12,
+                        padding: 16,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 12,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>
+                              {srv.name}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: 10,
+                                fontWeight: 700,
+                                textTransform: "uppercase",
+                                padding: "2px 6px",
+                                borderRadius: 4,
+                                background: srv.transport === "stdio" ? "rgba(245, 158, 11, 0.15)" : "rgba(59, 130, 246, 0.15)",
+                                color: srv.transport === "stdio" ? "#f59e0b" : "#60a5fa",
+                                border: srv.transport === "stdio" ? "1px solid rgba(245, 158, 11, 0.3)" : "1px solid rgba(59, 130, 246, 0.3)",
+                              }}
+                            >
+                              {srv.transport}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "monospace" }}>
+                            ID: {srv.id}
+                          </span>
+                        </div>
+
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 600,
+                            padding: "3px 8px",
+                            borderRadius: 6,
+                            background: srv.enabled ? "rgba(52, 211, 153, 0.12)" : "rgba(255, 255, 255, 0.05)",
+                            color: srv.enabled ? "#34d399" : "var(--text-muted)",
+                            border: srv.enabled ? "1px solid rgba(52, 211, 153, 0.3)" : "1px solid var(--border-subtle)",
+                          }}
+                        >
+                          {srv.enabled ? "Faol" : "Nofaol"}
+                        </span>
+                      </div>
+
+                      <p style={{ margin: 0, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.45 }}>
+                        {srv.description || "Tavsif berilmagan"}
+                      </p>
+
+                      <div
+                        style={{
+                          fontSize: 11,
+                          fontFamily: "monospace",
+                          background: "rgba(0, 0, 0, 0.3)",
+                          padding: "6px 10px",
+                          borderRadius: 6,
+                          color: "var(--text-muted)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                        title={srv.transport === "stdio" ? `${srv.command} ${(srv.args || []).join(" ")}` : srv.url}
+                      >
+                        {srv.transport === "stdio" ? (
+                          <>
+                            <span style={{ color: "#c084fc" }}>CMD:</span> {srv.command} {(srv.args || []).join(" ")}
+                          </>
+                        ) : (
+                          <>
+                            <span style={{ color: "#60a5fa" }}>URL:</span> {srv.url}
+                          </>
+                        )}
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 6, borderTop: "1px solid rgba(255, 255, 255, 0.05)" }}>
+                        <button
+                          onClick={() => handleToggleMcp(srv.id, srv.enabled)}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            background: srv.enabled ? "rgba(239, 68, 68, 0.1)" : "rgba(52, 211, 153, 0.1)",
+                            border: srv.enabled ? "1px solid rgba(239, 68, 68, 0.3)" : "1px solid rgba(52, 211, 153, 0.3)",
+                            color: srv.enabled ? "#f87171" : "#34d399",
+                            padding: "5px 10px",
+                            borderRadius: 6,
+                            fontSize: 11,
+                            fontWeight: 500,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {srv.enabled ? <PauseIcon size={12} /> : <PlayIcon size={12} />}
+                          <span>{srv.enabled ? "To'xtatish" : "Ishga tushirish"}</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleDeleteMcp(srv.id)}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 4,
+                            background: "transparent",
+                            border: "1px solid transparent",
+                            color: "var(--text-muted)",
+                            padding: "5px 8px",
+                            borderRadius: 6,
+                            fontSize: 11,
+                            cursor: "pointer",
+                          }}
+                          title="Serverni o'chirish"
+                        >
+                          <TrashIcon size={13} color="#f87171" />
+                          <span style={{ color: "#f87171" }}>O'chirish</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Mounted MCP Tools */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
+                Ulangan Vositalar (Tools) ({mcpTools.length})
+              </h4>
+
+              {mcpTools.length === 0 ? (
+                <div
+                  style={{
+                    padding: "32px 20px",
+                    textAlign: "center",
+                    background: "rgba(255, 255, 255, 0.02)",
+                    border: "1px dashed var(--border-subtle)",
+                    borderRadius: 12,
+                    color: "var(--text-muted)",
+                    fontSize: 12,
+                  }}
+                >
+                  Hech qanday MCP vositasi aniqlanmadi. Faol serverlar orqali vositalar avtomatik yuklanadi.
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                    gap: 12,
+                  }}
+                >
+                  {mcpTools.map((t, idx) => (
+                    <div
+                      key={`${t.server_id}_${t.name}_${idx}`}
+                      style={{
+                        background: "rgba(255, 255, 255, 0.02)",
+                        border: "1px solid var(--border-subtle)",
+                        borderRadius: 10,
+                        padding: 14,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "#c084fc", fontFamily: "monospace" }}>
+                          {t.name}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 10,
+                            padding: "2px 6px",
+                            borderRadius: 4,
+                            background: "rgba(255, 255, 255, 0.05)",
+                            color: "var(--text-muted)",
+                          }}
+                        >
+                          {t.server_id}
+                        </span>
+                      </div>
+                      <p style={{ margin: 0, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.4 }}>
+                        {t.description || "Tavsif mavjud emas"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Status Tabs Bar */}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {[
             { id: "all", label: `Barchasi (${stats.total})` },
             { id: "installed", label: `O'rnatilgan (${stats.installed})` },
@@ -836,6 +1292,8 @@ export const PluginsPage: React.FC<PluginsPageProps> = ({ onNavigateHome }) => {
               );
             })}
           </div>
+        )}
+          </>
         )}
       </div>
 
@@ -1312,6 +1770,288 @@ export const PluginsPage: React.FC<PluginsPageProps> = ({ onNavigateHome }) => {
                 }}
               >
                 {isSubmittingInstall ? "Yaratilmoqda..." : "Yaratish va O'rnatish"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add MCP Server Modal */}
+      {isAddMcpModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.75)",
+            backdropFilter: "blur(6px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 110,
+            padding: 20,
+          }}
+          onClick={() => setIsAddMcpModalOpen(false)}
+        >
+          <div
+            style={{
+              background: "#0d131f",
+              border: "1px solid rgba(168, 85, 247, 0.3)",
+              borderRadius: 14,
+              padding: 24,
+              width: "100%",
+              maxWidth: 520,
+              display: "flex",
+              flexDirection: "column",
+              gap: 16,
+              boxShadow: "0 10px 40px rgba(0, 0, 0, 0.6)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <TerminalIcon size={18} color="#c084fc" />
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>
+                  Yangi MCP Server Ulash
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsAddMcpModalOpen(false)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--text-muted)",
+                  cursor: "pointer",
+                }}
+              >
+                <CloseIcon size={16} />
+              </button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "flex", gap: 10 }}>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+                  <label style={{ fontSize: 12, color: "var(--text-secondary)" }}>Server ID (noyob)*:</label>
+                  <input
+                    type="text"
+                    placeholder="masalan: filesystem, github"
+                    value={mcpId}
+                    onChange={(e) => setMcpId(e.target.value)}
+                    style={{
+                      background: "rgba(0, 0, 0, 0.3)",
+                      border: "1px solid var(--border-subtle)",
+                      borderRadius: 8,
+                      padding: "8px 12px",
+                      color: "var(--text-primary)",
+                      fontSize: 13,
+                      outline: "none",
+                    }}
+                  />
+                </div>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+                  <label style={{ fontSize: 12, color: "var(--text-secondary)" }}>Server Nomi*:</label>
+                  <input
+                    type="text"
+                    placeholder="masalan: Filesystem MCP"
+                    value={mcpName}
+                    onChange={(e) => setMcpName(e.target.value)}
+                    style={{
+                      background: "rgba(0, 0, 0, 0.3)",
+                      border: "1px solid var(--border-subtle)",
+                      borderRadius: 8,
+                      padding: "8px 12px",
+                      color: "var(--text-primary)",
+                      fontSize: 13,
+                      outline: "none",
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 10 }}>
+                <div style={{ flex: 2, display: "flex", flexDirection: "column", gap: 6 }}>
+                  <label style={{ fontSize: 12, color: "var(--text-secondary)" }}>Tavsif (ixtiyoriy):</label>
+                  <input
+                    type="text"
+                    placeholder="Server vazifasi va imkoniyatlari haqida qisqacha"
+                    value={mcpDesc}
+                    onChange={(e) => setMcpDesc(e.target.value)}
+                    style={{
+                      background: "rgba(0, 0, 0, 0.3)",
+                      border: "1px solid var(--border-subtle)",
+                      borderRadius: 8,
+                      padding: "8px 12px",
+                      color: "var(--text-primary)",
+                      fontSize: 13,
+                      outline: "none",
+                    }}
+                  />
+                </div>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+                  <label style={{ fontSize: 12, color: "var(--text-secondary)" }}>Kategoriya:</label>
+                  <input
+                    type="text"
+                    placeholder="Tashqi Servis"
+                    value={mcpCategory}
+                    onChange={(e) => setMcpCategory(e.target.value)}
+                    style={{
+                      background: "rgba(0, 0, 0, 0.3)",
+                      border: "1px solid var(--border-subtle)",
+                      borderRadius: 8,
+                      padding: "8px 12px",
+                      color: "var(--text-primary)",
+                      fontSize: 13,
+                      outline: "none",
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Transport selection */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label style={{ fontSize: 12, color: "var(--text-secondary)" }}>Transport protokoli:</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => setMcpTransport("http")}
+                    style={{
+                      flex: 1,
+                      padding: "8px",
+                      borderRadius: 8,
+                      border: mcpTransport === "http" ? "1px solid #60a5fa" : "1px solid var(--border-subtle)",
+                      background: mcpTransport === "http" ? "rgba(59, 130, 246, 0.15)" : "rgba(255, 255, 255, 0.02)",
+                      color: mcpTransport === "http" ? "#60a5fa" : "var(--text-secondary)",
+                      fontSize: 12,
+                      fontWeight: 500,
+                      cursor: "pointer",
+                    }}
+                  >
+                    HTTP (SSE / REST)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMcpTransport("stdio")}
+                    style={{
+                      flex: 1,
+                      padding: "8px",
+                      borderRadius: 8,
+                      border: mcpTransport === "stdio" ? "1px solid #f59e0b" : "1px solid var(--border-subtle)",
+                      background: mcpTransport === "stdio" ? "rgba(245, 158, 11, 0.15)" : "rgba(255, 255, 255, 0.02)",
+                      color: mcpTransport === "stdio" ? "#f59e0b" : "var(--text-secondary)",
+                      fontSize: 12,
+                      fontWeight: 500,
+                      cursor: "pointer",
+                    }}
+                  >
+                    STDIO (CLI Subprocess)
+                  </button>
+                </div>
+              </div>
+
+              {mcpTransport === "http" ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <label style={{ fontSize: 12, color: "var(--text-secondary)" }}>Server URL*:</label>
+                  <input
+                    type="text"
+                    placeholder="http://127.0.0.1:8000/sse yoki http://localhost:3000/mcp"
+                    value={mcpUrl}
+                    onChange={(e) => setMcpUrl(e.target.value)}
+                    style={{
+                      background: "rgba(0, 0, 0, 0.3)",
+                      border: "1px solid var(--border-subtle)",
+                      borderRadius: 8,
+                      padding: "8px 12px",
+                      color: "var(--text-primary)",
+                      fontSize: 13,
+                      outline: "none",
+                    }}
+                  />
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <label style={{ fontSize: 12, color: "var(--text-secondary)" }}>Asosiy Buyruq (Command)*:</label>
+                    <input
+                      type="text"
+                      placeholder="masalan: npx, python, node, docker"
+                      value={mcpCommand}
+                      onChange={(e) => setMcpCommand(e.target.value)}
+                      style={{
+                        background: "rgba(0, 0, 0, 0.3)",
+                        border: "1px solid var(--border-subtle)",
+                        borderRadius: 8,
+                        padding: "8px 12px",
+                        color: "var(--text-primary)",
+                        fontSize: 13,
+                        outline: "none",
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <label style={{ fontSize: 12, color: "var(--text-secondary)" }}>Argumentlar (bo'sh joy bilan ajratilgan):</label>
+                    <input
+                      type="text"
+                      placeholder="masalan: -y @modelcontextprotocol/server-filesystem D:\Ishchi stoli"
+                      value={mcpArgs}
+                      onChange={(e) => setMcpArgs(e.target.value)}
+                      style={{
+                        background: "rgba(0, 0, 0, 0.3)",
+                        border: "1px solid var(--border-subtle)",
+                        borderRadius: 8,
+                        padding: "8px 12px",
+                        color: "var(--text-primary)",
+                        fontSize: 13,
+                        outline: "none",
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 8 }}>
+              <button
+                onClick={() => setIsAddMcpModalOpen(false)}
+                style={{
+                  background: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid var(--border-subtle)",
+                  color: "var(--text-secondary)",
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                Bekor qilish
+              </button>
+              <button
+                onClick={handleSaveMcp}
+                disabled={
+                  !mcpId.trim() ||
+                  !mcpName.trim() ||
+                  isSavingMcp ||
+                  (mcpTransport === "http" && !mcpUrl.trim()) ||
+                  (mcpTransport === "stdio" && !mcpCommand.trim())
+                }
+                style={{
+                  background: "linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)",
+                  color: "#ffffff",
+                  border: "none",
+                  padding: "8px 18px",
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor:
+                    !mcpId.trim() ||
+                    !mcpName.trim() ||
+                    isSavingMcp ||
+                    (mcpTransport === "http" && !mcpUrl.trim()) ||
+                    (mcpTransport === "stdio" && !mcpCommand.trim())
+                      ? "not-allowed"
+                      : "pointer",
+                  boxShadow: "0 2px 10px rgba(168, 85, 247, 0.3)",
+                }}
+              >
+                {isSavingMcp ? "Saqlanmoqda..." : "Ulash va Saqlash"}
               </button>
             </div>
           </div>

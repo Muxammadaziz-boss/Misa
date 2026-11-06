@@ -116,6 +116,7 @@ class UniversalTelegramBot:
         first_name = from_user.get("first_name")
         username = from_user.get("username")
         text = str(message.get("text", "")).strip()
+        voice = message.get("voice") or message.get("audio")
 
         # Update or register identity
         self.identity_mgr.register_or_update_identity(
@@ -124,12 +125,41 @@ class UniversalTelegramBot:
             username=username
         )
 
+        if not text and voice:
+            return await self._handle_voice_update(
+                chat_id=chat_id or tg_user_id,
+                tg_user_id=tg_user_id,
+                voice=voice
+            )
+
         return await self.handle_message(
             chat_id=chat_id or tg_user_id,
             tg_user_id=tg_user_id,
             first_name=first_name,
             username=username,
             text=text
+        )
+
+    async def _handle_voice_update(
+        self,
+        chat_id: Union[int, str],
+        tg_user_id: int,
+        voice: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Ovozli xabarni qabul qilish va qayta ishlash"""
+        link = self.identity_mgr.get_link_by_telegram_id(tg_user_id)
+        if not link or not link.is_active:
+            return await self._send_reply(
+                chat_id,
+                "🔒 *Misa Bot:* Ovozli xabarni qabul qildim, lekin Telegram hisobingiz Misa bilan bog'lanmagan.\n"
+                "Iltimos, avval Misa ilovasida ko'rsatilgan 6 xonali kodni yuboring."
+            )
+
+        duration = voice.get("duration", 0)
+        return await self._send_reply(
+            chat_id,
+            f"🎙 *Ovozli xabar qabul qilindi* ({duration} soniya).\n\n"
+            "Misa ovozli tahlil tizimi faol. Agar Whisper yoki STT plaginlari sozlanmagan bo'lsa, iltimos buyruqni matn ko'rinishida yuboring."
         )
 
     async def handle_message(

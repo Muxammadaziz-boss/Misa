@@ -2488,6 +2488,77 @@ class BackendService {
     }
   }
 
+  // ========== 5.1 MODEL CONTEXT PROTOCOL (MCP) ==========
+  public async getMcpServers(): Promise<{ ok: boolean; servers?: McpServerConfig[]; error?: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/api/mcp/servers`, { method: "GET" });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return await res.json();
+    } catch (err: any) {
+      return { ok: false, servers: [], error: String(err) };
+    }
+  }
+
+  public async saveMcpServer(config: Partial<McpServerConfig>): Promise<{ ok: boolean; server_id?: string; error?: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/api/mcp/servers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { ok: false, error: String(err) };
+    }
+  }
+
+  public async toggleMcpServer(id: string, enabled: boolean): Promise<{ ok: boolean; error?: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/api/mcp/servers/${encodeURIComponent(id)}/toggle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { ok: false, error: String(err) };
+    }
+  }
+
+  public async deleteMcpServer(id: string): Promise<{ ok: boolean; error?: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/api/mcp/servers/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { ok: false, error: String(err) };
+    }
+  }
+
+  public async getMcpTools(): Promise<{ ok: boolean; tools?: McpToolItem[]; total?: number; error?: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/api/mcp/tools`, { method: "GET" });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return await res.json();
+    } catch (err: any) {
+      return { ok: false, tools: [], total: 0, error: String(err) };
+    }
+  }
+
+  public async callMcpTool(serverId: string, toolName: string, args: Record<string, any> = {}): Promise<any> {
+    try {
+      const res = await fetch(`${API_BASE}/api/mcp/call`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ server_id: serverId, tool_name: toolName, arguments: args }),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { ok: false, error: String(err) };
+    }
+  }
+
   // ========== 6. HISOB VA SOZLAMALAR ==========
   public async getAccount(): Promise<AccountSettings> {
     const cachedName = localStorage.getItem("misa_user_name") || "Ustoz";
@@ -5104,6 +5175,30 @@ export interface MicrophoneTestResult {
   device_id?: string;
   sample_rate?: number;
   error?: string;
+}
+
+export interface McpServerConfig {
+  id: string;
+  name: string;
+  description?: string;
+  transport: "http" | "stdio";
+  url?: string;
+  headers?: Record<string, string>;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  enabled: boolean;
+  timeout?: number;
+  category?: string;
+}
+
+export interface McpToolItem {
+  name: string;
+  description?: string;
+  server_id: string;
+  server_name: string;
+  misa_qualified_name?: string;
+  inputSchema?: Record<string, any>;
 }
 
 export const backendService = new BackendService();
