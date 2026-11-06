@@ -3984,7 +3984,13 @@ async def handle_remote_audit(request):
 
 async def handle_telegram_link_start(request):
     """POST /api/telegram/link/start - 6 xonali OTP va Telegram deep-link yaratish"""
-    user_id, user, session, err = resolve_auth_identity(request, required=False)
+    require_auth = (
+        os.environ.get("MISA_REQUIRE_AUTH", "").lower() in ("true", "1")
+        or _is_production_mode()
+    )
+    user_id, user, session, err = resolve_auth_identity(request, required=require_auth)
+    if err:
+        return err
 
     try:
         body = await request.json()
@@ -4171,7 +4177,13 @@ async def handle_telegram_link_verify(request):
 
 async def handle_telegram_link_status(request):
     """GET /api/telegram/link/status - Bog'lanish holatini tekshirish"""
-    user_id, user, session, err = resolve_auth_identity(request, required=False)
+    require_auth = (
+        os.environ.get("MISA_REQUIRE_AUTH", "").lower() in ("true", "1")
+        or _is_production_mode()
+    )
+    user_id, user, session, err = resolve_auth_identity(request, required=require_auth)
+    if err:
+        return err
 
     misa_user_id = user_id
     request_id = request.query.get("request_id")
@@ -4350,16 +4362,12 @@ def resolve_auth_identity(
     if token:
         session, user = auth_mgr.authenticate_token(token)
         if not user or not session:
-            if required:
-                err_resp = web.json_response({
-                    "ok": False,
-                    "error": "Avtorizatsiyadan o'tilmagan: Token yaroqsiz yoki muddati o'tgan"
-                }, status=401)
-                err_resp["_auth_error"] = True
-                return None, None, None, err_resp
-            else:
-                session, user = None, None
-                token = None
+            err_resp = web.json_response({
+                "ok": False,
+                "error": "Avtorizatsiyadan o'tilmagan: Token yaroqsiz yoki muddati o'tgan"
+            }, status=401)
+            err_resp["_auth_error"] = True
+            return None, None, None, err_resp
         else:
             authenticated_user_id = user.id
             # "me", "self", "current" yoki frontend default "misa_user_id=admin" ni
@@ -4403,6 +4411,8 @@ def resolve_auth_identity(
                     mgr.sync_from_user_session(authenticated_user_id, user_meta)
             except Exception as _ex:
                 logger.debug(f"AI key sync error in resolve_auth_identity: {_ex}")
+
+            return authenticated_user_id, user, session, None
 
     # Token yo'q holat
     # XAVFSIZLIK: Production rejimda Supabase sozlanmagan bo'lsa ham autentifikatsiya majburiy

@@ -202,11 +202,13 @@ class WorkspaceManager:
         else:
             candidate = os.path.realpath(os.path.abspath(os.path.join(root, clean_target)))
 
-        # Validate against root and permitted paths
+        # Validate against root and permitted paths (with cross-platform Windows case normalization)
         allowed = False
+        norm_candidate = os.path.normcase(candidate)
         for perm in [root] + [os.path.realpath(p) for p in active_ws.permitted_paths]:
+            norm_perm = os.path.normcase(perm)
             # Exact match or subdirectory check
-            if candidate == perm or candidate.startswith(perm + os.sep):
+            if norm_candidate == norm_perm or norm_candidate.startswith(norm_perm + os.sep):
                 allowed = True
                 break
 

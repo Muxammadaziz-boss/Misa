@@ -15,6 +15,8 @@ import {
   LaptopIcon,
   RemoteControlIcon,
   TelegramIcon,
+  CpuIcon,
+  TerminalIcon,
 } from "./icons/Icons";
 import { backendService, CommandItem } from "../services/backendService";
 
@@ -112,11 +114,35 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       },
 
       {
+        id: "nav_agents",
+        title: "Multi-Agent Hub",
+        subtitle: "Avtonom mutaxassis agentlar va guruhli vazifalar",
+        category: "Navigatsiya",
+        shortcut: "Ctrl+5",
+        icon: <CpuIcon size={15} />,
+        action: () => {
+          onNavigate("/agents");
+          onClose();
+        },
+      },
+      {
+        id: "nav_workspace",
+        title: "Ishchi Muhit (Workspace)",
+        subtitle: "Lokal kod muharriri, terminal va loyihalar boshqaruvi",
+        category: "Navigatsiya",
+        shortcut: "Ctrl+6",
+        icon: <TerminalIcon size={15} />,
+        action: () => {
+          onNavigate("/workspace");
+          onClose();
+        },
+      },
+      {
         id: "nav_plugins",
         title: "Plaginlar Katalogi",
         subtitle: "Tashqi kengaytmalar va agent vositalari",
         category: "Navigatsiya",
-        shortcut: "Ctrl+6",
+        shortcut: "Ctrl+7",
         icon: <PluginsIcon size={15} />,
         action: () => {
           onNavigate("/plugins");
@@ -128,7 +154,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         title: "Masofaviy Boshqaruv va Ruxsatlar",
         subtitle: "Kompyuter agent ruxsatlari va xavfsizlik jurnali",
         category: "Navigatsiya",
-        shortcut: "Ctrl+7",
+        shortcut: "Ctrl+8",
         icon: <RemoteControlIcon size={15} />,
         action: () => {
           onNavigate("/remote");
@@ -140,7 +166,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         title: "Qurilmalar Boshqaruvi",
         subtitle: "Ulangan kompyuterlar va juftlash (Pairing)",
         category: "Navigatsiya",
-        shortcut: "Ctrl+8",
+        shortcut: "Ctrl+9",
         icon: <LaptopIcon size={15} />,
         action: () => {
           onNavigate("/devices");
@@ -152,7 +178,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         title: "Profil va Sozlamalar",
         subtitle: "Shaxsiy ma'lumotlar, tashqi ko'rinish va xavfsizlik",
         category: "Navigatsiya",
-        shortcut: "Ctrl+9",
+        shortcut: "Ctrl+M",
         icon: <SettingsIcon size={15} />,
         action: () => {
           onNavigate("/account");

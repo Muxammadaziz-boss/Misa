@@ -404,7 +404,8 @@ class AIKeyManager:
         active_gemini = self.get_active_gemini_key(user_id=user_id)
         has_gemini = bool(active_gemini)
         gemini_custom = self._user_keys.get(user_id, {}).get("gemini") if user_id else ""
-        masked_gemini = (gemini_custom[:6] + "..." + gemini_custom[-4:]) if gemini_custom and len(gemini_custom) > 10 else ""
+        target_gemini = gemini_custom or active_gemini or ""
+        masked_gemini = (target_gemini[:8] + "..." + target_gemini[-4:]) if target_gemini and len(target_gemini) > 12 else ""
 
         providers_status = {}
         for prov in ("gemini", "groq", "cerebras", "openrouter", "nvidia"):

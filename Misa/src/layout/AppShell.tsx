@@ -14,6 +14,8 @@ import {
   LaptopIcon,
   TelegramIcon,
   SearchIcon,
+  CpuIcon,
+  TerminalIcon,
 } from "../components/icons/Icons";
 
 interface AppShellProps {
@@ -34,6 +36,8 @@ const PRIMARY_NAV_ITEMS = [
 ];
 
 const EXTRA_NAV_ITEMS = [
+  { path: "/agents", label: "Multi-Agent Hub", desc: "Avtonom mutaxassis agentlar va guruhli ishlash", icon: CpuIcon },
+  { path: "/workspace", label: "Ishchi Muhit", desc: "Lokal kod muharriri, terminal va loyihalar", icon: TerminalIcon },
   { path: "/plugins", label: "Plaginlar Katalogi", desc: "Kengaytmalar va integratsiyalar", icon: PluginsIcon },
   { path: "/devices", label: "Qurilmalar", desc: "Ulangan kompyuterlar boshqaruvi", icon: LaptopIcon },
   { path: "/remote", label: "Masofaviy Boshqaruv", desc: "Ruxsatlar va xavfsizlik markazi", icon: RemoteControlIcon },
@@ -118,7 +122,7 @@ export const AppShell: React.FC<AppShellProps> = ({
       {/* 0. Native 8-Direction Window Resize Grips (Borderless Window) */}
       <div
         onMouseDown={(e) => handleStartResize("North", e)}
-        style={{ position: "fixed", top: 0, left: 10, right: 10, height: 5, cursor: "ns-resize", zIndex: 9999 }}
+        style={{ position: "fixed", top: 0, left: 10, right: 10, height: 3, cursor: "ns-resize", zIndex: 50 }}
       />
       <div
         onMouseDown={(e) => handleStartResize("South", e)}

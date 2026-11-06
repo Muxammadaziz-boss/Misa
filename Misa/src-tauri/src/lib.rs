@@ -1321,7 +1321,7 @@ pub fn run() {
             let win = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
                 .title("MISA AI v9.3")
                 .inner_size(1200.0, 720.0)
-                .min_inner_size(960.0, 600.0)
+                .min_inner_size(1024.0, 700.0)
                 .resizable(true)
                 .center()
                 .decorations(false)

@@ -274,6 +274,14 @@ export const SchedulerPage: React.FC<SchedulerPageProps> = ({ onAskMisa }) => {
   const handleCreatePlan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formTitle.trim() || isSubmitting) return;
+
+    const start = formStartTime || "14:00";
+    const end = formEndTime || "15:00";
+    if (start >= end) {
+      showToast("Boshlanish vaqti tugash vaqtidan oldin bo'lishi kerak!");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {

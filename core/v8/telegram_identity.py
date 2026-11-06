@@ -92,6 +92,7 @@ class TelegramLinkRequest:
     used_at: Optional[float] = None
     link_token: str = field(default_factory=lambda: secrets.token_urlsafe(24))
     expected_telegram_user_id: Optional[int] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
     _transient_auth_token: Optional[str] = field(default=None, repr=False, compare=False)
 
     def is_valid(self, current_time: Optional[float] = None) -> bool:
@@ -113,7 +114,7 @@ class TelegramLinkRequest:
             "misa_user_id", "otp_hash", "salt", "request_id",
             "created_at", "expires_at", "status", "attempt_count",
             "telegram_user_id", "used_at", "link_token",
-            "expected_telegram_user_id"
+            "expected_telegram_user_id", "metadata"
         }
         filtered = {k: v for k, v in data.items() if k in valid_fields}
         return cls(**filtered)
