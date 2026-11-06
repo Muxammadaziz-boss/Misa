@@ -46,6 +46,9 @@ core/config.json
 *.pt
 *.onnx
 *.index
+*.msi
+release/**/Misa-AI-Setup-*.exe
+release/**/Misa-AI-*.msi
 output/
 scratch/
 logos/
