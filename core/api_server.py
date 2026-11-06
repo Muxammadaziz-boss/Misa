@@ -69,7 +69,7 @@ def get_app_version() -> str:
         from core.v8.device import get_current_app_version
         return get_current_app_version()
     except Exception:
-        return "9.3.0"
+        return "9.4.0"
 
 
 def load_runtime_dotenv() -> None:
@@ -7786,7 +7786,7 @@ def run_server(host=None, port=None):
             resolved_port = 18420
 
     logger.info(
-        f"MISA AI 9.3.0 Background API Server boshlanmoqda: "
+        f"MISA AI 9.4.0 Background API Server boshlanmoqda: "
         f"http://{resolved_host}:{resolved_port}"
     )
 
@@ -7795,7 +7795,7 @@ def run_server(host=None, port=None):
         import urllib.request
         req = urllib.request.Request(
             f"http://{resolved_host}:{resolved_port}/api/health",
-            headers={"User-Agent": "MisaSingleInstanceCheck/9.3.0"}
+            headers={"User-Agent": "MisaSingleInstanceCheck/9.4.0"}
         )
         with urllib.request.urlopen(req, timeout=0.8) as resp:
             if resp.status == 200:

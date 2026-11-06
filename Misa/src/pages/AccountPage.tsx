@@ -33,7 +33,7 @@ import {
   MicrophoneTestResult,
   normalizeApiError,
 } from "../services/backendService";
-import { UpdateCheckResponse } from "../services/updateService";
+import { UpdateService, UpdateCheckResponse } from "../services/updateService";
 import { supabase } from "../services/supabaseClient";
 import { applyMisaAppearanceSettings } from "../App";
 
@@ -132,8 +132,10 @@ export const AccountPage: React.FC<AccountPageProps> = ({
   onProfileChange,
   currentUser,
   onLogout,
+  onOpenUpdateModal,
 }) => {
   const [activeTab, setActiveTab] = useState<ProfileTab>("profile");
+  const [isCheckingUpdates, setIsCheckingUpdates] = useState<boolean>(false);
 
   // 1. Shaxsiy Ma'lumotlar Holati (Ism, Familiya, Email, Telefon, Bio)
   const [firstName, setFirstName] = useState<string>(() => {
@@ -623,6 +625,28 @@ export const AccountPage: React.FC<AccountPageProps> = ({
       showToast(errText);
     } finally {
       setMicRefreshing(false);
+    }
+  };
+
+  // Dastur yangilanishlarini qo'lda tekshirish
+  const handleCheckUpdatesManual = async () => {
+    if (isCheckingUpdates) return;
+    setIsCheckingUpdates(true);
+    try {
+      const res = await UpdateService.checkForUpdates();
+      if (res && res.ok && res.update_available) {
+        if (onOpenUpdateModal) {
+          onOpenUpdateModal(res);
+        } else {
+          showToast(`Yangi versiya mavjud: ${res.target_version || "v9.4.0"}`);
+        }
+      } else {
+        showToast("Sizda eng so'nggi Misa AI versiyasi o'rnatilgan (v9.4.0) ✨");
+      }
+    } catch {
+      showToast("Yangilanishlarni tekshirishda xatolik yuz berdi");
+    } finally {
+      setIsCheckingUpdates(false);
     }
   };
 
@@ -5060,6 +5084,65 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                 }}
               >
                 Pluginlar Markaziga O'tish →
+              </button>
+            </div>
+
+            {/* Auto Update Portal */}
+            <div
+              className="misa-glass-card"
+              style={{
+                padding: "20px 22px",
+                borderRadius: "18px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                gap: "14px",
+                border: "1px solid rgba(168, 85, 247, 0.35)",
+              }}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <div
+                    style={{
+                      width: "38px",
+                      height: "38px",
+                      borderRadius: "12px",
+                      background: "rgba(168, 85, 247, 0.2)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <RefreshIcon size={18} color="#C084FC" />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: "14.5px", fontWeight: 700, color: "#FFFFFF" }}>
+                      Dastur Yangilanishlari
+                    </h4>
+                    <span style={{ fontSize: "11px", color: "#C084FC" }}>v9.4.0 • Rasmiy Reliz</span>
+                  </div>
+                </div>
+                <p style={{ margin: 0, fontSize: "12.5px", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                  Yangi imkoniyatlar (MCP Hub, Avtonom Xotira, Ekran Tahlili, Telegram Ovoz) va xavfsizlik yangilanishlarini tekshirish.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCheckUpdatesManual}
+                disabled={isCheckingUpdates}
+                className="misa-btn-violet"
+                style={{
+                  padding: "9px 16px",
+                  borderRadius: "10px",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  cursor: isCheckingUpdates ? "not-allowed" : "pointer",
+                  textAlign: "center",
+                  background: "linear-gradient(135deg, rgba(168, 85, 247, 0.4) 0%, rgba(147, 3, 197, 0.3) 100%)",
+                }}
+              >
+                {isCheckingUpdates ? "Tekshirilmoqda..." : "Yangilanishlarni Tekshirish"}
               </button>
             </div>
           </div>

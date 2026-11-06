@@ -1,9 +1,9 @@
 # ========== main.py ===============================
 # Misa AI — Shaxsiy sun'iy intellekt yordamchi
-# Versiya: 9.3.0
+# Versiya: 9.4.0
 # ========== Ogohlantirishlarni yashirish ==========
 
-VERSION = "9.3.0"
+VERSION = "9.4.0"
 APP_NAME = "Misa AI"
 import os
 import sys

@@ -27,7 +27,7 @@ import { ServerDiagnosticModal } from "../components/ServerDiagnosticModal";
 interface LandingPageProps {
   userName?: string;
   onStartChat: (initialQuery?: string) => void;
-  onStartVoice: () => void;
+  onStartVoice?: () => void;
   onNavigate?: (path: string) => void;
 }
 

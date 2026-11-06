@@ -1,5 +1,24 @@
 # 🚀 Misa AI Versiyalar Arxivi (Releases Archive)
 
+### [v9.4] — 06/11/2026 (Production Release — Latest)
+- **Rasmiy GitHub Reliz**: [Misa AI v9.4 Release](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.4)
+- **To'liq Portativ Paket (Backend Runtime bilan)**: `v9.4/Misa-AI-v9.4-Portable.zip` (307.12 MB)  
+  *SHA-256:* `2f3ef80f5f77dcc8480760bef71d01d8f4959366298ab349e4d2bb671b126023`
+- **Desktop Ilova (Rasmiy Standalone)**: `v9.4/Misa.exe` (10.17 MB)  
+  *SHA-256:* `73ab941bd386f79cd6f421d9c05c4b1d09878beb1cb2952a836f386628051b2e`
+- **Native WebView2 Yuklagich**: `v9.4/WebView2Loader.dll` (0.15 MB)  
+  *SHA-256:* `8427b1fc58ec707813e5c0a51eb5d69397bb333250a7b891be4d3b123f1e0f1c`
+- **Offline WebView2 Bootstrapper**: `v9.4/webview2/MicrosoftEdgeWebview2Setup.exe` (1.77 MB)  
+  *SHA-256:* `87ad3fe4e3faa1b48bad79de1b9269e5eb30574545bb6f5f7c37d51035748caf`
+- **Kriptografik SHA-256 Summalar**: `v9.4/SHA256SUMS.txt`
+- **Avto-Yangilanish Manifesti**: `v9.4/version_manifest.json`
+- **Asosiy Yangiliklar**:
+  - UX/UI tozalash: alohida audio bo'limi va buyruqlar markazi olib tashlandi, bosh sahifada yagona qulay muloqot markazi yaratildi.
+  - Xotiradagi bo'sh 5 ta shablon kartalar tozalandi, faqat AI aniqlagan real ma'lumotlar saqlanadi.
+  - Rejalashtirishdagi barcha sinov vazifalari tozalandi.
+  - Universal MCP (Model Context Protocol) mijozi va interaktiv vositalar markazi joriy qilindi.
+  - Sozlamalar / Account sahifasiga tizim yangilanishlarini tekshirish vositasi integratsiya qilindi.
+
 ### [v9.3] — 21/10/2026 (Production Release — Latest)
 - **Rasmiy GitHub Reliz**: [Misa AI v9.3 Release](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.3)
 - **To'liq Portativ Paket (Backend + Python Runtime + RVC HuBERT bilan)**: `v9.3/Misa-AI-v9.3-Portable.zip` (470.45 MB) — [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3/Misa-AI-v9.3-Portable.zip)  

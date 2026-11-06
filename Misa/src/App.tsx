@@ -317,19 +317,19 @@ function App() {
             break;
           case "5":
             e.preventDefault();
-            handleNavigate("/commands");
+            handleNavigate("/plugins");
             break;
           case "6":
             e.preventDefault();
-            handleNavigate("/plugins");
+            handleNavigate("/remote");
             break;
           case "7":
             e.preventDefault();
-            handleNavigate("/remote");
+            handleNavigate("/devices");
             break;
           case "8":
             e.preventDefault();
-            handleNavigate("/devices");
+            handleNavigate("/telegram");
             break;
           case "9":
             e.preventDefault();
@@ -373,7 +373,7 @@ function App() {
           <LandingPage
             userName={userName}
             onStartChat={handleStartChatWithQuery}
-            onStartVoice={() => handleNavigate("/voice")}
+            onStartVoice={() => {}}
             onNavigate={handleNavigate}
           />
         );
@@ -386,28 +386,10 @@ function App() {
             onNavigate={handleNavigate}
           />
         );
-      case "/voice":
-        return (
-          <LandingPage
-            userName={userName}
-            onStartChat={handleStartChatWithQuery}
-            onStartVoice={() => handleNavigate("/")}
-            onNavigate={handleNavigate}
-          />
-        );
       case "/agents":
         return <AgentsPage onNavigateHome={() => handleNavigate("/")} />;
       case "/workspace":
         return <WorkspacePage onNavigateHome={() => handleNavigate("/")} />;
-      case "/commands":
-        return (
-          <LandingPage
-            userName={userName}
-            onStartChat={handleStartChatWithQuery}
-            onStartVoice={() => handleNavigate("/")}
-            onNavigate={handleNavigate}
-          />
-        );
       case "/memory":
         return <MemoryPage onNavigateHome={() => handleNavigate("/")} />;
       case "/scheduler":
@@ -481,7 +463,7 @@ function App() {
           }}
         />
         <div style={{ fontSize: "13.5px", color: "var(--text-secondary)", fontWeight: 500 }}>
-          Misa AI v9.3 ishga tushirilmoqda...
+          Misa AI v9.4 ishga tushirilmoqda...
         </div>
       </div>
     );

@@ -473,7 +473,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = () => {
       const dataStr = JSON.stringify(
         {
           exported_at: new Date().toISOString(),
-          version: "9.3",
+          version: "9.4",
           memory_cards: memoryCards,
           facts: memory.facts,
           profile: memory.profile,

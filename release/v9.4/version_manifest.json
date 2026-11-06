@@ -1,0 +1,37 @@
+{
+  "app": "Misa AI",
+  "version": "9.4.0",
+  "version_name": "v9.4",
+  "release_date": "2026-11-06T17:09:33.877Z",
+  "files": [
+    {
+      "name": "Misa.exe",
+      "size_bytes": 10658816,
+      "size_mb": 10.17,
+      "sha256": "73ab941bd386f79cd6f421d9c05c4b1d09878beb1cb2952a836f386628051b2e"
+    },
+    {
+      "name": "WebView2Loader.dll",
+      "size_bytes": 160320,
+      "size_mb": 0.15,
+      "sha256": "8427b1fc58ec707813e5c0a51eb5d69397bb333250a7b891be4d3b123f1e0f1c"
+    },
+    {
+      "name": "MicrosoftEdgeWebview2Setup.exe",
+      "size_bytes": 1857232,
+      "size_mb": 1.77,
+      "sha256": "87ad3fe4e3faa1b48bad79de1b9269e5eb30574545bb6f5f7c37d51035748caf"
+    },
+    {
+      "name": "Misa-AI-v9.4-Portable.zip",
+      "size_bytes": 322042364,
+      "size_mb": 307.12,
+      "sha256": "2f3ef80f5f77dcc8480760bef71d01d8f4959366298ab349e4d2bb671b126023"
+    }
+  ],
+  "backend": {
+    "service": "core/api_server.py",
+    "port": 18420,
+    "protocol": "HTTP/REST + WebSocket"
+  }
+}
