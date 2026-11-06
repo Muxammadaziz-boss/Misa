@@ -88,7 +88,7 @@ impl SingleInstanceGuard {
         if last_err == ERROR_ALREADY_EXISTS {
             startup_log("SINGLE_INSTANCE", "ERROR_ALREADY_EXISTS: existing instance detected!");
             println!("[INSTANCE] Boshqa Misa AI nusxasi allaqachon faol (Single Instance Lock).");
-            let titles = ["MISA AI v9.3", "MISA AI v9.2", "Misa AI", "MISA AI", "MISA AI v9.0.2"];
+            let titles = ["MISA AI v9.4", "MISA AI v9.3", "MISA AI v9.2", "Misa AI", "MISA AI", "MISA AI v9.0.2"];
             let mut hwnd = 0;
             for t in &titles {
                 let win_title: Vec<u16> = OsStr::new(t).encode_wide().chain(std::iter::once(0)).collect();
@@ -165,7 +165,7 @@ pub fn check_backend_handshake(addr_str: &str, expected_version: &str) -> Backen
     let _ = stream.set_write_timeout(Some(Duration::from_millis(2000)));
 
     let request = format!(
-        "GET /api/health HTTP/1.1\r\nHost: {}\r\nUser-Agent: MisaDesktopSupervisor/9.3.0\r\nConnection: close\r\n\r\n",
+        "GET /api/health HTTP/1.1\r\nHost: {}\r\nUser-Agent: MisaDesktopSupervisor/9.4.0\r\nConnection: close\r\n\r\n",
         addr_str
     );
     if stream.write_all(request.as_bytes()).is_err() {
@@ -227,7 +227,7 @@ pub fn check_backend_handshake(addr_str: &str, expected_version: &str) -> Backen
 
 /// HTTP GET /api/health tekshiruvi (Pure Rust stdlib)
 pub fn check_http_health(addr_str: &str, _path: &str) -> bool {
-    check_backend_handshake(addr_str, "9.3.0").is_healthy
+    check_backend_handshake(addr_str, "9.4.0").is_healthy
 }
 
 pub fn stop_backend(state: &SupervisorState) {
@@ -287,7 +287,8 @@ fn find_bundled_backend_binary() -> Option<(PathBuf, PathBuf)> {
     // 2. Joriy ishchi katalog
     if let Ok(cwd) = std::env::current_dir() {
         candidates.push((cwd.join("backend").join("misa_backend.exe"), cwd.join("backend")));
-        candidates.push((cwd.join("release").join("v9.3").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.3").join("backend")));
+        candidates.push((cwd.join("release").join("v9.4").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.4").join("backend")));
+    candidates.push((cwd.join("release").join("v9.3").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.3").join("backend")));
         candidates.push((cwd.join("release").join("v9.3").join("misa_backend.exe"), cwd.join("release").join("v9.3")));
         candidates.push((cwd.join("release").join("v9.2").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.2").join("backend")));
         candidates.push((cwd.join("release").join("v9.0.2").join("backend").join("misa_backend.exe"), cwd.join("release").join("v9.0.2").join("backend")));
@@ -444,7 +445,7 @@ pub fn ensure_backend_running(state: &SupervisorState) {
     println!("[BACKEND] Backend holati tekshirilmoqda (127.0.0.1:18420)...");
 
     // 1. Agar 127.0.0.1:18420 da backend allaqachon ishlab turgan bo'lsa va versiyasi mos bo'lsa
-    let initial_hs = check_backend_handshake("127.0.0.1:18420", "9.3.0");
+    let initial_hs = check_backend_handshake("127.0.0.1:18420", "9.4.0");
     if initial_hs.is_healthy && initial_hs.is_compatible_version {
         backend_lifecycle_log("HEALTH_OK", &format!("Mavjud backend aniqlandi va mos (127.0.0.1:18420, v{}) — yangi jarayon ochilmaydi ✓", initial_hs.version));
         println!("[BACKEND] Mavjud backend aniqlandi va mos (127.0.0.1:18420, v{}) — yangi jarayon ochilmaydi ✓", initial_hs.version);
@@ -459,8 +460,8 @@ pub fn ensure_backend_running(state: &SupervisorState) {
         }
         return;
     } else if initial_hs.is_healthy && !initial_hs.is_compatible_version {
-        backend_lifecycle_log("VERSION_MISMATCH", &format!("18420-portdagi mavjud backend versiyasi mos emas: '{}' (kutilgan: 9.3.0). Jarayon xavfsiz to'xtatilib, yangilanadi...", initial_hs.version));
-        println!("[BACKEND] 18420-portdagi mavjud backend versiyasi mos emas: '{}' (kutilgan: 9.3.0). Jarayon to'xtatilib yangilanadi...", initial_hs.version);
+        backend_lifecycle_log("VERSION_MISMATCH", &format!("18420-portdagi mavjud backend versiyasi mos emas: '{}' (kutilgan: 9.4.0). Jarayon xavfsiz to'xtatilib, yangilanadi...", initial_hs.version));
+        println!("[BACKEND] 18420-portdagi mavjud backend versiyasi mos emas: '{}' (kutilgan: 9.4.0). Jarayon to'xtatilib yangilanadi...", initial_hs.version);
         cleanup_port_process(18420);
         std::thread::sleep(Duration::from_millis(500));
     }
@@ -496,7 +497,7 @@ pub fn ensure_backend_running(state: &SupervisorState) {
         let mut port_compatible = false;
         for _ in 0..3 {
             std::thread::sleep(Duration::from_millis(400));
-            let hs = check_backend_handshake("127.0.0.1:18420", "9.3.0");
+            let hs = check_backend_handshake("127.0.0.1:18420", "9.4.0");
             if hs.is_healthy {
                 port_healthy = true;
                 port_compatible = hs.is_compatible_version;
@@ -1241,13 +1242,13 @@ pub fn run() {
     startup_log("STARTUP", "Misa AI process started");
     startup_log("STARTUP", &format!("Executable path: {}", exe_path));
     startup_log("STARTUP", &format!("PID: {} TID: {}", current_pid(), current_tid()));
-    println!("[BOOT] MISA AI v9.3.0 Desktop Application ishga tushmoqda...");
+    println!("[BOOT] MISA AI v9.4.0 Desktop Application ishga tushmoqda...");
     register_custom_protocol();
 
     // 1. Single-Instance Guard tekshiruvi (faqat 1 ta Misa UI instansiyasi ishlaydi)
     startup_log("SINGLE_INSTANCE", "Checking single instance guard...");
     println!("[INSTANCE] Yagona nusxa (Single-Instance) tekshirilmoqda...");
-    let _instance_guard = match SingleInstanceGuard::acquire("Local\\Misa_AI_SingleInstance_Mutex_v9.3") {
+    let _instance_guard = match SingleInstanceGuard::acquire("Local\\Misa_AI_SingleInstance_Mutex_v9.4") {
         Some(g) => {
             startup_log("SINGLE_INSTANCE", "Acquired mutex successfully (Primary instance)");
             println!("[INSTANCE] Yagona nusxa qulfi o'rnatildi (Primary instance) ✓");
@@ -1319,7 +1320,7 @@ pub fn run() {
             // 1. Asosiy oynani yaratish (on_new_window handler bilan — bo'sh qora oyna chiqishini butunlay bloklaydi)
             startup_log("TAURI", "Building main WebviewWindow with on_new_window interceptor...");
             let win = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
-                .title("MISA AI v9.3")
+                .title("MISA AI v9.4")
                 .inner_size(1200.0, 720.0)
                 .min_inner_size(1024.0, 700.0)
                 .resizable(true)
@@ -1368,7 +1369,7 @@ pub fn run() {
 
             let mut tray_builder = TrayIconBuilder::with_id("misa_main_tray")
                 .menu(&tray_menu)
-                .tooltip("Misa AI v9.3")
+                .tooltip("Misa AI v9.4")
                 .show_menu_on_left_click(false);
 
             if let Some(icon) = app.default_window_icon() {

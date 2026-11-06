@@ -34,7 +34,7 @@ class MultiAgentMemoryManager:
             self._project_memory_path,
             {
                 "project_name": "Misa AI",
-                "version": "9.3.0",
+                "version": "9.4.0",
                 "architecture": "React 19 Frontend + Tauri v2 Desktop Shell + Python 3.11 Asynchronous Backend",
                 "established_patterns": [
                     "Ultra Glass Dark Design Language (#02060E, #9303C5)",

@@ -182,7 +182,7 @@ def build():
     logger.info(f"✔ Deployed backend to Tauri resources: {tauri_backend_dir}")
 
     # Destination 2: release/v9.2 & v9.3/backend/ (for release distribution)
-    for rel_ver in ["v9.2", "v9.3"]:
+    for rel_ver in ["v9.2", "v9.3", "v9.4"]:
         rel_dir = root_dir / "release" / rel_ver
         if rel_dir.exists():
             release_backend_dir = rel_dir / "backend"

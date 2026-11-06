@@ -3667,7 +3667,7 @@ async def handle_remote_devices(request):
         agent_ver = (
             local_ident.agent_version
             if (is_local and local_ident and local_ident.agent_version)
-            else (d.agent_version or (local_ident.agent_version if local_ident else "9.3.0"))
+            else (d.agent_version or (local_ident.agent_version if local_ident else "9.4.0"))
         )
         if is_local and local_ident and d.agent_version != local_ident.agent_version:
             d.agent_version = local_ident.agent_version

@@ -402,7 +402,9 @@ with zipfile.ZipFile(dst, 'w', zipfile.ZIP_DEFLATED) as zf:
 // 8. Write Manifest
 const manifestPath = path.join(releaseVersionDir, "version_manifest.json");
 fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf-8");
-console.log(`✔ Versiya manifesti: version_manifest.json`);
+const rootManifestPath = path.join(releaseBaseDir, "version_manifest.json");
+fs.writeFileSync(rootManifestPath, JSON.stringify(manifest, null, 2), "utf-8");
+console.log(`✔ Versiya manifesti: version_manifest.json (v9.x va global canonical)`);
 
 // 8.1 Write SHA256SUMS.txt
 const sumsLines = [];

@@ -120,7 +120,7 @@ class TestBackendRuntimeAndHealth(unittest.TestCase):
         data = res.json()
         self.assertEqual(data.get("status"), "ok")
         self.assertEqual(data.get("app"), "Misa AI")
-        self.assertIn(data.get("version"), ("8.0.0", "9.0.0", "9.0.1", "9.0.2", "9.2", "9.2.0", "9.3.0"))
+        self.assertIn(data.get("version"), ("8.0.0", "9.0.0", "9.0.1", "9.0.2", "9.2", "9.2.0", "9.3.0", "9.4.0"))
 
     def test_oauth_callback_html(self):
         """Scenario G: GET /api/auth/callback serves OAuth redirect landing page."""

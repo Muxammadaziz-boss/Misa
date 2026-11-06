@@ -1,15 +1,15 @@
 # 🔷 MISA AI (sobiq Mikasa AI) — Autonomous Desktop Assistant & Intelligence Hub
 
-> **📢 MUHIM E'LON (v9.0.0 Rebranding & v9.3.0 Release): 9-versiyadan boshlab "Mikasa AI" loyihasi rasmiy ravishda "Misa" (`Misa AI`) deb yuritiladi!**  
+> **📢 MUHIM E'LON (v9.0.0 Rebranding & v9.4.0 Release): 9-versiyadan boshlab "Mikasa AI" loyihasi rasmiy ravishda "Misa" (`Misa AI`) deb yuritiladi!**  
 > *1.0.0 dan 8.0.0 gacha bo'lgan barcha barqaror versiyalarda loyiha **Mikasa AI** nomi bilan ishlab chiqilgan va arxivlangan (`main` / `dev-v8.0.0`). **9.0.0 versiyadan (`dev-v9.0.0`) boshlab** loyiha yadrosi, desktop interfeysi (`Misa/`), ovozli chaqiruv tizimi ("Salom Misa"), Windows PC agenti va barcha hujjatlar **Misa AI** nomi ostida davom ettiriladi.*
 
-> **O'zbek tilidagi birinchi professional avtonom AI desktop yordamchisi va aqlli orkestratori (v9.3.0 Barqaror Reliz)**  
+> **O'zbek tilidagi birinchi professional avtonom AI desktop yordamchisi va aqlli orkestratori (v9.4.0 Barqaror Reliz)**  
 > React 19 + Tauri 2.0 zamonaviy aero-shisha interfeysi, Model Context Protocol (MCP) ko'prigi, Stitch UI generatori, Multi-Provider AI (Gemini 3.8 Flash, Groq Llama 3.3, Cerebras, OpenRouter), Neural RVC (Retrieval-based Voice Conversion) va Edge-TTS ovoz dvigatellari, Supabase Auth ko'p foydalanuvchili (multi-tenant) xavfsiz autentifikatsiyasi, Google OAuth 2.0, Ed25519 kriptografik PC Agent Enrollment & Pairing, Universal Telegram Bot (`@Mikasa_ai_agent_bot`) orqali masofaviy boshqaruv, Wake-on-LAN, ko'p bosqichli intellektual boshqaruv (Agent Loop 2.0), Authoritative Tool Security, Session-Aware Windows GUI Controller va Ed25519 imzolangan xavfsiz auto-update tizimi.
 
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![UI](https://img.shields.io/badge/UI-Tauri%202.0%20%7C%20React%2019-61DAFB?style=flat&logo=react&logoColor=black)](Misa/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D6?logo=windows)](https://microsoft.com/windows)
-[![Stable Release](https://img.shields.io/badge/Stable%20Release-v9.3.0-success)](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.3.0)
+[![Stable Release](https://img.shields.io/badge/Stable%20Release-v9.4.0-success)](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.4)
 [![Active Branch](https://img.shields.io/badge/Active%20Branch-dev--v9.0.0-blueviolet)](https://github.com/Muxammadaziz-boss/Misa/tree/dev-v9.0.0)
 [![CI Checks](https://img.shields.io/badge/CI%20Checks-9%2F9%20Passing%20%7C%20100%25%20Green-brightgreen)](https://github.com/Muxammadaziz-boss/Misa/actions)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -23,7 +23,8 @@
 | **v1.0.0 – v8.0.0** | **Mikasa AI** | `main`, `dev-v8.0.0` | `mikasa-7/` | 8-versiyagacha bo'lgan barcha relizlar va tarixiy arxitektura o'z holicha saqlanadi. |
 | **v9.0.0 – v9.0.2** | **Misa AI** | `dev-v9.0.0` | `Misa/` | Yangi Tauri 2.0 + React 19 interfeysi, ovozli boshqaruv ("Salom Misa") va PC Agent. |
 | **v9.2** | **Misa AI** | `dev-v9.0.0` | `Misa/` | 9.2 Versiya sinxronizatsiyasi, yangi relizlar paketi va to'liq platforma barqarorligi. |
-| **v9.3.0 (Eng so'nggi barqaror reliz)** | **Misa AI** | `dev-v9.0.0` | `Misa/` | **Model Context Protocol (MCP)** arxitekturasi, **Stitch UI Generator**, **Multi-Provider AI Key Manager** (Gemini, Groq, Cerebras, OpenRouter), **Neural RVC & Edge-TTS** ovozli dvigateli, 56 ta tizim vositalari, 100% Portativ binar relizlar va to'liq yashil CI (GitHub Actions 9/9). |
+| **v9.4.0** | **Misa AI** | `dev-v9.0.0` | `Misa/` | Model Context Protocol (MCP) ko'prigi, Multi-Provider AI (Gemini, Groq, Cerebras, OpenRouter), Neural RVC & Edge-TTS. |
+| **v9.4.0 (Eng so'nggi barqaror reliz)** | **Misa AI** | `dev-v9.0.0` | `Misa/` | **Toza UX/UI**: ortiqcha audio va buyruqlar bo'limlari olib tashlandi, bosh sahifada yagona qulay muloqot markazi; **Avtonom Xotira**: bo'sh shablonlar tozalanib, faqat AI aniqlagan faktlar saqlanadi; **Rejalashtirish**: test qiymatlar tozalandi; **Universal MCP Hub**: jonli stdio/SSE serverlar boshqaruvi; **In-App Auto-Update**: bir bosishda yangilanishlarni tekshirish; **Desktop Screen Vision**: real ishchi stoli skrinshot tahlili. |
 
 ---
 
@@ -59,7 +60,7 @@
 
 ---
 
-## 🌟 9.3-Versiyadagi Asosiy Imkoniyatlar (v9.3.0 — Eng So'nggi Barqaror Reliz)
+## 🌟 9.4-Versiyadagi Asosiy Imkoniyatlar (v9.4.0 — Eng So'nggi Barqaror Reliz)
 
 1. **🤖 Multi-Provider AI va Standart API Kalitlari**:
    - **Gemini 3.8 Flash**, **Groq (Llama 3.3 70B Versatile)**, **Cerebras (Llama 3.3 70B Ultra-fast)** va **OpenRouter** tizimga standart integratsiya qilingan va dastur ishga tushishi bilanoq darhol AI bilan ishlashga tayyor.
@@ -96,7 +97,7 @@
    - Foydalanuvchi ekrani tasvirlari hech qanday tashqi AI bulutlariga yuborilmaydi (to'liq lokal tahlil qilinadi).
 
 8. **⚙️ Desktop Supervisor Handshake & Platform Hardening**:
-   - Rust Tauri supervisor va Python backend o'rtasida `GET /api/health` orqali qat'iy versiya mosligi (`version: 9.3.0`, `app: MISA AI`).
+   - Rust Tauri supervisor va Python backend o'rtasida `GET /api/health` orqali qat'iy versiya mosligi (`version: 9.4.0`, `app: MISA AI`).
    - Telemetriya va loglarda foydalanuvchi parollari va API kalitlari avtomatik `[REDACTED]` holatiga keltiriladi.
 
 ---
@@ -115,18 +116,18 @@
 
 ---
 
-## 📦 Rasmiy Windows Relizlar (v9.3.0 — Eng So'nggi Barqaror Reliz / Latest)
+## 📦 Rasmiy Windows Relizlar (v9.4.0 — Eng So'nggi Barqaror Reliz / Latest)
 
-Barcha reliz fayllari mustaqil kriptografik SHA-256 xeshlari bilan tekshirilgan va rasmiy [GitHub Releases Sahifasida](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.3.0) joylashtirilgan:
+Barcha reliz fayllari mustaqil kriptografik SHA-256 xeshlari bilan tekshirilgan va rasmiy [GitHub Releases Sahifasida](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.4) joylashtirilgan:
 
 | Fayl nomi | Tavsif | Hajmi | SHA-256 Checksum | Yuklab olish |
 | :--- | :--- | :---: | :--- | :---: |
-| **`Misa-AI-v9.3-Portable.zip`** | 📦 **To'liq Portativ Paket (Backend + Python Runtime + RVC HuBERT bilan)** | **470.45 MB** | `008f1f159dd8357c63b470281086ca479d9d79d7d530c4b7c00841ec8a94cbc9` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/Misa-AI-v9.3-Portable.zip) |
-| **`Misa-AI-v9.3.exe`** | 🚀 **Mustaqil Standalone Desktop Executable** | **5.24 MB** | `9d7d3e8122181176354c35e92854f7b8780926b0ededc649a231c6da5d58982f` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/Misa-AI-v9.3.exe) |
-| **`MicrosoftEdgeWebview2Setup.exe`** | 🌐 **Offline Windows WebView2 Bootstrapper** | **1.77 MB** | `87ad3fe4e3faa1b48bad79de1b9269e5eb30574545bb6f5f7c37d51035748caf` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/MicrosoftEdgeWebview2Setup.exe) |
-| **`run_portable.bat`** | ⚡ **Portativ Ishga Tushirish Skripti** | **360 B** | Bir bosishda ishga tushirish | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/run_portable.bat) |
-| **`SHA256SUMS.txt`** | 🔐 **Kriptografik Nazorat Summalari** | **175 B** | Mustaqil tekshirilgan | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/SHA256SUMS.txt) |
-| **`version_manifest.json`** | ⚙️ **Avto-Yangilanish Rasmiy Manifesti** | **1.00 KB** | Ed25519 imzolangan | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/version_manifest.json) |
+| **`Misa-AI-v9.4-Portable.zip`** | 📦 **To'liq Portativ Paket (Backend + Python Runtime + RVC HuBERT bilan)** | **470.45 MB** | `008f1f159dd8357c63b470281086ca479d9d79d7d530c4b7c00841ec8a94cbc9` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.4.0/Misa-AI-v9.4-Portable.zip) |
+| **`Misa-AI-v9.4.exe`** | 🚀 **Mustaqil Standalone Desktop Executable** | **5.24 MB** | `9d7d3e8122181176354c35e92854f7b8780926b0ededc649a231c6da5d58982f` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.4.0/Misa-AI-v9.4.exe) |
+| **`MicrosoftEdgeWebview2Setup.exe`** | 🌐 **Offline Windows WebView2 Bootstrapper** | **1.77 MB** | `87ad3fe4e3faa1b48bad79de1b9269e5eb30574545bb6f5f7c37d51035748caf` | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.4.0/MicrosoftEdgeWebview2Setup.exe) |
+| **`run_portable.bat`** | ⚡ **Portativ Ishga Tushirish Skripti** | **360 B** | Bir bosishda ishga tushirish | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.4.0/run_portable.bat) |
+| **`SHA256SUMS.txt`** | 🔐 **Kriptografik Nazorat Summalari** | **175 B** | Mustaqil tekshirilgan | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.4.0/SHA256SUMS.txt) |
+| **`version_manifest.json`** | ⚙️ **Avto-Yangilanish Rasmiy Manifesti** | **1.00 KB** | Ed25519 imzolangan | [Yuklab olish](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.4.0/version_manifest.json) |
 
 ### 🏛️ Tarixiy Relizlar Arxivi
 - [Misa AI v9.2 Release](https://github.com/Muxammadaziz-boss/Misa/releases/tag/v9.2) — Platform stability & version synchronization
@@ -140,9 +141,9 @@ Barcha reliz fayllari mustaqil kriptografik SHA-256 xeshlari bilan tekshirilgan 
 ## 🚀 O'rnatish va Ishga Tushirish
 
 ### 1-usul: Tayyor Portativ Desktop Ilovani Ishlatish (Foydalanuvchilar uchun — Tavsiya etiladi)
-1. [Misa-AI-v9.3-Portable.zip](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/Misa-AI-v9.3-Portable.zip) arxivini yuklab oling va istalgan papkaga chiqaring.
+1. [Misa-AI-v9.4-Portable.zip](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.4.0/Misa-AI-v9.4-Portable.zip) arxivini yuklab oling va istalgan papkaga chiqaring.
 2. `run_portable.bat` faylini ikki marta bosing. Dastur backend serverini va Tauri interfeysini avtomatik sozlaydi va ishga tushiradi.
-3. Standalone foydalanish uchun to'g'ridan-to'g'ri [Misa-AI-v9.3.exe](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.3.0/Misa-AI-v9.3.exe) ni ochishingiz mumkin.
+3. Standalone foydalanish uchun to'g'ridan-to'g'ri [Misa-AI-v9.4.exe](https://github.com/Muxammadaziz-boss/Misa/releases/download/v9.4.0/Misa-AI-v9.4.exe) ni ochishingiz mumkin.
 
 ### 2-usul: Dasturchilar uchun (Manba kodi orqali)
 ```bash
@@ -168,7 +169,7 @@ python main.py
 
 ---
 
-## 📁 Loyiha Kataloglar Tuzilmasi (v9.3 — Misa AI)
+## 📁 Loyiha Kataloglar Tuzilmasi (v9.4 — Misa AI)
 
 ```
 Misa/ (yordamchi_9.0.0)
@@ -197,7 +198,7 @@ Misa/ (yordamchi_9.0.0)
 │   ├── src-tauri/              # Rust Tauri 2.0 desktop qobig'i va Backend Supervisor
 │   └── dist/                   # Ishlab chiqarish uchun yig'ilgan statik fayllar
 ├── packaging/                  # PyInstaller backend/agent bundler va Ed25519 reliz imzolash
-├── release/                    # Yig'ilgan desktop ilovalar arxivi (v9.3 Latest)
+├── release/                    # Yig'ilgan desktop ilovalar arxivi (v9.4 Latest)
 ├── supabase/                   # Supabase PostgreSQL migratsiyalari va RLS siyosatlari
 ├── tests/                      # Avtomatlashtirilgan backend, xavfsizlik va mikrofon testlari
 ├── main.py                     # Asosiy Misa AI tizim boshqaruvchisi
