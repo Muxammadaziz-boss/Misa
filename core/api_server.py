@@ -227,7 +227,17 @@ def sync_broadcast(event_type: str, data: dict, loop=None):
 
 # ========== Helper functions for User & Voice ==========
 def get_current_user_name() -> str:
-    """Foydalanuvchi ismini olish (birinchi navbatda foydalanuvchi_ismi.txt, keyin config.json)"""
+    """Foydalanuvchi ismini olish (birinchi navbatda agent_profile.json, keyin foydalanuvchi_ismi.txt)"""
+    prof_file = os.path.join(BASE_DIR, "data", "agent_profile.json")
+    if os.path.exists(prof_file):
+        try:
+            with open(prof_file, "r", encoding="utf-8") as f:
+                prof = json.load(f)
+                name = prof.get("ism")
+                if name:
+                    return name
+        except Exception:
+            pass
     txt_file = os.path.join(BASE_DIR, "data", "foydalanuvchi_ismi.txt")
     if os.path.exists(txt_file):
         try:

@@ -18,7 +18,6 @@ class MemoryExtractor:
     va xotiraga (AgentMemory) yozuvchi modul.
     """
 
-    # O'zbek, Rus va Ingliz tillaridagi aniq patternlar
     PATTERNS = [
         # Ism
         {
@@ -26,10 +25,11 @@ class MemoryExtractor:
             "category": "Shaxsiy",
             "key": "foydalanuvchi_ismi",
             "regexes": [
-                r"(?:mening\s+ismim|ismim|otim)\s+([A-ZА-ЯЁA-Za-zʻʼ'\-]+)",
+                r"(?:mening\s+ismim|ismim|otim)\s+([A-Za-zʻʼ'\-]+)",
                 r"(?:my\s+name\s+is|i\s+am)\s+([A-Za-zʻʼ'\-]+)",
                 r"(?:меня\s+зовут|мое\s+имя)\s+([A-Za-zА-Яа-яЁёʻʼ'\-]+)",
             ],
+            "formatter": lambda v: v.strip().capitalize(),
             "importance": 0.95,
             "confidence": 0.95,
         },
@@ -39,11 +39,12 @@ class MemoryExtractor:
             "category": "Shaxsiy",
             "key": "foydalanuvchi_shahri",
             "regexes": [
-                r"(?:men\s+)?([A-Za-zА-Яа-яЁёʻʼ'\-]+)(?:da|da\s+turaman|da\s+yashayman|danman)\b",
-                r"(?:yashash\s+joyim|shahrim)\s+([A-Za-zА-Яа-яЁёʻʼ'\-]+)",
+                r"(?:^|\bmen\s+)([A-Za-zʻʼ'\-]+?)(?:da|da\s+turaman|da\s+yashayman|danman)\b",
+                r"(?:yashash\s+joyim|shahrim)\s+([A-Za-zʻʼ'\-]+)",
                 r"i\s+live\s+in\s+([A-Za-zʻʼ'\-]+)",
                 r"я\s+живу\s+в\s+([A-Za-zА-Яа-яЁёʻʼ'\-]+)",
             ],
+            "formatter": lambda v: v.strip().capitalize(),
             "importance": 0.85,
             "confidence": 0.90,
         },
@@ -53,11 +54,13 @@ class MemoryExtractor:
             "category": "Loyihalar",
             "key": "foydalanuvchi_kasbi",
             "regexes": [
-                r"(?:men\s+)?([A-Za-zА-Яа-яЁё\s]{3,30}?)\s*(?:dasturchisiman|mutaxassisiman|muhandisiman|bo'lib\s+ishlayman|bo'lib\s+faoliyat\s+yuritaman)",
-                r"(?:kasbim|mutaxassisligim)\s+([A-Za-zА-Яа-яЁё\s]{3,30})",
-                r"i\s+work\s+as\s+(?:a\s+|an\s+)?([A-Za-z\s]{3,30})",
-                r"я\s+работаю\s+([A-Za-zА-Яа-яЁё\s]{3,30})",
+                r"(?:^|\bmen\s+)([A-Za-z0-9_\-]{2,20})\s+(?:dasturchisiman|dasturchiman|mutaxassisiman|muhandisiman)\b",
+                r"(?:kasbim|mutaxassisligim)\s*[:\-]?\s*([A-Za-z0-9_\-\s]{3,25})\b",
+                r"(?:men\s+)?([A-Za-z0-9_\-\s]{3,25})\s+bo'lib\s+(?:ishlayman|faoliyat\s+yuritaman)\b",
+                r"i\s+work\s+as\s+(?:a\s+|an\s+)?([A-Za-z\s]{3,25})\b",
+                r"я\s+работаю\s+([A-Za-zА-Яа-яЁё\s]{3,25})\b",
             ],
+            "formatter": lambda v: f"{v.strip()} dasturchisi" if v.lower() in ("backend", "frontend", "fullstack", "mobile", "ios", "android", "python", "java", "golang") else v.strip(),
             "importance": 0.85,
             "confidence": 0.85,
         },
@@ -67,10 +70,11 @@ class MemoryExtractor:
             "category": "Loyihalar",
             "key": "faol_loyiha",
             "regexes": [
-                r"(?:mening\s+loyiham|loyihamiz|ustida\s+ishlayotgan\s+loyiham)\s*[:\-]?\s*([A-Za-z0-9А-Яа-яЁё_\-\.\s]{3,40})",
-                r"my\s+project\s+is\s+([A-Za-z0-9_\-\.\s]{3,40})",
-                r"(?:мой\s+проект|наш\s+проект)\s*[:\-]?\s*([A-Za-z0-9А-Яа-яЁё_\-\.\s]{3,40})",
+                r"(?:mening\s+loyiham|loyihamiz|ustida\s+ishlayotgan\s+loyiham)\s*[:\-]?\s*([A-Za-z0-9_\-\.\s]{3,30})\b",
+                r"my\s+project\s+is\s+([A-Za-z0-9_\-\.\s]{3,30})\b",
+                r"(?:мой\s+проект|наш\s+проект)\s*[:\-]?\s*([A-Za-z0-9А-Яа-яЁё_\-\.\s]{3,30})\b",
             ],
+            "formatter": lambda v: v.strip(),
             "importance": 0.90,
             "confidence": 0.85,
         },
@@ -84,6 +88,7 @@ class MemoryExtractor:
                 r"(?:remember\s+that|remember\s+this|remember)\s*[:\-]?\s*(.+)",
                 r"(?:запомни|сохрани\s+в\s+памяти)\s*[:\-]?\s*(.+)",
             ],
+            "formatter": lambda v: v.strip(),
             "importance": 0.95,
             "confidence": 1.0,
         },
@@ -93,10 +98,11 @@ class MemoryExtractor:
             "category": "Afzalliklar",
             "key": "afzallik",
             "regexes": [
-                r"(?:menga\s+yoqadi|men\s+yoqtiraman|sevimli\s+tilim|sevimli\s+mavzum)\s*[:\-]?\s*([A-Za-z0-9А-Яа-яЁё_\-\s]{2,40})",
-                r"i\s+prefer\s+([A-Za-z0-9_\-\s]{2,40})",
-                r"(?:мне\s+нравится|я\s+предпочитаю)\s+([A-Za-z0-9А-Яа-яЁё_\-\s]{2,40})",
+                r"(?:menga\s+yoqadi|men\s+yoqtiraman|sevimli\s+tilim|sevimli\s+mavzum)\s*[:\-]?\s*([A-Za-z0-9_\-\s]{2,30})\b",
+                r"i\s+prefer\s+([A-Za-z0-9_\-\s]{2,30})\b",
+                r"(?:мне\s+нравится|я\s+предпочитаю)\s+([A-Za-z0-9А-Яа-яЁё_\-\s]{2,30})\b",
             ],
+            "formatter": lambda v: v.strip(),
             "importance": 0.80,
             "confidence": 0.80,
         },
@@ -106,40 +112,55 @@ class MemoryExtractor:
     def extract_from_text(cls, text: str) -> List[Dict[str, Any]]:
         """
         Foydalanuvchi yozgan matndan aniq faktlarni ajratib oladi.
+        Gaplar va sintaktik bo'laklarga ajratib, nojo'ya aralashuvlarning oldini oladi.
         """
         if not text or len(text.strip()) < 3:
             return []
 
+        # Gaplar va iboralarga bo'lish
+        raw_clauses = re.split(r"[\n.!?;]|\bva\b|\bhamda\b|\blekin\b", text)
+        clauses = [c.strip() for c in raw_clauses if len(c.strip()) >= 3]
+        targets = clauses if clauses else [text.strip()]
+
         extracted = []
-        cleaned = text.strip()
+        seen_keys = set()
 
-        for pat in cls.PATTERNS:
-            for rgx in pat["regexes"]:
-                match = re.search(rgx, cleaned, re.IGNORECASE)
-                if match:
-                    val = match.group(1).strip().strip(".,;:!?\"'")
-                    if not val or len(val) < 2:
-                        continue
+        for target in targets:
+            for pat in cls.PATTERNS:
+                key_base = pat["key"]
+                if key_base in seen_keys:
+                    continue
 
-                    # Ignored noisy common words
-                    if val.lower() in {"nima", "qanday", "nega", "kim", "salom", "qayerda", "hello", "hi", "test"}:
-                        continue
+                for rgx in pat["regexes"]:
+                    match = re.search(rgx, target, re.IGNORECASE)
+                    if match:
+                        raw_val = match.group(1).strip().strip(".,;:!?\"'")
+                        if not raw_val or len(raw_val) < 2:
+                            continue
 
-                    key = pat["key"]
-                    if key in ("eslatma", "afzallik"):
-                        slug = re.sub(r"[^a-z0-9]+", "_", val[:24].lower()).strip("_")
-                        key = f"{key}_{slug}" if slug else key
+                        # Shovqinli so'zlarni rad etish
+                        if raw_val.lower() in {"nima", "qanday", "nega", "kim", "salom", "qayerda", "hello", "hi", "test"}:
+                            continue
 
-                    extracted.append({
-                        "key": key,
-                        "content": val,
-                        "type": pat["type"],
-                        "category": pat["category"],
-                        "importance": pat["importance"],
-                        "confidence": pat["confidence"],
-                        "source": MemorySource.CONVERSATION,
-                    })
-                    break  # Har bir pattern uchun birinchi moslik kifoya
+                        formatter = pat.get("formatter") or (lambda x: x)
+                        formatted_val = formatter(raw_val)
+
+                        key = key_base
+                        if key in ("eslatma", "afzallik"):
+                            slug = re.sub(r"[^a-z0-9]+", "_", formatted_val[:24].lower()).strip("_")
+                            key = f"{key}_{slug}" if slug else key
+
+                        extracted.append({
+                            "key": key,
+                            "content": formatted_val,
+                            "type": pat["type"],
+                            "category": pat["category"],
+                            "importance": pat["importance"],
+                            "confidence": pat["confidence"],
+                            "source": MemorySource.CONVERSATION,
+                        })
+                        seen_keys.add(key_base)
+                        break
 
         return extracted
 
@@ -156,7 +177,6 @@ class MemoryExtractor:
         saved_keys = []
         for cand in candidates:
             try:
-                # Xavfsizlik va ruxsat tekshiruvi
                 allowed = memory_store.save_knowledge(
                     key=cand["key"],
                     value=cand["content"],
