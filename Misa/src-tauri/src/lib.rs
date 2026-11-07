@@ -1236,6 +1236,14 @@ pub fn show_native_message_box(_title: &str, _message: &str, _is_error: bool) {}
 pub fn run() {
     install_crash_handlers();
 
+    // WebView2 unmuted media autoplay ruxsatini faollashtirish (Intro video ovozi bilan chiqishi uchun)
+    #[cfg(target_os = "windows")]
+    {
+        if std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").is_err() {
+            std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--autoplay-policy=no-user-gesture-required");
+        }
+    }
+
     let exe_path = std::env::current_exe()
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| "unknown".to_string());

@@ -338,11 +338,18 @@ if (webview2Source) {
   }
 }
 
-const introMp4Candidates = ["Misa.mp4", "Misa1.mp4", "misa_intro.mp4"];
+const introMp4Candidates = ["Misa.mp4", "misa_intro.mp4", "Misa1.mp4"];
+const publicDir = path.resolve(__dirname, "../public");
 for (const vid of introMp4Candidates) {
-  const vidSrc = path.join(releaseVersionDir, vid);
-  if (fs.existsSync(vidSrc)) {
-    fs.copyFileSync(vidSrc, path.join(portableDir, vid));
+  const publicVid = path.join(publicDir, vid);
+  const releaseVid = path.join(releaseVersionDir, vid);
+  const portableVid = path.join(portableDir, vid);
+  if (fs.existsSync(publicVid)) {
+    copyFileWithLog(publicVid, releaseVid, `Intro Splash Video (${vid})`);
+    fs.copyFileSync(publicVid, portableVid);
+    console.log(`✔ Intro Splash Video (${vid}) portativ papkaga nusxalandi`);
+  } else if (fs.existsSync(releaseVid)) {
+    fs.copyFileSync(releaseVid, portableVid);
     console.log(`✔ Intro Splash Video (${vid}) portativ papkaga nusxalandi`);
   }
 }

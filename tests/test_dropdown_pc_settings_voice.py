@@ -36,11 +36,12 @@ def test_device_selector_enlarged_and_styled():
 
 
 def test_landing_page_capsule_centered_and_nowrap():
-    """LandingPage Grand Status kapsulasi markazda va whiteSpace: nowrap bo'lishi kerak."""
+    """LandingPage da ortiqcha status kapsulasi olib tashlangan va asosiy qahramon salomi toza bo'lishi kerak."""
     with open(LANDING_PAGE_PATH, "r", encoding="utf-8") as f:
         code = f.read()
     assert "nowrap" in code
-    assert "Misa Autonom Agent Faol" in code or "Misa Avtonom Agent Faol" in code
+    # Grand status kapsulasi foydalanuvchi iltimosiga binoan LandingPage dan olib tashlangan (telemetriya tepa panel DeviceSelector da mavjud)
+    assert "Grand Status & PC Telemetry Command Capsule" not in code
 
 
 def test_landing_page_auto_speak_integration():

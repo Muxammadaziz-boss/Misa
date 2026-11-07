@@ -5,12 +5,15 @@ interface MisaIntroSplashProps {
   minDurationMs?: number;
 }
 
+const INTRO_SOURCES = ["/Misa.mp4", "/misa_intro.mp4", "/Misa1.mp4"];
+
 export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
   onFinish,
-  minDurationMs = 1200,
+  minDurationMs = 1500,
 }) => {
   const [isFading, setIsFading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [sourceIndex, setSourceIndex] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const startTimeRef = useRef<number>(Date.now());
   const completedRef = useRef<boolean>(false);
@@ -48,22 +51,45 @@ export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
       setIsFading(true);
       setTimeout(() => {
         onFinish();
-      }, 250);
+      }, 280);
     }, remaining);
   }, [minDurationMs, onFinish]);
+
+  // Unmute or resume audio on user interaction if restricted by browser policy
+  const handleUserInteraction = useCallback(() => {
+    const video = videoRef.current;
+    if (video) {
+      if (video.paused) {
+        video.play().catch(() => {});
+      }
+      if (video.muted) {
+        video.muted = false;
+        video.volume = 1.0;
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    // Autoplay video with sound, fallback to muted if system restricts
+    video.muted = false;
+    video.volume = 1.0;
+
+    // Autoplay video with sound, fallback to muted only if system autoplay policy restricts
     const playPromise = video.play();
     if (playPromise !== undefined) {
-      playPromise.catch(() => {
+      playPromise.catch((err) => {
+        console.warn("[MisaIntroSplash] Audio autoplay restricted, trying muted fallback:", err);
         video.muted = true;
-        video.play().catch(() => {
-          // If video completely fails to play after all fallbacks
-          handleComplete(false);
+        video.play().catch((playErr) => {
+          console.warn("[MisaIntroSplash] Muted video play failed:", playErr);
+          // Try next fallback source if available
+          if (sourceIndex < INTRO_SOURCES.length - 1) {
+            setSourceIndex((prev) => prev + 1);
+          } else {
+            handleComplete(false);
+          }
         });
       });
     }
@@ -74,17 +100,38 @@ export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
       }
     };
 
-    // Intro video must play from start to end; it cannot be skipped
+    // Intro video must play from start to end; it finishes when playback ends
     const onVideoEnd = () => handleComplete(false);
+
+    const onVideoError = () => {
+      console.warn(`[MisaIntroSplash] Error on source: ${INTRO_SOURCES[sourceIndex]}`);
+      if (sourceIndex < INTRO_SOURCES.length - 1) {
+        setSourceIndex((prev) => prev + 1);
+      } else {
+        handleComplete(false);
+      }
+    };
 
     video.addEventListener("timeupdate", handleTimeUpdate);
     video.addEventListener("ended", onVideoEnd);
-    video.addEventListener("error", onVideoEnd);
+    video.addEventListener("error", onVideoError);
+
+    // Global listener to unmute on first click or key if muted by policy
+    window.addEventListener("pointerdown", handleUserInteraction);
+    window.addEventListener("keydown", handleUserInteraction);
+
+    // Safety timeout in case video stalls indefinitely
+    const safetyTimeout = setTimeout(() => {
+      handleComplete(false);
+    }, 15000);
 
     return () => {
+      clearTimeout(safetyTimeout);
       video.removeEventListener("timeupdate", handleTimeUpdate);
       video.removeEventListener("ended", onVideoEnd);
-      video.removeEventListener("error", onVideoEnd);
+      video.removeEventListener("error", onVideoError);
+      window.removeEventListener("pointerdown", handleUserInteraction);
+      window.removeEventListener("keydown", handleUserInteraction);
       try {
         if ((document as any).pictureInPictureElement) {
           (document as any).exitPictureInPicture().catch(() => {});
@@ -96,10 +143,11 @@ export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
         video.load();
       } catch {}
     };
-  }, [handleComplete]);
+  }, [handleComplete, handleUserInteraction, sourceIndex]);
 
   return (
     <div
+      onClick={handleUserInteraction}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -118,6 +166,7 @@ export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
         pointerEvents: isFading ? "none" : "auto",
         overflow: "hidden",
         userSelect: "none",
+        cursor: "default",
       }}
     >
       {/* Background ambient crystal glow */}
@@ -133,12 +182,13 @@ export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
         }}
       />
 
-      {/* Fullscreen Video Presentation with Zero Margin */}
+      {/* Fullscreen Video Presentation with Zero Margin and Full Audio */}
       <video
         ref={videoRef}
+        key={INTRO_SOURCES[sourceIndex]}
+        src={INTRO_SOURCES[sourceIndex]}
         playsInline
         autoPlay
-        muted
         controls={false}
         disablePictureInPicture
         controlsList="nodownload noplaybackrate nofullscreen noremoteplayback"
@@ -160,9 +210,10 @@ export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
           pointerEvents: "none",
         }}
       >
-        <source src="/Misa.mp4" type="video/mp4" />
-        <source src="/Misa1.mp4" type="video/mp4" />
-        <source src="/misa_intro.mp4" type="video/mp4" />
+        <source src={INTRO_SOURCES[sourceIndex]} type="video/mp4" />
+        {INTRO_SOURCES.filter((_, i) => i !== sourceIndex).map((s) => (
+          <source key={s} src={s} type="video/mp4" />
+        ))}
       </video>
 
       {/* Bottom Edge Progress Bar */}

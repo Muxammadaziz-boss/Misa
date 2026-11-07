@@ -442,11 +442,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
 
 
-  const [telemetry, setTelemetry] = useState<SystemTelemetry | null>(null);
+  const [_telemetry, setTelemetry] = useState<SystemTelemetry | null>(null);
 
 
 
-  const [currentTime, setCurrentTime] = useState<Date>(new Date());
+  const [_currentTime, setCurrentTime] = useState<Date>(new Date());
 
 
 
@@ -3678,138 +3678,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
 
       >
-
-
-
-        {/* 1. Grand Status & PC Telemetry Command Capsule (Katta va Chiroyli Dizayn) */}
-        <div
-          data-tauri-drag-region="false"
-          className="misa-ultra-glass misa-status-capsule"
-          onClick={() => setIsDiagModalOpen(true)}
-          title="Tizim diagnostikasi va PC holatini to'liq ko'rish uchun bosing"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "14px",
-            padding: "10px 26px",
-            borderRadius: "9999px",
-            background: "linear-gradient(135deg, rgba(147, 3, 197, 0.28) 0%, rgba(20, 12, 34, 0.88) 100%)",
-            border: "1px solid rgba(192, 76, 253, 0.5)",
-            marginBottom: "24px",
-            boxShadow: "0 12px 36px rgba(2, 6, 14, 0.75), 0 0 32px rgba(147, 3, 197, 0.28)",
-            backdropFilter: "blur(28px)",
-            WebkitBackdropFilter: "blur(28px)",
-            transition: "all 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
-            cursor: "pointer",
-            whiteSpace: "nowrap",
-            flexWrap: "nowrap",
-            userSelect: "none",
-            WebkitUserSelect: "none",
-            WebkitAppRegion: "no-drag",
-          } as React.CSSProperties}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = "translateY(-1px) scale(1.015)";
-            e.currentTarget.style.borderColor = "rgba(192, 76, 253, 0.75)";
-            e.currentTarget.style.boxShadow = "0 16px 42px rgba(2, 6, 14, 0.85), 0 0 40px rgba(147, 3, 197, 0.4)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = "translateY(0) scale(1)";
-            e.currentTarget.style.borderColor = "rgba(192, 76, 253, 0.5)";
-            e.currentTarget.style.boxShadow = "0 12px 36px rgba(2, 6, 14, 0.75), 0 0 32px rgba(147, 3, 197, 0.28)";
-          }}
-        >
-          <span
-            className={backendStatus.status === "online" ? "misa-beacon-pulse" : ""}
-            style={{
-              width: "9px",
-              height: "9px",
-              borderRadius: "50%",
-              backgroundColor:
-                backendStatus.status === "online"
-                  ? "#4EDEA3"
-                  : backendStatus.status === "connecting"
-                  ? "#F59E0B"
-                  : "#FF716C",
-              boxShadow:
-                backendStatus.status === "online"
-                  ? "0 0 10px #4EDEA3, 0 0 18px rgba(78, 222, 163, 0.6)"
-                  : "0 0 10px rgba(245, 158, 11, 0.8)",
-              flexShrink: 0,
-            }}
-          />
-
-          <span
-            style={{
-              fontSize: "13px",
-              fontWeight: 700,
-              textTransform: "uppercase",
-              letterSpacing: "0.06em",
-              color: "#FFFFFF",
-              textShadow: "0 0 14px rgba(232, 179, 255, 0.45)",
-              whiteSpace: "nowrap",
-              flexShrink: 0,
-            }}
-          >
-            Misa Autonom Agent Faol
-          </span>
-
-          <span style={{ color: "rgba(255,255,255,0.3)", fontSize: "12px", flexShrink: 0 }}>•</span>
-
-          <span style={{ fontSize: "12.5px", color: "#E8B3FF", fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0 }}>
-            {formatUzbekDateTime(currentTime)}
-          </span>
-
-          {telemetry && (
-            <>
-              <span style={{ color: "rgba(255,255,255,0.3)", fontSize: "12px", flexShrink: 0 }}>•</span>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, whiteSpace: "nowrap" }}>
-                <span
-                  title="Markaziy protsessor yuklamasi"
-                  style={{
-                    fontSize: "11.5px",
-                    fontWeight: 700,
-                    padding: "3px 10px",
-                    borderRadius: "9999px",
-                    background: "rgba(78, 222, 163, 0.16)",
-                    border: "1px solid rgba(78, 222, 163, 0.4)",
-                    color: "#4EDEA3",
-                    letterSpacing: "0.02em",
-                    whiteSpace: "nowrap",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "5px",
-                  }}
-                >
-                  <CpuIcon size={12} color="#4EDEA3" />
-                  CPU {Math.round(telemetry.cpu_percent)}%
-                </span>
-
-                <span
-                  title="Tezkor xotira yuklamasi"
-                  style={{
-                    fontSize: "11.5px",
-                    fontWeight: 700,
-                    padding: "3px 10px",
-                    borderRadius: "9999px",
-                    background: "rgba(192, 76, 253, 0.18)",
-                    border: "1px solid rgba(192, 76, 253, 0.45)",
-                    color: "#E8B3FF",
-                    letterSpacing: "0.02em",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  RAM {Math.round(telemetry.ram_percent)}%
-                </span>
-              </div>
-            </>
-          )}
-        </div>
-
-
-
-
-
-
 
         {/* 1.5. Startup System Status & Diagnostic Briefing Banner (faqat muammo bo'lganda) */}
 
