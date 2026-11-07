@@ -135,52 +135,130 @@ h1, h2, h3, h4, .font-headline {
     inset 0 1px 0 rgba(232, 179, 255, 0.22);
 }
 
+/* ── Neumorphic Recessed Inputs (Uiverse Pattern adapted for Misa Deep Violet) ── */
 .ultra-glass-input,
-.misa-glass-input {
-  background: rgba(8, 11, 20, 0.72);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--text-primary);
-  transition: all 0.2s ease;
+.misa-glass-input,
+.misa-neumorphic-input,
+.misa-neumorphic-textarea,
+.misa-neumorphic-field {
+  display: block;
+  width: 100%;
+  border-radius: var(--neumorph-radius-field, 14px) !important;
+  background: var(--neumorph-input-bg, #141923) !important;
+  border: 1px solid var(--neumorph-border, rgba(192, 76, 253, 0.22)) !important;
+  box-shadow:
+    var(--neumorph-shadow-inset, inset 4px 4px 10px rgba(0, 0, 0, 0.75), inset -3px -3px 8px rgba(70, 40, 105, 0.2)),
+    0 4px 14px rgba(0, 0, 0, 0.45) !important;
+  color: var(--text-primary, #FFFFFF) !important;
+  font-family: inherit !important;
+  font-size: 13.5px !important;
+  padding: 10px 14px !important;
+  box-sizing: border-box !important;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  outline: none !important;
+}
+
+.ultra-glass-input:hover,
+.misa-glass-input:hover,
+.misa-neumorphic-input:hover,
+.misa-neumorphic-textarea:hover,
+.misa-neumorphic-field:hover {
+  border-color: var(--neumorph-border-hover, rgba(192, 76, 253, 0.5)) !important;
 }
 
 .ultra-glass-input:focus,
-.misa-glass-input:focus {
-  border-color: rgba(192, 76, 253, 0.6);
-  box-shadow: 0 0 0 3px rgba(147, 3, 197, 0.2), 0 0 20px rgba(147, 3, 197, 0.2);
-  outline: none;
+.misa-glass-input:focus,
+.misa-neumorphic-input:focus,
+.misa-neumorphic-textarea:focus,
+.misa-neumorphic-field:focus {
+  border-color: var(--neumorph-border-focus, #9303C5) !important;
+  box-shadow:
+    var(--neumorph-focus-glow, inset 0 0 14px rgba(147, 3, 197, 0.28), inset 3px 3px 8px rgba(0, 0, 0, 0.8), inset -2px -2px 6px rgba(70, 40, 105, 0.2), 0 0 20px rgba(147, 3, 197, 0.35)) !important;
+  outline: none !important;
 }
 
-/* ── Unified Input Box with Icon & Closed Border (Ultra Glass) ── */
+/* Placeholders with WCAG accessible contrast */
+.ultra-glass-input::placeholder,
+.misa-glass-input::placeholder,
+.misa-neumorphic-input::placeholder,
+.misa-neumorphic-textarea::placeholder,
+.misa-neumorphic-field::placeholder,
+.misa-input-inner::placeholder,
+.misa-neumorphic-container input::placeholder,
+.misa-neumorphic-container textarea::placeholder {
+  color: var(--neumorph-placeholder, #7B7094) !important;
+  opacity: 1 !important;
+}
+
+/* ── Neumorphic Gradient Outer Container (Recessed Field Host) ── */
+.misa-input-container,
+.misa-neumorphic-container,
+.misa-neumorphic-wrapper {
+  display: flex !important;
+  align-items: center !important;
+  border-radius: var(--neumorph-radius-container, 16px) !important;
+  background: var(--neumorph-container-bg, linear-gradient(173deg, #181126 0%, #0d0918 100%)) !important;
+  box-shadow:
+    var(--neumorph-shadow-outer, 6px 6px 18px rgba(0, 0, 0, 0.75), -4px -4px 14px rgba(60, 35, 90, 0.2)) !important;
+  border: 1px solid var(--neumorph-border, rgba(192, 76, 253, 0.22)) !important;
+  padding: 4px !important;
+  gap: 6px !important;
+  box-sizing: border-box !important;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.misa-input-container:hover,
+.misa-neumorphic-container:hover,
+.misa-neumorphic-wrapper:hover {
+  border-color: var(--neumorph-border-hover, rgba(192, 76, 253, 0.5)) !important;
+}
+
+.misa-input-container:focus-within,
+.misa-neumorphic-container:focus-within,
+.misa-neumorphic-wrapper:focus-within {
+  border-color: var(--neumorph-border-focus, #9303C5) !important;
+  box-shadow:
+    var(--neumorph-shadow-outer, 6px 6px 18px rgba(0, 0, 0, 0.75), -4px -4px 14px rgba(60, 35, 90, 0.2)),
+    0 0 22px rgba(147, 3, 197, 0.35) !important;
+}
+
+/* ── Unified Neumorphic Input Box with Icons (Auth, Palette, Forms) ── */
 .misa-input-box {
   display: flex !important;
   align-items: center !important;
   width: 100% !important;
   height: 50px !important;
   min-height: 50px !important;
-  background: rgba(10, 15, 30, 0.88) !important;
-  backdrop-filter: blur(16px) !important;
-  -webkit-backdrop-filter: blur(16px) !important;
-  border: 1.5px solid rgba(192, 76, 253, 0.45) !important;
-  border-radius: 14px !important;
-  padding: 0 12px !important;
+  background: var(--neumorph-container-bg, linear-gradient(173deg, #181126 0%, #0d0918 100%)) !important;
+  border: 1px solid var(--neumorph-border, rgba(192, 76, 253, 0.25)) !important;
+  border-radius: var(--neumorph-radius-container, 16px) !important;
+  padding: 0 14px !important;
+  gap: 10px !important;
   box-sizing: border-box !important;
   min-width: 0 !important;
   max-width: 100% !important;
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+  box-shadow:
+    var(--neumorph-shadow-outer, 6px 6px 18px rgba(0, 0, 0, 0.75), -4px -4px 14px rgba(60, 35, 90, 0.2)),
+    var(--neumorph-shadow-inset, inset 4px 4px 10px rgba(0, 0, 0, 0.75), inset -3px -3px 8px rgba(70, 40, 105, 0.18)) !important;
   transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
 .misa-input-box:hover {
-  border-color: rgba(192, 76, 253, 0.75) !important;
-  background: rgba(16, 22, 44, 0.95) !important;
+  border-color: var(--neumorph-border-hover, rgba(192, 76, 253, 0.55)) !important;
+  box-shadow:
+    6px 6px 18px rgba(0, 0, 0, 0.8),
+    -4px -4px 14px rgba(70, 40, 105, 0.25),
+    inset 4px 4px 10px rgba(0, 0, 0, 0.75),
+    inset -3px -3px 8px rgba(70, 40, 105, 0.2) !important;
 }
 
 .misa-input-box:focus-within {
-  border-color: #C04CFD !important;
-  background: rgba(20, 26, 52, 1) !important;
-  box-shadow: 0 0 0 3px rgba(192, 76, 253, 0.32), 0 0 22px rgba(147, 3, 197, 0.38) !important;
+  border-color: var(--neumorph-border-focus, #9303C5) !important;
+  box-shadow:
+    inset 0 0 14px rgba(147, 3, 197, 0.28),
+    inset 3px 3px 8px rgba(0, 0, 0, 0.8),
+    inset -2px -2px 6px rgba(70, 40, 105, 0.2),
+    0 0 22px rgba(147, 3, 197, 0.35) !important;
 }
 
 .misa-input-inner {
@@ -195,14 +273,37 @@ h1, h2, h3, h4, .font-headline {
   box-shadow: none !important;
   color: #FFFFFF !important;
   font-size: 14.5px !important;
-  padding: 0 6px !important;
+  padding: 0 4px !important;
   margin: 0 !important;
   font-family: inherit !important;
 }
 
-.misa-input-inner::placeholder {
-  color: #64748B !important;
-  font-size: 13.5px !important;
+/* ── Neumorphic OTP Input Slots ── */
+.misa-otp-slot {
+  width: 48px !important;
+  height: 56px !important;
+  box-sizing: border-box !important;
+  text-align: center !important;
+  font-size: 24px !important;
+  font-weight: 800 !important;
+  font-family: var(--font-mono, monospace) !important;
+  color: #FFFFFF !important;
+  background: var(--neumorph-input-bg, #141923) !important;
+  border: 1px solid var(--neumorph-border, rgba(192, 76, 253, 0.25)) !important;
+  border-radius: 14px !important;
+  outline: none !important;
+  box-shadow:
+    inset 4px 4px 8px rgba(0, 0, 0, 0.75),
+    inset -2px -2px 6px rgba(70, 40, 105, 0.18),
+    0 3px 8px rgba(0, 0, 0, 0.4) !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.misa-otp-slot:focus {
+  border-color: var(--neumorph-border-focus, #9303C5) !important;
+  box-shadow:
+    inset 0 0 12px rgba(147, 3, 197, 0.3),
+    0 0 18px rgba(192, 76, 253, 0.4) !important;
 }
 
 /* ── OAuth Glass Buttons (Google, GitHub, Telegram) ── */

@@ -110,6 +110,21 @@
   --z-modal: 50;
   --z-toast: 100;
   --z-tooltip: 110;
+
+  /* 10. Neumorphic Recessed Input System (Misa Ultra Glass + Deep Violet) */
+  --neumorph-input-bg: #141923;
+  --neumorph-input-bg-subtle: #120D1C;
+  --neumorph-container-bg: linear-gradient(173deg, #181126 0%, #0d0918 100%);
+  --neumorph-border: rgba(192, 76, 253, 0.22);
+  --neumorph-border-hover: rgba(192, 76, 253, 0.5);
+  --neumorph-border-focus: #9303C5;
+  --neumorph-border-focus-glow: #C04CFD;
+  --neumorph-shadow-outer: 6px 6px 18px rgba(0, 0, 0, 0.75), -4px -4px 14px rgba(60, 35, 90, 0.2);
+  --neumorph-shadow-inset: inset 4px 4px 10px rgba(0, 0, 0, 0.75), inset -3px -3px 8px rgba(70, 40, 105, 0.2);
+  --neumorph-focus-glow: inset 0 0 14px rgba(147, 3, 197, 0.28), inset 3px 3px 8px rgba(0, 0, 0, 0.8), inset -2px -2px 6px rgba(70, 40, 105, 0.2), 0 0 20px rgba(147, 3, 197, 0.35);
+  --neumorph-placeholder: #7B7094;
+  --neumorph-radius-field: 14px;
+  --neumorph-radius-container: 16px;
 }
 
 /* Light Mode Adaptive Override (MISA-ROOT-019 - WCAG 1.4.3 Contrast Enhancement) */
@@ -132,6 +147,18 @@ html.theme-light {
   --glass-border: rgba(147, 3, 197, 0.2);
   --glass-border-hover: rgba(147, 3, 197, 0.4);
   --glass-border-focus: rgba(147, 3, 197, 0.65);
+
+  --neumorph-input-bg: #FFFFFF;
+  --neumorph-input-bg-subtle: #F8F5FC;
+  --neumorph-container-bg: linear-gradient(173deg, #FFFFFF 0%, #F1EBF9 100%);
+  --neumorph-border: rgba(147, 3, 197, 0.25);
+  --neumorph-border-hover: rgba(147, 3, 197, 0.5);
+  --neumorph-border-focus: #9303C5;
+  --neumorph-border-focus-glow: #C04CFD;
+  --neumorph-shadow-outer: 4px 4px 12px rgba(147, 3, 197, 0.1), -3px -3px 10px rgba(255, 255, 255, 0.9);
+  --neumorph-shadow-inset: inset 3px 3px 6px rgba(0, 0, 0, 0.08), inset -2px -2px 5px rgba(255, 255, 255, 0.8);
+  --neumorph-focus-glow: inset 0 0 8px rgba(147, 3, 197, 0.2), 0 0 16px rgba(147, 3, 197, 0.25);
+  --neumorph-placeholder: #8B7D9E;
 }
 
 /* Accessible Reduced Motion Support */
