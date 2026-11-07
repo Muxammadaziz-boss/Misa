@@ -8,6 +8,7 @@ import { APP_VERSION_NAME } from "../version";
 import { Avatar } from "../components/Avatar";
 import { ExpandableButton } from "../components/ExpandableButton";
 import { GlassCheckbox } from "../components/GlassCheckbox";
+import { ThemeSwitch } from "../components/ThemeSwitch";
 import {
   UserIcon,
   SettingsIcon,
@@ -3696,9 +3697,20 @@ export const AccountPage: React.FC<AccountPageProps> = ({
 
             {/* Mavzu Rejimi */}
             <div>
-              <label style={{ display: "block", fontSize: "12px", color: "var(--text-secondary)", marginBottom: "8px" }}>
-                Mavzu rejimi
-              </label>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: 600, color: "#FFFFFF", marginBottom: "2px" }}>
+                    Mavzu rejimi (Kun / Tun)
+                  </label>
+                  <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                    {themeMode === "light" ? "Yorug' (Light Mode) faol" : "Qorong'i (Dark Mode) faol"}
+                  </span>
+                </div>
+                <ThemeSwitch
+                  theme={themeMode}
+                  onChange={(nextTheme) => updateAppearance({ theme: nextTheme })}
+                />
+              </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
                 {(
                   [

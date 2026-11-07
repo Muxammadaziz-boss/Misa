@@ -1875,3 +1875,314 @@ button {
     stroke-dashoffset: 0 !important;
   }
 }
+
+
+/* ==========================================================================
+   MISA THEME SYSTEM — LIGHT MODE TOKEN OVERRIDES
+   ========================================================================== */
+
+:root.theme-light,
+html.theme-light {
+  --bg-darkest: #F6F3FA;
+  --background: #F6F3FA;
+  --surface-lowest: #FFFFFF;
+  --surface-low: rgba(255, 255, 255, 0.9);
+  --surface: rgba(255, 255, 255, 0.82);
+  --surface-elevated: rgba(248, 244, 254, 0.95);
+  --surface-high: rgba(240, 234, 250, 0.9);
+  --surface-highest: rgba(232, 224, 245, 0.95);
+  --surface-hover: rgba(147, 3, 197, 0.08);
+  --surface-active: rgba(147, 3, 197, 0.16);
+  --surface-card: rgba(255, 255, 255, 0.88);
+  --border-subtle: rgba(147, 3, 197, 0.12);
+  --border-strong: rgba(147, 3, 197, 0.28);
+  --text-primary: #1C1028;
+  --text-secondary: #584A67;
+  --text-muted: #857497;
+  --glass-highlight: rgba(255, 255, 255, 0.65);
+}
+
+/* ==========================================================================
+   MISA UI REDESIGN — ANIMATED DAY/NIGHT THEME SWITCH (Uiverse JustCode14 Adaptation)
+   Ultra Glass Design System
+   ========================================================================== */
+
+.misa-theme-switch-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.misa-theme-switch-wrapper.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.misa-theme-switch-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 5;
+}
+
+/* Switch Track (~68x36px Pill Shape) */
+.misa-theme-switch-track {
+  position: relative;
+  width: 68px;
+  height: 36px;
+  border-radius: 9999px;
+  overflow: hidden;
+  box-sizing: border-box;
+  background: linear-gradient(135deg, #100C1F 0%, #1A1230 100%);
+  border: 1px solid rgba(147, 3, 197, 0.35);
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.5),
+    inset 0 1px 2px rgba(255, 255, 255, 0.08);
+  transition:
+    background 400ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 400ms ease,
+    box-shadow 400ms ease;
+}
+
+.misa-theme-switch-wrapper:hover:not(.is-disabled) .misa-theme-switch-track {
+  border-color: rgba(147, 3, 197, 0.65);
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.55),
+    0 0 12px rgba(147, 3, 197, 0.3);
+}
+
+.misa-theme-switch-input:focus-visible + .misa-theme-switch-track {
+  outline: 2px solid #9303C5;
+  outline-offset: 2px;
+}
+
+/* Light / Day Mode Track */
+.misa-theme-switch-wrapper.is-day .misa-theme-switch-track,
+.misa-theme-switch-input:checked + .misa-theme-switch-track {
+  background: linear-gradient(135deg, #7C3AED 0%, #A855F7 40%, #E9D5FF 100%);
+  border-color: rgba(192, 76, 253, 0.55);
+  box-shadow:
+    0 4px 16px rgba(147, 3, 197, 0.3),
+    inset 0 1px 2px rgba(255, 255, 255, 0.4);
+}
+
+/* Stars Container (Night Mode) */
+.misa-theme-switch-stars {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  transition:
+    opacity 350ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 350ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.misa-theme-switch-wrapper.is-day .misa-theme-switch-stars,
+.misa-theme-switch-input:checked + .misa-theme-switch-track .misa-theme-switch-stars {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.misa-star {
+  position: absolute;
+  background: #FFFFFF;
+  border-radius: 50%;
+  box-shadow: 0 0 4px #FFFFFF, 0 0 8px rgba(192, 76, 253, 0.8);
+  transition: all 300ms ease;
+}
+
+.misa-star-1 {
+  width: 3px;
+  height: 3px;
+  top: 9px;
+  right: 14px;
+}
+
+.misa-star-2 {
+  width: 2px;
+  height: 2px;
+  top: 22px;
+  right: 22px;
+}
+
+.misa-star-3 {
+  width: 4px;
+  height: 4px;
+  top: 15px;
+  right: 32px;
+}
+
+.misa-star-4 {
+  width: 2px;
+  height: 2px;
+  top: 7px;
+  right: 26px;
+}
+
+.misa-star-5 {
+  width: 2px;
+  height: 2px;
+  top: 24px;
+  right: 10px;
+}
+
+/* Clouds Container (Day Mode) */
+.misa-theme-switch-clouds {
+  position: absolute;
+  bottom: -4px;
+  left: 6px;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity 350ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 350ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.misa-theme-switch-wrapper.is-day .misa-theme-switch-clouds,
+.misa-theme-switch-input:checked + .misa-theme-switch-track .misa-theme-switch-clouds {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.misa-cloud {
+  background: rgba(255, 255, 255, 0.88);
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+.misa-cloud-1 {
+  width: 14px;
+  height: 14px;
+}
+
+.misa-cloud-2 {
+  width: 18px;
+  height: 18px;
+  margin-bottom: 2px;
+  margin-left: -5px;
+}
+
+.misa-cloud-3 {
+  width: 12px;
+  height: 12px;
+  margin-left: -4px;
+}
+
+/* Moving Thumb (~28x28px) */
+.misa-theme-switch-thumb {
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #E2E8F0;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.35),
+    inset 0 1px 1px rgba(255, 255, 255, 0.8);
+  transition:
+    transform 380ms cubic-bezier(0.16, 1, 0.3, 1),
+    background 380ms ease,
+    box-shadow 380ms ease;
+  z-index: 3;
+}
+
+/* Day Mode Thumb Movement & Sun Transformation */
+.misa-theme-switch-wrapper.is-day .misa-theme-switch-thumb,
+.misa-theme-switch-input:checked + .misa-theme-switch-track .misa-theme-switch-thumb {
+  transform: translateX(32px);
+  background: linear-gradient(135deg, #FDE047 0%, #F59E0B 100%);
+  box-shadow:
+    0 0 14px #F59E0B,
+    0 0 24px rgba(245, 158, 11, 0.5),
+    inset 0 1px 1px rgba(255, 255, 255, 0.9);
+}
+
+/* Moon Surface & Craters */
+.misa-thumb-moon {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  opacity: 1;
+  transition: opacity 280ms ease;
+}
+
+.misa-theme-switch-wrapper.is-day .misa-thumb-moon,
+.misa-theme-switch-input:checked + .misa-theme-switch-track .misa-thumb-moon {
+  opacity: 0;
+}
+
+.misa-crater {
+  position: absolute;
+  background: #94A3B8;
+  border-radius: 50%;
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+
+.misa-crater-1 {
+  width: 7px;
+  height: 7px;
+  top: 5px;
+  left: 9px;
+}
+
+.misa-crater-2 {
+  width: 5px;
+  height: 5px;
+  bottom: 6px;
+  left: 6px;
+}
+
+.misa-crater-3 {
+  width: 4px;
+  height: 4px;
+  bottom: 8px;
+  right: 7px;
+}
+
+/* Sun Surface */
+.misa-thumb-sun {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 280ms ease;
+}
+
+.misa-theme-switch-wrapper.is-day .misa-thumb-sun,
+.misa-theme-switch-input:checked + .misa-theme-switch-track .misa-thumb-sun {
+  opacity: 1;
+}
+
+/* Prefers Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .misa-theme-switch-track,
+  .misa-theme-switch-thumb,
+  .misa-theme-switch-stars,
+  .misa-theme-switch-clouds,
+  .misa-thumb-moon,
+  .misa-thumb-sun {
+    transition: none !important;
+  }
+}
