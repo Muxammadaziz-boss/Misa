@@ -2603,16 +2603,23 @@ class BackendService {
   }
 
   public async speakText(text: string, voiceType?: string): Promise<boolean> {
-    try {
-      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/speak`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, voice_type: voiceType }),
-      });
-      return res.ok;
-    } catch {
-      return false;
+    const urls = [`${LOCAL_HARDWARE_URL}/api/voice/speak`];
+    if (API_BASE && API_BASE !== LOCAL_HARDWARE_URL) {
+      urls.push(`${API_BASE}/api/voice/speak`);
     }
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, voice_type: voiceType }),
+        });
+        if (res.ok) return true;
+      } catch {
+        // Fallback to next endpoint
+      }
+    }
+    return false;
   }
 
   public async getVoices(): Promise<{ ok: boolean; active_voice: string; voices: any[] }> {

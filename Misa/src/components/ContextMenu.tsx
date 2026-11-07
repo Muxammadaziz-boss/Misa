@@ -351,6 +351,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ onNavigate, onAskMisa 
       {isOpen && (
         <div
           ref={menuRef}
+          className="misa-glass-menu"
           style={{
             position: "fixed",
             top: `${position.y}px`,

@@ -324,8 +324,6 @@ export const AppShell: React.FC<AppShellProps> = ({
 
       <header
 
-        data-tauri-drag-region
-
         style={{
 
           position: "relative",
@@ -356,7 +354,7 @@ export const AppShell: React.FC<AppShellProps> = ({
 
         <nav
 
-          data-tauri-drag-region
+          data-tauri-drag-region="false"
 
           className="misa-ultra-glass misa-glass-topnav"
 
@@ -586,6 +584,10 @@ export const AppShell: React.FC<AppShellProps> = ({
 
                 type="button"
 
+                data-tauri-drag-region="false"
+
+                onMouseDown={(e) => e.stopPropagation()}
+
                 onClick={(e) => { e.stopPropagation(); setMoreMenuOpen((prev) => !prev); }}
 
                 aria-expanded={moreMenuOpen}
@@ -700,7 +702,11 @@ export const AppShell: React.FC<AppShellProps> = ({
 
                 <div
 
-                  className="misa-ultra-glass"
+                  className="misa-ultra-glass misa-glass-menu"
+
+                  data-tauri-drag-region="false"
+
+                  onMouseDown={(e) => e.stopPropagation()}
 
                   onClick={(e) => e.stopPropagation()}
 
