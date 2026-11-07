@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { APP_VERSION_NAME } from "../version";
 import { Avatar } from "../components/Avatar";
+import { ExpandableButton } from "../components/ExpandableButton";
 import {
   UserIcon,
   SettingsIcon,
@@ -24,6 +25,7 @@ import {
   PlayIcon,
   PauseIcon,
   StopIcon,
+  LogOutIcon,
 } from "../components/icons/Icons";
 import {
   backendService,
@@ -4360,25 +4362,14 @@ export const AccountPage: React.FC<AccountPageProps> = ({
 
               {/* Chiqish Tugmasi */}
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "8px" }}>
-                <button
-                  type="button"
+                <ExpandableButton
+                  icon={<LogOutIcon size={18} color="currentColor" />}
+                  label="Chiqish"
+                  variant="destructive"
                   onClick={handleLogoutClick}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    padding: "9px 20px",
-                    borderRadius: "12px",
-                    background: "rgba(239, 68, 68, 0.12)",
-                    border: "1px solid rgba(239, 68, 68, 0.3)",
-                    color: "#FCA5A5",
-                    fontSize: "12.5px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  <span>Hisobdan chiqish</span>
-                </button>
+                  title="Hisobdan chiqish"
+                  ariaLabel="Hisobdan chiqish"
+                />
               </div>
             </div>
           </div>

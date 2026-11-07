@@ -1432,3 +1432,244 @@ button {
     transform: translateX(-50%) !important;
   }
 }
+
+
+/* ==========================================================================
+   MISA UI — EXPANDABLE ICON ACTION BUTTON (Uiverse vinodjangid07 Adaptation)
+   Ultra Glass Design System
+   ========================================================================== */
+
+.misa-expandable-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0;
+  margin: 0;
+  border-radius: 9999px;
+  overflow: hidden;
+  white-space: nowrap;
+  user-select: none;
+  cursor: pointer;
+  background: rgba(14, 10, 24, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition:
+    width 280ms cubic-bezier(0.16, 1, 0.3, 1),
+    background 250ms ease,
+    border-color 250ms ease,
+    box-shadow 250ms ease,
+    transform 120ms ease;
+  outline: none;
+}
+
+/* Default / Medium Size (~45x45px expanding to ~132px) */
+.misa-expandable-btn--md {
+  width: 45px;
+  min-width: 45px;
+  height: 45px;
+  min-height: 45px;
+}
+
+.misa-expandable-btn--md:hover:not(:disabled),
+.misa-expandable-btn--md:focus-visible:not(:disabled),
+.misa-expandable-btn--md.is-expanded {
+  width: 132px;
+}
+
+/* Small Size (~36x36px expanding to ~115px) */
+.misa-expandable-btn--sm {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+}
+
+.misa-expandable-btn--sm:hover:not(:disabled),
+.misa-expandable-btn--sm:focus-visible:not(:disabled),
+.misa-expandable-btn--sm.is-expanded {
+  width: 115px;
+}
+
+/* Large Size (~50x50px expanding to ~148px) */
+.misa-expandable-btn--lg {
+  width: 50px;
+  min-width: 50px;
+  height: 50px;
+  min-height: 50px;
+}
+
+.misa-expandable-btn--lg:hover:not(:disabled),
+.misa-expandable-btn--lg:focus-visible:not(:disabled),
+.misa-expandable-btn--lg.is-expanded {
+  width: 148px;
+}
+
+/* Primary Variant (Misa Purple Accent) */
+.misa-expandable-btn--primary {
+  border: 1px solid rgba(147, 3, 197, 0.32);
+  color: #FFFFFF;
+}
+
+.misa-expandable-btn--primary:hover:not(:disabled),
+.misa-expandable-btn--primary:focus-visible:not(:disabled),
+.misa-expandable-btn--primary.is-expanded {
+  background: linear-gradient(135deg, rgba(147, 3, 197, 0.35) 0%, rgba(20, 10, 36, 0.95) 100%);
+  border-color: rgba(147, 3, 197, 0.7);
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.5),
+    0 0 16px rgba(147, 3, 197, 0.35);
+}
+
+/* Secondary Variant (Neutral Dark Glass) */
+.misa-expandable-btn--secondary {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #E2E8F0;
+}
+
+.misa-expandable-btn--secondary:hover:not(:disabled),
+.misa-expandable-btn--secondary:focus-visible:not(:disabled),
+.misa-expandable-btn--secondary.is-expanded {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(22, 14, 32, 0.95) 100%);
+  border-color: rgba(147, 3, 197, 0.45);
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.5),
+    0 0 14px rgba(147, 3, 197, 0.22);
+}
+
+/* Destructive Variant (Warning Red for Logout / Delete) */
+.misa-expandable-btn--destructive {
+  background: rgba(22, 8, 12, 0.85);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #FCA5A5;
+}
+
+.misa-expandable-btn--destructive:hover:not(:disabled),
+.misa-expandable-btn--destructive:focus-visible:not(:disabled),
+.misa-expandable-btn--destructive.is-expanded {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.32) 0%, rgba(28, 8, 14, 0.95) 100%);
+  border-color: rgba(239, 68, 68, 0.75);
+  color: #FFFFFF;
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.5),
+    0 0 16px rgba(239, 68, 68, 0.38);
+}
+
+/* Active Pressed Feedback */
+.misa-expandable-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Icon Container */
+.misa-expandable-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1), color 200ms ease;
+}
+
+.misa-expandable-btn--md .misa-expandable-icon {
+  width: 45px;
+  height: 45px;
+}
+
+.misa-expandable-btn--sm .misa-expandable-icon {
+  width: 36px;
+  height: 36px;
+}
+
+.misa-expandable-btn--lg .misa-expandable-icon {
+  width: 50px;
+  height: 50px;
+}
+
+/* Label Text Container */
+.misa-expandable-text {
+  display: inline-block;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  color: inherit;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateX(10px);
+  transition:
+    opacity 220ms ease,
+    transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+  padding-right: 14px;
+}
+
+.misa-expandable-btn--sm .misa-expandable-text {
+  font-size: 11.5px;
+  padding-right: 11px;
+}
+
+.misa-expandable-btn--lg .misa-expandable-text {
+  font-size: 14px;
+  padding-right: 16px;
+}
+
+.misa-expandable-btn:hover:not(:disabled) .misa-expandable-text,
+.misa-expandable-btn:focus-visible:not(:disabled) .misa-expandable-text,
+.misa-expandable-btn.is-expanded .misa-expandable-text {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Loading Spinner */
+.misa-expandable-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: misaExpandableSpin 0.75s linear infinite;
+}
+
+@keyframes misaExpandableSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Disabled State */
+.misa-expandable-btn:disabled,
+.misa-expandable-btn.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+  box-shadow: none;
+  transform: none !important;
+}
+
+/* Focus Visible */
+.misa-expandable-btn:focus-visible {
+  outline: 2px solid #9303C5;
+  outline-offset: 2px;
+}
+
+.misa-expandable-btn--destructive:focus-visible {
+  outline: 2px solid #EF4444;
+}
+
+/* Prefers Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .misa-expandable-btn,
+  .misa-expandable-icon,
+  .misa-expandable-text {
+    transition: none !important;
+    transform: none !important;
+  }
+  .misa-expandable-btn:hover:not(:disabled) .misa-expandable-text,
+  .misa-expandable-btn:focus-visible:not(:disabled) .misa-expandable-text,
+  .misa-expandable-btn.is-expanded .misa-expandable-text {
+    transform: none !important;
+  }
+}

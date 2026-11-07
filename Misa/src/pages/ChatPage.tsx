@@ -7,6 +7,7 @@ import { MisaAperture } from "../components/MisaAperture";
 import { MarkdownView } from "../components/MarkdownView";
 import { CopyButton } from "../components/CopyButton";
 import { ReactionBar } from "../components/ReactionBar";
+import { ExpandableButton } from "../components/ExpandableButton";
 import {
   ArrowUpIcon,
   SparklesIcon,
@@ -15,6 +16,7 @@ import {
   SearchIcon,
   SettingsIcon,
   CameraIcon,
+  TrashIcon,
 } from "../components/icons/Icons";
 import {
   backendService,
@@ -1085,7 +1087,19 @@ export const ChatPage: React.FC<ChatPageProps> = ({
             Bugun • Misa {APP_VERSION_NAME} Avtonom Ish Maydoni
           </span>
 
-          <div style={{ width: "110px" }} />
+          <div style={{ width: "110px", display: "flex", justifyContent: "flex-end" }}>
+            {messages.length > 0 && (
+              <ExpandableButton
+                icon={<TrashIcon size={14} color="currentColor" />}
+                label="Tozalash"
+                variant="secondary"
+                size="sm"
+                onClick={() => setMessages([])}
+                title="Joriy suhbatni tozalash"
+                ariaLabel="Joriy suhbatni tozalash"
+              />
+            )}
+          </div>
         </div>
 
         {/* Scrollable Message Stream */}
