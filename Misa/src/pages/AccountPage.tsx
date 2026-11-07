@@ -9,6 +9,7 @@ import { Avatar } from "../components/Avatar";
 import { ExpandableButton } from "../components/ExpandableButton";
 import { GlassCheckbox } from "../components/GlassCheckbox";
 import { ThemeSwitch } from "../components/ThemeSwitch";
+import { NeumorphicCard } from "../components/NeumorphicCard";
 import {
   UserIcon,
   SettingsIcon,
@@ -4845,11 +4846,11 @@ export const AccountPage: React.FC<AccountPageProps> = ({
             }}
           >
             {/* Telegram Bot */}
-            <div
-              className="misa-glass-card"
+            <NeumorphicCard
+              variant="interactive"
               style={{
                 padding: "20px 22px",
-                borderRadius: "18px",
+                borderRadius: "20px",
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "space-between",
@@ -4901,14 +4902,14 @@ export const AccountPage: React.FC<AccountPageProps> = ({
               >
                 Telegram Sahifasiga O'tish →
               </button>
-            </div>
+            </NeumorphicCard>
 
             {/* Remote Control & WOL */}
-            <div
-              className="misa-glass-card"
+            <NeumorphicCard
+              variant="interactive"
               style={{
                 padding: "20px 22px",
-                borderRadius: "18px",
+                borderRadius: "20px",
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "space-between",
@@ -4958,14 +4959,14 @@ export const AccountPage: React.FC<AccountPageProps> = ({
               >
                 Masofaviy Panelga O'tish →
               </button>
-            </div>
+            </NeumorphicCard>
 
             {/* Connected Devices */}
-            <div
-              className="misa-glass-card"
+            <NeumorphicCard
+              variant="interactive"
               style={{
                 padding: "20px 22px",
-                borderRadius: "18px",
+                borderRadius: "20px",
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "space-between",
@@ -5015,14 +5016,14 @@ export const AccountPage: React.FC<AccountPageProps> = ({
               >
                 Qurilmalar Sahifasiga O'tish →
               </button>
-            </div>
+            </NeumorphicCard>
 
             {/* Plugins and Tools */}
-            <div
-              className="misa-glass-card"
+            <NeumorphicCard
+              variant="interactive"
               style={{
                 padding: "20px 22px",
-                borderRadius: "18px",
+                borderRadius: "20px",
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "space-between",
@@ -5072,14 +5073,14 @@ export const AccountPage: React.FC<AccountPageProps> = ({
               >
                 Pluginlar Markaziga O'tish →
               </button>
-            </div>
+            </NeumorphicCard>
 
             {/* Auto Update Portal */}
-            <div
-              className="misa-glass-card"
+            <NeumorphicCard
+              variant="interactive"
               style={{
                 padding: "20px 22px",
-                borderRadius: "18px",
+                borderRadius: "20px",
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "space-between",
@@ -5131,7 +5132,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
               >
                 {isCheckingUpdates ? "Tekshirilmoqda..." : "Yangilanishlarni Tekshirish"}
               </button>
-            </div>
+            </NeumorphicCard>
           </div>
         </div>
       )}

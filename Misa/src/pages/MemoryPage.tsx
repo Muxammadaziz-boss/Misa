@@ -14,6 +14,7 @@ import {
   ClockIcon,
   SettingsIcon,
 } from "../components/icons/Icons";
+import { NeumorphicCard } from "../components/NeumorphicCard";
 import {
   backendService,
   MemoryResponse,
@@ -686,18 +687,10 @@ export const MemoryPage: React.FC<MemoryPageProps> = () => {
         }}
       >
         {/* Overview 1: Total Memories */}
-        <div
-          className="misa-glass-card"
-          style={{
-            padding: "18px 20px",
-            borderRadius: "20px",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "space-between",
-            gap: "12px",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <NeumorphicCard
+          variant="stat"
+          icon={<DatabaseIcon size={15} color="#E8B3FF" />}
+          title={
             <span
               style={{
                 fontSize: "11px",
@@ -709,66 +702,20 @@ export const MemoryPage: React.FC<MemoryPageProps> = () => {
             >
               Jami xotiralar
             </span>
-            <div
-              style={{
-                width: "32px",
-                height: "32px",
-                borderRadius: "10px",
-                background: "rgba(147, 3, 197, 0.2)",
-                border: "1px solid rgba(192, 76, 253, 0.3)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#E8B3FF",
-              }}
-            >
-              <DatabaseIcon size={15} color="#E8B3FF" />
-            </div>
-          </div>
-          <div>
-            <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
-              <span
-                style={{
-                  fontFamily: "var(--font-display)",
-                  fontSize: "26px",
-                  fontWeight: 700,
-                  color: "#FFFFFF",
-                }}
-              >
-                {memoryCards.length} ta
-              </span>
-              <span
-                style={{
-                  fontSize: "11px",
-                  fontWeight: 600,
-                  padding: "2px 8px",
-                  borderRadius: "999px",
-                  background: "rgba(16, 185, 129, 0.15)",
-                  color: "#4EDEA3",
-                }}
-              >
-                +{Math.min(memoryCards.length, 4)} bu hafta
-              </span>
-            </div>
-            <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "4px" }}>
-              Faol foydalanilayotgan shaxsiy va loyiha bilimlari
-            </p>
-          </div>
-        </div>
+          }
+          value={`${memoryCards.length} ta`}
+          trend={{ direction: "up", label: `+${Math.min(memoryCards.length, 4)} bu hafta` }}
+        >
+          <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "4px" }}>
+            Faol foydalanilayotgan shaxsiy va loyiha bilimlari
+          </p>
+        </NeumorphicCard>
 
         {/* Overview 2: Categories */}
-        <div
-          className="misa-glass-card"
-          style={{
-            padding: "18px 20px",
-            borderRadius: "20px",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "space-between",
-            gap: "12px",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <NeumorphicCard
+          variant="stat"
+          icon={<SparklesIcon size={15} color="#E8B3FF" />}
+          title={
             <span
               style={{
                 fontSize: "11px",
@@ -780,77 +727,19 @@ export const MemoryPage: React.FC<MemoryPageProps> = () => {
             >
               Kategoriyalar
             </span>
-            <div
-              style={{
-                width: "32px",
-                height: "32px",
-                borderRadius: "10px",
-                background: "rgba(147, 3, 197, 0.2)",
-                border: "1px solid rgba(192, 76, 253, 0.3)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#E8B3FF",
-              }}
-            >
-              <SparklesIcon size={15} color="#E8B3FF" />
-            </div>
-          </div>
-          <div>
-            <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
-              <span
-                style={{
-                  fontFamily: "var(--font-display)",
-                  fontSize: "26px",
-                  fontWeight: 700,
-                  color: "#FFFFFF",
-                }}
-              >
-                5 ta bo'lim
-              </span>
-              <span
-                style={{
-                  fontSize: "11px",
-                  fontWeight: 600,
-                  padding: "2px 8px",
-                  borderRadius: "999px",
-                  background: "rgba(147, 3, 197, 0.2)",
-                  color: "#E8B3FF",
-                }}
-              >
-                Eng faol: Loyihalar
-              </span>
-            </div>
-            <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "4px" }}>
-              Shaxsiy, Qiziqishlar, Loyihalar, Afzalliklar, Boshqa
-            </p>
-          </div>
-        </div>
+          }
+          value="5 ta bo'lim"
+          trend={{ direction: "neutral", label: "Eng faol: Loyihalar" }}
+        >
+          <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "4px" }}>
+            Shaxsiy, Qiziqishlar, Loyihalar, Afzalliklar, Boshqa
+          </p>
+        </NeumorphicCard>
 
         {/* Overview 3: Memory Auto-Learn Toggle */}
-        <div
-          className="misa-glass-card"
-          style={{
-            padding: "18px 20px",
-            borderRadius: "20px",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "space-between",
-            gap: "12px",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span
-              style={{
-                fontSize: "11px",
-                fontWeight: 700,
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                color: "var(--text-secondary)",
-              }}
-            >
-              Xotira holati
-            </span>
+        <NeumorphicCard
+          variant="stat"
+          badge={
             <button
               type="button"
               onClick={handleToggleAutoRemember}
@@ -883,7 +772,21 @@ export const MemoryPage: React.FC<MemoryPageProps> = () => {
                 }}
               />
             </button>
-          </div>
+          }
+          title={
+            <span
+              style={{
+                fontSize: "11px",
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: "var(--text-secondary)",
+              }}
+            >
+              Xotira holati
+            </span>
+          }
+        >
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <span
@@ -915,7 +818,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = () => {
               Suhbatlardan avtomatik o'rganish va moslashish
             </p>
           </div>
-        </div>
+        </NeumorphicCard>
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════
@@ -1071,9 +974,10 @@ export const MemoryPage: React.FC<MemoryPageProps> = () => {
               {filteredCards.map((card) => {
                 const catStyle = CATEGORY_META[card.category] || CATEGORY_META.Boshqa;
                 return (
-                  <div
+                  <NeumorphicCard
                     key={card.id}
-                    className={card.pinned ? "misa-glass-card-active" : "misa-glass-card"}
+                    variant="interactive"
+                    selected={card.pinned}
                     style={{
                       padding: "20px",
                       borderRadius: "20px",
@@ -1220,7 +1124,7 @@ export const MemoryPage: React.FC<MemoryPageProps> = () => {
                       </span>
                       <span>{card.source}</span>
                     </div>
-                  </div>
+                  </NeumorphicCard>
                 );
               })}
             </div>

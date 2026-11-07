@@ -2440,3 +2440,221 @@ html.theme-light {
   animation: misaPulseBeacon 2.4s infinite ease-in-out;
 }
 
+
+
+/* ==========================================================================
+   MISA UI — PREMIUM NEUMORPHIC CARDS (Uiverse.io by Yaseen549 Adaptation)
+   Dual-direction shadows, dark gradient depth, and Misa purple glow
+   ========================================================================== */
+
+.misa-neumorphic-card {
+  position: relative;
+  background: linear-gradient(145deg, #171D29, #101520);
+  border-radius: 22px;
+  box-shadow:
+    8px 8px 20px rgba(0, 0, 0, 0.38),
+    -8px -8px 20px rgba(45, 53, 70, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  color: #FFFFFF;
+  padding: 22px 24px;
+  transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+  outline: none;
+}
+
+/* 1. Elevated Variant: Stronger elevation and dual depth */
+.misa-neumorphic-card--elevated {
+  background: linear-gradient(145deg, #1A2230, #0E131C);
+  box-shadow:
+    14px 14px 32px rgba(0, 0, 0, 0.48),
+    -12px -12px 28px rgba(45, 53, 70, 0.16),
+    inset 0 1px 1px rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* 2. Interactive Variant: Tactile hover lift, purple illumination & active press */
+.misa-neumorphic-card--interactive {
+  cursor: pointer;
+  -webkit-app-region: no-drag !important;
+  user-select: none;
+}
+
+.misa-neumorphic-card--interactive:hover {
+  transform: translateY(-2px);
+  background: linear-gradient(145deg, #1C2332, #121824);
+  border-color: rgba(192, 76, 253, 0.42);
+  box-shadow:
+    12px 14px 28px rgba(0, 0, 0, 0.44),
+    -10px -10px 24px rgba(45, 53, 70, 0.16),
+    0 0 22px rgba(147, 3, 197, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.misa-neumorphic-card--interactive:focus-visible {
+  outline: none;
+  border-color: #C04CFD;
+  box-shadow:
+    0 0 0 3px rgba(147, 3, 197, 0.35),
+    10px 10px 24px rgba(0, 0, 0, 0.4);
+}
+
+.misa-neumorphic-card--interactive:active {
+  transform: translateY(0);
+  box-shadow:
+    inset 2px 2px 6px rgba(0, 0, 0, 0.45),
+    inset -2px -2px 6px rgba(45, 53, 70, 0.1),
+    2px 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+/* 3. Selected Variant: Distinct active violet perimeter and inner/outer glow */
+.misa-neumorphic-card--selected {
+  border-color: rgba(192, 76, 253, 0.75) !important;
+  background: linear-gradient(145deg, #1D182E, #120F20) !important;
+  box-shadow:
+    8px 8px 22px rgba(0, 0, 0, 0.42),
+    -8px -8px 22px rgba(45, 53, 70, 0.12),
+    0 0 26px rgba(147, 3, 197, 0.32),
+    inset 0 0 14px rgba(147, 3, 197, 0.14) !important;
+}
+
+/* 4. Compact Variant: Tighter padding and radius for dense lists or grids */
+.misa-neumorphic-card--compact {
+  padding: 14px 18px;
+  border-radius: 16px;
+  box-shadow:
+    5px 5px 14px rgba(0, 0, 0, 0.32),
+    -5px -5px 14px rgba(45, 53, 70, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* 5. Statistics Variant: Dashboard KPI / telemetry vertical stack */
+.misa-neumorphic-card--stat {
+  display: flex;
+  flex-direction: column;
+  justifyContent: space-between;
+  gap: 12px;
+}
+
+/* 6. Glass-Neumorphic Variant: Hybrid backdrop blur with neumorphic dual shadow */
+.misa-neumorphic-card--glass {
+  background: linear-gradient(145deg, rgba(23, 29, 41, 0.72), rgba(16, 21, 32, 0.58));
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    10px 10px 24px rgba(0, 0, 0, 0.35),
+    -8px -8px 22px rgba(45, 53, 70, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Sub-elements for structure */
+.misa-neumorphic-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.misa-neumorphic-card__title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #FFFFFF;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.misa-neumorphic-card__subtitle {
+  font-size: 0.8125rem;
+  color: var(--text-secondary, #A99AB8);
+  margin-top: 3px;
+}
+
+.misa-neumorphic-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: rgba(147, 3, 197, 0.18);
+  border: 1px solid rgba(192, 76, 253, 0.3);
+  color: #E8B3FF;
+  flex-shrink: 0;
+}
+
+.misa-neumorphic-card__badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #F5F0FF;
+}
+
+.misa-neumorphic-card__body {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+}
+
+.misa-neumorphic-card__footer {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.misa-neumorphic-card__stat-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #FFFFFF;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.misa-neumorphic-card__stat-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary, #A99AB8);
+}
+
+.misa-neumorphic-card__stat-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.misa-neumorphic-card__stat-trend--up {
+  color: #4EDEA3;
+  background: rgba(78, 222, 163, 0.15);
+}
+
+.misa-neumorphic-card__stat-trend--down {
+  color: #FF5E7E;
+  background: rgba(255, 94, 126, 0.15);
+}
+
+.misa-neumorphic-card__stat-trend--neutral {
+  color: #A99AB8;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .misa-neumorphic-card,
+  .misa-neumorphic-card--interactive {
+    transition: none !important;
+    transform: none !important;
+  }
+}
