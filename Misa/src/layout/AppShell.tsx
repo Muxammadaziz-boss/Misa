@@ -234,7 +234,7 @@ export const AppShell: React.FC<AppShellProps> = ({
               background: "rgba(2, 6, 14, 0.48)",
               border: "1px solid rgba(255, 255, 255, 0.06)",
               minWidth: 0,
-              flexShrink: 1,
+              flexShrink: 0,
               ...({ WebkitAppRegion: "no-drag" } as React.CSSProperties),
             }}
           >
@@ -572,7 +572,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                   fontSize: "12px",
                   fontWeight: 600,
                   color: "#F5F0FF",
-                  maxWidth: "160px",
+                  maxWidth: "110px",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",

@@ -34,9 +34,9 @@ except Exception as _oww_err:
 
 BASE_DIR = get_base_dir()
 DEFAULT_MODEL_DIR = os.path.join(BASE_DIR, "models", "wake_word")
-DEFAULT_PRIMARY_PHRASE = "Salom Misa"
+DEFAULT_PRIMARY_PHRASE = "Misa"
 DEFAULT_MODEL_FILENAME = "salom_misa.onnx"
-DEFAULT_ALTERNATIVE_PHRASES = ["Hey Misa", "Mikasa"]
+DEFAULT_ALTERNATIVE_PHRASES = ["Salom Misa", "Hey Misa", "Mikasa"]
 
 
 class OpenWakeWordEngine:
@@ -231,10 +231,10 @@ class AcousticWakeWordDetector:
         # FFT chastota zonalari (hardware-calibrated fonetik zonalar)
         self.fft_size = 512
         freqs = np.fft.rfftfreq(self.fft_size, 1.0 / self.sample_rate)
-        self.nasal_mask = (freqs >= 150) & (freqs <= 480)     # /m/ burun murmuri (150-480Hz)
-        self.vowel_a_mask = (freqs >= 650) & (freqs <= 1400) # /a/ ochiq unli formantlari (F1 ~750Hz, F2 ~1200Hz)
-        self.mid_mask = (freqs >= 1400) & (freqs <= 2800)   # /i/ yuqori formanti (F2 ~2200-2600Hz)
-        self.high_mask = (freqs >= 2800) & (freqs <= 7500)  # /s/ frikativ sibilans
+        self.nasal_mask = (freqs >= 100) & (freqs <= 550)     # /m/ burun murmuri (150-480Hz)
+        self.vowel_a_mask = (freqs >= 550) & (freqs <= 1600) # /a/ ochiq unli formantlari (F1 ~750Hz, F2 ~1200Hz)
+        self.mid_mask = (freqs >= 1200) & (freqs <= 3200)   # /i/ yuqori formanti (F2 ~2200-2600Hz)
+        self.high_mask = (freqs >= 2000) & (freqs <= 7800)  # /s/ frikativ sibilans
 
     def reset(self) -> None:
         """Buferni tozalash"""
@@ -281,7 +281,7 @@ class AcousticWakeWordDetector:
         3. /s/ (Frikativ sibilans, 2800-7500Hz va yuqori ZCR)
         4. /a/ (Ochiq unli, F1 ~650-850Hz, F2 ~1200Hz)
         """
-        thresh = 0.82 - (self.sensitivity * 0.40)
+        thresh = 0.52 - (self.sensitivity * 0.28)
         rms_total = float(np.sqrt(np.mean(audio**2)))
         if rms_total < self._ambient_noise_level * 1.1 or rms_total < 0.002:
             return False, 0.0, thresh
@@ -321,9 +321,9 @@ class AcousticWakeWordDetector:
 
         s_candidates = [
             i for i in range(1, num_frames - 1)
-            if frame_rms[i] >= speech_thresh and crest_factors[i] <= 9.5 and (
-                (zcrs[i] >= 0.15 and high_energies[i] >= 0.14) or
-                (high_energies[i] >= 0.25)
+            if frame_rms[i] >= speech_thresh and crest_factors[i] <= 16.0 and (
+                (zcrs[i] >= 0.10 and high_energies[i] >= 0.08) or
+                (high_energies[i] >= 0.18)
             )
         ]
 
@@ -337,7 +337,7 @@ class AcousticWakeWordDetector:
             for p in range(max(0, s_idx - 5), s_idx):
                 if (
                     frame_rms[p] >= speech_thresh
-                    and crest_factors[p] <= 9.5
+                    and crest_factors[p] <= 16.0
                     and zcrs[p] < 0.16
                     and high_energies[p] < 0.12
                 ):
@@ -352,7 +352,7 @@ class AcousticWakeWordDetector:
             for p in range(s_idx + 1, min(num_frames, s_idx + 6)):
                 if (
                     frame_rms[p] >= speech_thresh
-                    and crest_factors[p] <= 9.5
+                    and crest_factors[p] <= 16.0
                     and zcrs[p] < 0.18
                     and high_energies[p] < 0.14
                 ):

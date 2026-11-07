@@ -1,8 +1,10 @@
 import React from "react";
+import { APP_VERSION_NAME } from "../version";
 
 export interface MisaLogoProps {
   compact?: boolean;
   showVersion?: boolean;
+  versionText?: string;
   size?: number;
   showText?: boolean;
   showBadge?: boolean;
@@ -13,6 +15,7 @@ export interface MisaLogoProps {
 export const MisaLogo: React.FC<MisaLogoProps> = ({
   compact = false,
   showVersion = true,
+  versionText,
   size = 32,
   showText,
   showBadge,
@@ -21,6 +24,7 @@ export const MisaLogo: React.FC<MisaLogoProps> = ({
 }) => {
   const isCompact = showText !== undefined ? !showText : compact;
   const displayVersion = showBadge !== undefined ? showBadge : showVersion;
+  const badgeLabel = versionText || APP_VERSION_NAME;
 
   return (
     <div
@@ -95,7 +99,7 @@ export const MisaLogo: React.FC<MisaLogoProps> = ({
                 whiteSpace: "nowrap",
               }}
             >
-              v9.4
+              {badgeLabel}
             </span>
           )}
         </div>

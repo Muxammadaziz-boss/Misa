@@ -1,6 +1,6 @@
 {
   "app": {
-    "version": "9.3.0",
+    "version": "9.4.0",
     "name": "Misa AI",
     "debug": false
   },
@@ -91,35 +91,35 @@
     "groq": {
       "enabled": true,
       "priority": 96,
-      "timeout": 15.0,
+      "timeout": 15,
       "base_url": "https://api.groq.com/openai/v1",
       "default_model": "qwen/qwen3.8-27b"
     },
     "cerebras": {
       "enabled": true,
       "priority": 94,
-      "timeout": 15.0,
+      "timeout": 15,
       "base_url": "https://api.cerebras.ai/v1",
       "default_model": "qwen-3.8-27b"
     },
     "gemini": {
       "enabled": true,
       "priority": 95,
-      "timeout": 15.0,
+      "timeout": 15,
       "base_url": "https://generativelanguage.googleapis.com/v1beta",
       "default_model": "gemini-flash-lite-latest"
     },
     "openrouter": {
       "enabled": true,
       "priority": 82,
-      "timeout": 20.0,
+      "timeout": 20,
       "base_url": "https://openrouter.ai/api/v1",
       "default_model": "nvidia/nemotron-3.5-lightning:free"
     },
     "nvidia": {
       "enabled": true,
       "priority": 74,
-      "timeout": 20.0,
+      "timeout": 20,
       "base_url": "https://integrate.api.nvidia.com/v1",
       "default_model": "meta/llama-3.3-70b-instruct"
     }

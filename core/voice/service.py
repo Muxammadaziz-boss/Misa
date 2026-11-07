@@ -65,6 +65,8 @@ class ConversationalVoiceService:
 
         # Oqim va holat
         self.state: str = VoiceServiceState.IDLE
+        self.is_secretary_mode: bool = True
+        self._listening_deadline: float = 0.0
         self._is_running = False
         self._reconnect_stream_event = threading.Event()
         self._lock = threading.Lock()
@@ -79,6 +81,26 @@ class ConversationalVoiceService:
         self._active_cancel_token: Optional[CancellationToken] = None
         self._listening_deadline: float = 0.0
         self.barge_in.on_interrupted = self.handle_interruption
+
+    
+    def is_misa_invocation(self, text: str) -> bool:
+        """Matnda 'Misa' yoki 'Mikasa' chaqiruvi mavjudligini aniqlash"""
+        if not text:
+            return False
+        pattern = r"(?:\b|^|\s)(?:misa|mikasa|micasa|миса|микаса|мекаса|mekasa)(?:\b|$|\s|[.,!?:])"
+        return bool(re.search(pattern, text, flags=re.IGNORECASE))
+
+    def extract_clean_command(self, text: str) -> str:
+        """Buyruqdan 'misa', 'salom misa' prefikslarini tozalash"""
+        if not text:
+            return ""
+        clean = re.sub(
+            r"^(?:(?:salom|assalomu\s+alaykum|hey|ey|hoy|iltimos|qani)\s+)?(?:misa|mikasa|micasa|миса|микаса|мекаса|mekasa)(?:\s+(?:eshit|qara|ayt))?(?:[,\s:!.]*|$)",
+            "",
+            text,
+            flags=re.IGNORECASE
+        ).strip()
+        return clean
 
     def add_wake_callback(self, cb: Callable[[Dict[str, Any]], None]) -> None:
         """Uyg'otuvchi so'z aniqlanganda hodisa yuborish (WebSocket va frontend uchun)"""
@@ -152,10 +174,14 @@ class ConversationalVoiceService:
             except Exception:
                 pass
 
-    def start(self) -> bool:
+    def start(self, mode: str = "listening") -> bool:
         """Ovozli xizmatni ishga tushirish (orqa fonda mikrofonni ochadi)"""
         with self._lock:
             if self._is_running:
+                if mode == "listening":
+                    self.is_secretary_mode = True
+                    self._listening_deadline = time.time() + 3600.0
+                    self._set_state(VoiceServiceState.LISTENING)
                 return True
             self._is_running = True
 
@@ -170,7 +196,12 @@ class ConversationalVoiceService:
         self._stream_thread.start()
         logger.info("[VOICE] ConversationalVoiceService started")
         logger.info("[VOICE] WakeWordDetector started")
-        self._set_state(VoiceServiceState.IDLE)
+        if mode == "listening":
+            self.is_secretary_mode = True
+            self._listening_deadline = time.time() + 3600.0
+            self._set_state(VoiceServiceState.LISTENING)
+        else:
+            self._set_state(VoiceServiceState.IDLE)
         return True
 
     def stop(self) -> None:
@@ -315,6 +346,21 @@ class ConversationalVoiceService:
                             self.wake_detector.update_ambient_noise(rms)
                             if self.wake_detector.process_frame(flat_chunk):
                                 self._on_wake_detected()
+                                continue
+                            
+                            # Dual Wake-Word Pipeline: Fondagi VAD orqali nutq aniqlansa, STT orqali 'Misa' ni tekshirish
+                            vad_event, full_audio = self.vad.process_chunk(flat_chunk)
+                            if vad_event == "speech_end" and full_audio is not None:
+                                try:
+                                    t_quick = self.stt_manager.transcribe(full_audio, sample_rate=self.sample_rate, language="uz-UZ")
+                                    if t_quick and self.is_misa_invocation(t_quick.strip()):
+                                        logger.info(f"[VOICE] Dual VAD+STT wake word tasdiqlandi: '{t_quick}'")
+                                        self._on_wake_detected({"phrase": "Misa", "engine": "stt_vad", "score": 1.0})
+                                        clean_cmd = self.extract_clean_command(t_quick.strip())
+                                        if clean_cmd and len(clean_cmd) >= 2:
+                                            self._dispatch_to_misa_intelligence(clean_cmd)
+                                except Exception as _ve:
+                                    logger.debug(f"IDLE speech check xatosi: {_ve}")
                             continue
 
                         # ==============================================================
@@ -334,8 +380,11 @@ class ConversationalVoiceService:
                             deadline = getattr(self, "_listening_deadline", 0.0)
                             is_follow_up = self.session.is_in_follow_up_window()
 
-                            # Tinglash oynasi to'liq tugaganda (kamida 6-7 soniya) IDLE ga qaytish
+                            # Tinglash oynasi to'liq tugaganda tekshirish (Kotiba rejimida doimiy tinglanadi)
                             if now > deadline and not is_follow_up:
+                                if self.is_secretary_mode:
+                                    self._listening_deadline = time.time() + 3600.0
+                                    continue
                                 logger.info("[VOICE] Tinglash darchasi tugadi (jimlik) -> IDLE holatiga qaytilmoqda")
                                 self._set_state(VoiceServiceState.IDLE)
                                 self.session.close_follow_up()
@@ -415,29 +464,40 @@ class ConversationalVoiceService:
         transcript = self.stt_manager.transcribe(audio_data, sample_rate=self.sample_rate, language="uz-UZ")
         if not transcript:
             logger.info("STT: Nutq tushunarsiz yoki bo'sh")
-            # Agar follow-up rejimida bo'lsa, xotirjamlik bilan idle ga o'tamiz
-            self.session.close_follow_up()
-            self._set_state(VoiceServiceState.IDLE)
+            if self.is_secretary_mode:
+                self._listening_deadline = time.time() + 3600.0
+                self._set_state(VoiceServiceState.LISTENING)
+            else:
+                self.session.close_follow_up()
+                self._set_state(VoiceServiceState.IDLE)
             return
 
         clean_text = transcript.strip()
         self._emit_transcript(clean_text, sender="user")
-        logger.info(f"Foydalanuvchi buyrug'i: '{clean_text}'")
+        logger.info(f"Foydalanuvchi nutqi: '{clean_text}'")
 
-        # 2. "To'xta" komandasi ekanligini tezkor tekshirish
+        # 2. Kotiba rejimi: Agar matnda 'Misa' chaqiruvi bo'lmasa, jim tinglashda davom etiladi
+        if self.is_secretary_mode and not self.is_misa_invocation(clean_text):
+            logger.info(f"[VOICE] Kotiba rejimi: 'Misa' chaqirilmadi ('{clean_text}'). Jim tinglashda davom etmoqda...")
+            self._listening_deadline = time.time() + 3600.0
+            self._set_state(VoiceServiceState.LISTENING)
+            return
+
+        # 3. "To'xta" komandasi ekanligini tezkor tekshirish
         if self.barge_in.is_stop_command(clean_text):
             self.handle_interruption()
             return
 
-        # 3. Agar foydalanuvchi "Misa, bugun havo qanday?" degan bo'lsa, "Misa" qismini olib tashlash
-        clean_text = re.sub(
-            r"^(?:(?:salom|hey|ey|hoy)\s+)?(?:misa|mikasa|миса|микаса)(?:\s+(?:eshit|qara|ayt))?(?:[,\s:!.]*|$)",
-            "",
-            clean_text,
-            flags=re.IGNORECASE
-        ).strip()
-        if not clean_text:
-            clean_text = "ha"
+        # 4. Buyruqdan 'Misa' prefiksini tozalash
+        command_to_run = self.extract_clean_command(clean_text)
+        if not command_to_run or len(command_to_run) < 2:
+            ack_msg = "Ha, eshitaman."
+            self._emit_response(ack_msg)
+            self._emit_transcript(ack_msg, sender="misa")
+            self._speak_and_listen_follow_up(ack_msg)
+            return
+
+        clean_text = command_to_run
 
         # 4. Xavfsizlik tekshiruvi (Destructive Command Gate)
         is_dangerous, action_desc, confirm_prompt = self.security.check_for_destructive_intent(clean_text)

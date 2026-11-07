@@ -593,7 +593,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         } catch {}
       }
       isListeningRef.current = true;
-      const started = await backendService.startVoice();
+      const started = await backendService.startVoice({ mode: "listening" });
       if (!started) {
         isListeningRef.current = false;
       }
@@ -735,7 +735,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     setAssistantResponse("");
     setVoiceState("listening");
     setOrbState("listening");
-    await backendService.startVoice();
+    await backendService.startVoice({ mode: "listening" });
   };
 
   const handleToggleVoice = async () => {

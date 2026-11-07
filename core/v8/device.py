@@ -18,23 +18,18 @@ logger = logging.getLogger("core.v8.device")
 
 
 def get_current_app_version() -> str:
-    """Tizimning joriy versiyasini dinamik olish (yagona haqiqat manbai)."""
+    """Tizimning joriy versiyasini dinamik olish (yagona haqiqat manbai: core.version)."""
+    try:
+        from core.version import APP_VERSION
+        if APP_VERSION:
+            return str(APP_VERSION).strip()
+    except Exception:
+        pass
     try:
         from config import get_config
         ver = get_config("app.version")
         if ver:
             return str(ver).strip()
-    except Exception:
-        pass
-    try:
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        cfg_path = os.path.join(base_dir, "data", "config.json")
-        if os.path.exists(cfg_path):
-            with open(cfg_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                v = data.get("app", {}).get("version")
-                if v:
-                    return str(v).strip()
     except Exception:
         pass
     return "9.4.0"

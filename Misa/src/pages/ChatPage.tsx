@@ -2,6 +2,7 @@
 // Misa AI v9.0 — Ultra Glass AI Suhbat va Avtonom Agent Maydoni
 
 import React, { useState, useEffect, useRef } from "react";
+import { APP_VERSION_NAME } from "../version";
 import { MisaAperture } from "../components/MisaAperture";
 import { MarkdownView } from "../components/MarkdownView";
 import {
@@ -1003,7 +1004,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
               </div>
               <div>
                 <div style={{ fontSize: "12px", fontWeight: 600, color: "#FFFFFF" }}>
-                  Misa Neural v9.3
+                  Misa Neural {APP_VERSION_NAME}
                 </div>
                 <div style={{ fontSize: "10.5px", color: "#4EDEA3" }}>
                   {backendStatus.status === "online" ? "Kontekst oynasi faol" : "Ulanilmoqda..."}
@@ -1067,7 +1068,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
               color: "var(--text-secondary)",
             }}
           >
-            Bugun • Misa v9.3 Avtonom Ish Maydoni
+            Bugun • Misa {APP_VERSION_NAME} Avtonom Ish Maydoni
           </span>
 
           <div style={{ width: "110px" }} />
@@ -1111,7 +1112,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                   Salom, {userName}!
                 </h2>
                 <p style={{ fontSize: "13.5px", color: "var(--text-secondary)", maxWidth: "460px" }}>
-                  Misa v9.3 Neural suhbat oynasi tayyor. Savol bering, kod tahlil qiling yoki tizim buyruqlarini ishga tushiring.
+                  Misa {APP_VERSION_NAME} Neural suhbat oynasi tayyor. Savol bering, kod tahlil qiling yoki tizim buyruqlarini ishga tushiring.
                 </p>
               </div>
 
@@ -1309,12 +1310,12 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                               msg.text.includes("Google Gemini API kaliti xatoligi");
 
                             const badgeLabel = isWarning
-                              ? "v9.3 Ogohlantirish"
+                              ? `${APP_VERSION_NAME} Ogohlantirish`
                               : isFallback
                               ? "🛡️ Zaxira model"
                               : isOffline
-                              ? "v9.3 Mahalliy"
-                              : "v9.3 Neural";
+                              ? `${APP_VERSION_NAME} Mahalliy`
+                              : `${APP_VERSION_NAME} Neural`;
                             const badgeBg = isWarning
                               ? "rgba(255, 171, 0, 0.18)"
                               : isFallback
@@ -1839,7 +1840,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                 color: "var(--text-muted)",
               }}
             >
-              Misa AI v9.3 xato qilishi mumkin. Muhim ma'lumotlarni tekshirib ko'ring.
+              Misa AI {APP_VERSION_NAME} xato qilishi mumkin. Muhim ma'lumotlarni tekshirib ko'ring.
             </div>
           </div>
         </div>

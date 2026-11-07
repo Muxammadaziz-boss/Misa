@@ -1162,7 +1162,15 @@ async def handle_voice_start(request):
         # AudioQueue holatlarini MisaAperture ga sinxron uzatish
         get_voice_manager().register_state_callback(lambda st: sync_broadcast("voice_state", {"state": st}, loop))
 
-        service.start()
+        mode = request.query.get("mode", "listening")
+        try:
+            if request.can_read_body and request.content_length:
+                body = await request.json()
+                mode = body.get("mode", mode)
+        except Exception:
+            pass
+
+        service.start(mode=mode)
 
         m, _, _, _, _, _ = get_modules()
         if m and hasattr(m, "global_state"):
@@ -5334,6 +5342,21 @@ async def handle_health(request):
     }, status=200)
 
 
+async def handle_version(request):
+    """GET /api/version - Kanonik versiya ma'lumotlari (Single Source of Truth)"""
+    try:
+        from core.version import get_version_info
+        return web.json_response({"ok": True, **get_version_info()}, status=200)
+    except Exception:
+        ver = get_app_version()
+        return web.json_response({
+            "ok": True,
+            "version": ver,
+            "version_name": f"v{ver[:3]}",
+            "app": "Misa AI"
+        }, status=200)
+
+
 # ========== 8.2.1. OAUTH REDIRECT & SESSION RECEIVER ==========
 _re = re
 _pending_oauth_sessions: Dict[str, Tuple[float, Dict[str, Any]]] = {}
@@ -7483,6 +7506,7 @@ def create_app():
     # Tizim va Bosh sahifa
     app.router.add_get("/api/status", handle_status)
     app.router.add_get("/api/health", handle_health)
+    app.router.add_get("/api/version", handle_version)
     app.router.add_get("/api/system/metrics", handle_system_metrics)
     app.router.add_get("/api/ws", handle_ws)
 
@@ -7875,7 +7899,7 @@ def run_server(host=None, port=None):
                 service.add_response_callback(lambda resp: sync_broadcast("ai_response", {"text": resp, "mode": "voice"}, _main_loop))
                 service.add_audio_level_callback(lambda lvl: sync_broadcast("audio_level", {"level": lvl}, _main_loop))
 
-                service.start()
+                service.start(mode="listening")
                 logger.info("[VOICE] ConversationalVoiceService avtomatik ishga tushirildi (Boot auto-listen)")
             except Exception as ve:
                 logger.error(f"[VOICE] ConversationalVoiceService avtomatik start xatosi: {ve}")

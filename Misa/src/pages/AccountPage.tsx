@@ -4,6 +4,7 @@
 // Google Avatar integratsiyasi va to'liq ma'lumotlar sinxronizatsiyasi.
 
 import React, { useState, useEffect, useRef } from "react";
+import { APP_VERSION_NAME } from "../version";
 import { Avatar } from "../components/Avatar";
 import {
   UserIcon,
@@ -1526,7 +1527,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
               {email && <span>•</span>}
               <span>💼 {roleTitle || "Foydalanuvchi"}</span>
               <span>•</span>
-              <span style={{ color: "#4EDEA3" }}>● Misa AI v9.3</span>
+              <span style={{ color: "#4EDEA3" }}>● Misa AI {APP_VERSION_NAME}</span>
             </div>
 
             {bio ? (
@@ -4335,7 +4336,7 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                       Faol qurilmalar ({Math.max(1, devices.length)})
                     </div>
                     <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
-                      Windows PC • Agent v9.3
+                      Windows PC • Agent {APP_VERSION_NAME}
                     </div>
                   </div>
                 </div>

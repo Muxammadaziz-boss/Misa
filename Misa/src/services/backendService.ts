@@ -1495,11 +1495,16 @@ class BackendService {
     }
   }
 
-  public async startVoice(): Promise<boolean> {
+  public async startVoice(params?: { mode?: string }): Promise<boolean> {
     // Brauzer SpeechRecognition va AudioContext mikrofonni bo'shatishi shart
     this.stopClientVoiceOnly();
     try {
-      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/start`, { method: "POST" });
+      const mode = params?.mode || "listening";
+      const res = await fetch(`${LOCAL_HARDWARE_URL}/api/voice/start?mode=${encodeURIComponent(mode)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode }),
+      });
       if (res.ok) {
         this.notifyVoiceState("listening");
         return true;
@@ -3158,7 +3163,7 @@ class BackendService {
           status: d.status || d.state || "online",
           state: d.state || d.status || "online",
           platform: d.platform || d.os || "windows",
-          client_version: d.client_version || d.version || "9.3.0",
+          client_version: d.client_version || d.version || "9.4.0",
         }));
         if (data.devices.length > 0 && isLocalhostUrl(API_BASE) && authHeaders.Authorization) {
           this.syncDevicesToCloud({

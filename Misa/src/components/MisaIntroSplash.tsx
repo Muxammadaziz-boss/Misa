@@ -10,7 +10,6 @@ export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
   minDurationMs = 1200,
 }) => {
   const [isFading, setIsFading] = useState(false);
-  const [canSkip, setCanSkip] = useState(false);
   const [progress, setProgress] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const startTimeRef = useRef<number>(Date.now());
@@ -49,49 +48,22 @@ export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
       setIsFading(true);
       setTimeout(() => {
         onFinish();
-      }, 200);
+      }, 250);
     }, remaining);
   }, [minDurationMs, onFinish]);
-
-  useEffect(() => {
-    // Check if user has opted to skip intro splash entirely (MISA-ROOT-031)
-    try {
-      if (localStorage.getItem("misa_skip_intro") === "true") {
-        onFinish();
-        return;
-      }
-    } catch {}
-
-    // Make skip immediately accessible without arbitrary 800ms lockup
-    setCanSkip(true);
-
-    // Keyboard shortcut to skip (Escape, Space, Enter)
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" || e.key === " " || e.key === "Enter") {
-        e.preventDefault();
-        handleComplete(true);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [handleComplete, onFinish]);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    // Attempt autoplay with sound, fallback to muted if system restricts
+    // Autoplay video with sound, fallback to muted if system restricts
     const playPromise = video.play();
     if (playPromise !== undefined) {
       playPromise.catch(() => {
-        // Fallback to muted playback
         video.muted = true;
         video.play().catch(() => {
-          // If video completely cannot play, finish gracefully
-          handleComplete();
+          // If video completely fails to play after all fallbacks
+          handleComplete(false);
         });
       });
     }
@@ -102,6 +74,7 @@ export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
       }
     };
 
+    // Intro video must play from start to end; it cannot be skipped
     const onVideoEnd = () => handleComplete(false);
 
     video.addEventListener("timeupdate", handleTimeUpdate);
@@ -214,56 +187,8 @@ export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
           }}
         />
       </div>
-
-      {/* Skip Button */}
-      {canSkip && (
-        <button
-          onClick={() => handleComplete(true)}
-          style={{
-            position: "absolute",
-            top: "24px",
-            right: "28px",
-            zIndex: 30,
-            background: "rgba(18, 12, 28, 0.7)",
-            backdropFilter: "blur(12px)",
-            border: "1px solid rgba(168, 85, 247, 0.3)",
-            borderRadius: "20px",
-            color: "#E2E8F0",
-            padding: "8px 18px",
-            fontSize: "12.5px",
-            fontWeight: 500,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            transition: "all 0.2s ease",
-            boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.7)";
-            e.currentTarget.style.backgroundColor = "rgba(28, 18, 44, 0.85)";
-            e.currentTarget.style.transform = "translateY(-1px)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.3)";
-            e.currentTarget.style.backgroundColor = "rgba(18, 12, 28, 0.7)";
-            e.currentTarget.style.transform = "translateY(0)";
-          }}
-        >
-          <span>O'tkazib yuborish</span>
-          <span
-            style={{
-              fontSize: "10.5px",
-              background: "rgba(255, 255, 255, 0.1)",
-              padding: "2px 6px",
-              borderRadius: "4px",
-              color: "#94A3B8",
-            }}
-          >
-            Esc
-          </span>
-        </button>
-      )}
     </div>
   );
 };
+
+export default MisaIntroSplash;
