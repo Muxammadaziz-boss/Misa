@@ -1691,26 +1691,38 @@ async def handle_voice_speak(request):
     loop = asyncio.get_running_loop()
 
     # Fast-path Barge-in: "To'xta" / "Stop" bo'lsa darhol to'xtatish
-    from core.voice.barge_in import BargeInDetector
-    barge = BargeInDetector()
-    if barge.is_stop_command(text):
-        from core.voice.voice_manager import get_voice_manager
-        count = get_voice_manager().interrupt()
-        sync_broadcast("voice_state", {"state": "idle"}, loop)
-        return web.json_response({"ok": True, "message": "Ovoz darhol to'xtatildi (Barge-in)", "cancelled_tracks": count})
+    try:
+        from core.voice.barge_in import BargeInDetector
+        barge = BargeInDetector()
+        if barge.is_stop_command(text):
+            from core.voice.voice_manager import get_voice_manager
+            count = get_voice_manager().interrupt()
+            sync_broadcast("voice_state", {"state": "idle"}, loop)
+            return web.json_response({"ok": True, "message": "Ovoz darhol to'xtatildi (Barge-in)", "cancelled_tracks": count})
+    except Exception as e_barge:
+        logger.debug(f"Barge-in tekshiruvida ogohlantirish: {e_barge}")
 
     sync_broadcast("voice_state", {"state": "speaking"}, loop)
 
-    from core.voice.voice_manager import get_voice_manager
-    vm = get_voice_manager()
+    success = False
+    try:
+        from core.voice.voice_manager import get_voice_manager
+        vm = get_voice_manager()
 
-    def _on_done(interrupted: bool):
-        sync_broadcast("voice_state", {"state": "idle"}, loop)
+        def _on_done(interrupted: bool):
+            sync_broadcast("voice_state", {"state": "idle"}, loop)
 
-    success = vm.speak(text, voice_id=voice_type, on_complete=_on_done)
+        success = vm.speak(text, voice_id=voice_type, on_complete=_on_done)
+    except Exception as ex_vm:
+        logger.warning(f"VoiceManager orqali ijroda ogohlantirish: {ex_vm}")
+
     if not success:
-        # Fallback
-        speak_out_loud(text, voice_type=voice_type)
+        # Fallback ultra-reliable ijro
+        try:
+            speak_out_loud(text, voice_type=voice_type)
+            success = True
+        except Exception as ex_fb:
+            logger.error(f"Fallback speak_out_loud xatosi: {ex_fb}")
 
     return web.json_response({"ok": True, "message": "Ovoz chiqarilmoqda"})
 

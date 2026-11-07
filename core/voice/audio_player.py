@@ -2,7 +2,7 @@
 """
 Misa AI — Interruptible Audio Player
 Kutilmagan to'xtatish (Barge-in / "To'xta") imkoniyatiga ega xavfsiz audio ijrochi.
-Windows MCI bloklanishlarini chetlab o'tib, Pygame va Sounddevice orqali real-vaqtda boshqariladi.
+Windows MCI (winmm), Pygame mixer va Sounddevice orqali apparat darajasida boshqariladi.
 """
 
 import os
@@ -19,6 +19,7 @@ class AudioPlayer:
     """
     Tezkor to'xtatiluvchi audio ijro moduli.
     Ijro jarayonida CancellationToken holatini har 25ms da tekshiradi.
+    Windows MCI (winmm), Pygame mixer va Sounddevice orqali apparat darajasida boshqariladi.
     """
 
     def __init__(self):
@@ -29,6 +30,7 @@ class AudioPlayer:
         self._playback_start_cb: Optional[Callable[[str], None]] = None
         self._playback_end_cb: Optional[Callable[[str, bool], None]] = None
         self._pygame_initialized = False
+        self._active_winmm_alias: Optional[str] = None
 
     def _ensure_pygame_mixer(self) -> bool:
         """Pygame mixer drayverini initsializatsiya qilish"""
@@ -59,6 +61,18 @@ class AudioPlayer:
 
     def _force_stop_hardware(self) -> None:
         """Apparat drayverlarida ijroni to'xtatish"""
+        # 1. Windows MCI ijrosini to'xtatish
+        with self._lock:
+            alias = self._active_winmm_alias
+        if alias and os.name == "nt":
+            try:
+                import ctypes
+                ctypes.windll.winmm.mciSendStringW(f'stop {alias}', None, 0, 0)
+                ctypes.windll.winmm.mciSendStringW(f'close {alias}', None, 0, 0)
+            except Exception:
+                pass
+
+        # 2. Pygame mixer ijrosini to'xtatish
         try:
             import pygame
             if pygame.mixer.get_init():
@@ -66,6 +80,64 @@ class AudioPlayer:
                 pygame.mixer.music.unload()
         except Exception:
             pass
+
+    def _play_with_winmm(
+        self,
+        file_path: str,
+        cancel_token: Optional[CancellationToken] = None
+    ) -> tuple:
+        """
+        Windows native MCI (winmm) orqali ultra-barqaror ijro.
+        DirectSound / Pygame / Sounddevice bilan ziddiyatga bormaydi.
+        Qaytaradi: (handled: bool, completed_normally: bool)
+        """
+        if os.name != "nt":
+            return False, False
+        try:
+            import ctypes
+            import uuid
+            winmm = ctypes.windll.winmm
+            alias = f"misa_{uuid.uuid4().hex[:8]}"
+            with self._lock:
+                self._active_winmm_alias = alias
+
+            ret = winmm.mciSendStringW(f'open "{file_path}" type mpegvideo alias {alias}', None, 0, 0)
+            if ret != 0:
+                ret = winmm.mciSendStringW(f'open "{file_path}" alias {alias}', None, 0, 0)
+            if ret != 0:
+                with self._lock:
+                    self._active_winmm_alias = None
+                return False, False
+
+            winmm.mciSendStringW(f'set {alias} time format milliseconds', None, 0, 0)
+            buf = ctypes.create_unicode_buffer(128)
+            winmm.mciSendStringW(f'status {alias} length', buf, 128, 0)
+            length_ms = int(buf.value) if buf.value.isdigit() else 2500
+
+            winmm.mciSendStringW(f'play {alias}', None, 0, 0)
+            start_t = time.time()
+            interrupted = False
+
+            while True:
+                if cancel_token and cancel_token.is_cancelled:
+                    winmm.mciSendStringW(f'stop {alias}', None, 0, 0)
+                    interrupted = True
+                    break
+                winmm.mciSendStringW(f'status {alias} mode', buf, 128, 0)
+                mode_str = buf.value.lower()
+                if mode_str in ("stopped", "") or (time.time() - start_t) * 1000 > (length_ms + 300):
+                    break
+                time.sleep(0.025)
+
+            winmm.mciSendStringW(f'close {alias}', None, 0, 0)
+            with self._lock:
+                self._active_winmm_alias = None
+            return True, not interrupted
+        except Exception as ex_mci:
+            logger.debug(f"WinMM MCI ijrosida xato: {ex_mci}")
+            with self._lock:
+                self._active_winmm_alias = None
+            return False, False
 
     def play_file(
         self,
@@ -107,8 +179,14 @@ class AudioPlayer:
                 except Exception as e:
                     logger.debug(f"on_start callback xatosi: {e}")
 
-            # 1. Pygame Mixer orqali ijro (Eng tez va to'xtatish oson usul)
-            if self._ensure_pygame_mixer():
+            # 1. Windows MCI orqali apparat darajasida xavfsiz va toza ijro
+            handled, ok = self._play_with_winmm(file_path, cancel_token=cancel_token)
+            if handled:
+                completed_normally = ok
+                interrupted = not ok
+
+            # 2. Pygame Mixer orqali ijro (agar MCI ishlamasa yoki Windows bo'lmasa)
+            if not completed_normally and not interrupted and self._ensure_pygame_mixer():
                 try:
                     import pygame
                     pygame.mixer.music.load(file_path)
@@ -125,10 +203,10 @@ class AudioPlayer:
                     pygame.mixer.music.unload()
                     completed_normally = not interrupted
                 except Exception as ex_pg:
-                    logger.warning(f"Pygame ijrosida xato: {ex_pg}, fallbackga o'tilmoqda")
-                    interrupted = True
+                    logger.warning(f"Pygame ijrosida xato: {ex_pg}, Sounddevice fallbackga o'tilmoqda")
+                    interrupted = False
 
-            # 2. Sounddevice / Soundfile fallback (agar Pygame ishlamasa)
+            # 3. Sounddevice / Soundfile fallback (agar oldingilar ishlamasa)
             if not completed_normally and not interrupted and os.path.exists(file_path):
                 try:
                     import soundfile as sf
