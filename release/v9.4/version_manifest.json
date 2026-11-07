@@ -6,9 +6,9 @@
   "files": [
     {
       "name": "Misa.exe",
-      "size_bytes": 10667008,
+      "size_bytes": 10668032,
       "size_mb": 10.17,
-      "sha256": "641c1114e8c4a8ad8f98e50c49bb63190b604afcc5e2a799a2b7ab40e0f56133"
+      "sha256": "73727fae869bc36336a58710683e74e40e3dad6b6f1202adf711cca09c014ff6"
     },
     {
       "name": "WebView2Loader.dll",
@@ -36,9 +36,9 @@
     },
     {
       "name": "Misa-AI-v9.4-Portable.zip",
-      "size_bytes": 323164627,
+      "size_bytes": 323164749,
       "size_mb": 308.19,
-      "sha256": "3770f04e0e98b53fb8e58c4320b525e0aef980b2281344225baad2f3425f4b72"
+      "sha256": "46b846605f72c23c69b153d163dd45f18fd9638602c239a77309ca993d56f676"
     }
   ],
   "backend": {

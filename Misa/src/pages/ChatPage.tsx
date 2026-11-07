@@ -6,6 +6,7 @@ import { APP_VERSION_NAME } from "../version";
 import { MisaAperture } from "../components/MisaAperture";
 import { MarkdownView } from "../components/MarkdownView";
 import { CopyButton } from "../components/CopyButton";
+import { ReactionBar } from "../components/ReactionBar";
 import {
   ArrowUpIcon,
   SparklesIcon,
@@ -29,6 +30,7 @@ export interface Message {
   text: string;
   timestamp: string;
   feedback?: 1 | -1;
+  reaction?: string;
   imageUrl?: string;
   agentPlan?: AgentPlanEvent;
 }
@@ -553,6 +555,32 @@ export const ChatPage: React.FC<ChatPageProps> = ({
     );
 
     await backendService.sendFeedback(userQuery, targetMsg.text, rating);
+  };
+
+  const handleReaction = async (msgIndex: number, reactionId: string) => {
+    const targetMsg = messages[msgIndex];
+    if (!targetMsg) return;
+    const nextReaction = targetMsg.reaction === reactionId ? undefined : reactionId;
+    setMessages((prev) =>
+      prev.map((m, idx) => (idx === msgIndex ? { ...m, reaction: nextReaction } : m))
+    );
+    if (nextReaction === "like") {
+      void handleFeedback(msgIndex, 1);
+    }
+    if (targetMsg.sender !== "user" && nextReaction) {
+      let userQuery = "";
+      for (let i = msgIndex - 1; i >= 0; i--) {
+        if (messages[i].sender === "user") {
+          userQuery = messages[i].text;
+          break;
+        }
+      }
+      try {
+        await backendService.sendFeedback(userQuery, targetMsg.text, nextReaction);
+      } catch (err) {
+        console.warn("Reaction feedback error:", err);
+      }
+    }
   };
 
   const handleFileAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1202,6 +1230,13 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                         ariaLabel="Foydalanuvchi xabaridan nusxa olish"
                         style={{ opacity: 0.75 }}
                       />
+                      <ReactionBar
+                        selectedReaction={msg.reaction}
+                        onSelectReaction={(rid) => handleReaction(idx, rid)}
+                        size="sm"
+                        showContainer={false}
+                        style={{ opacity: 0.8 }}
+                      />
                     </div>
                     <div
                       style={{
@@ -1397,38 +1432,11 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                             <RefreshIcon size={12} color="currentColor" />
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={() => handleFeedback(idx, 1)}
-                            title="Foydali javob"
-                            style={{
-                              padding: "3px 6px",
-                              borderRadius: "6px",
-                              fontSize: "11px",
-                              background:
-                                msg.feedback === 1 ? "rgba(78, 222, 163, 0.2)" : "transparent",
-                              color: msg.feedback === 1 ? "#4EDEA3" : "var(--text-muted)",
-                              cursor: "pointer",
-                            }}
-                          >
-                            👍
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleFeedback(idx, -1)}
-                            title="Yaxshilash kerak"
-                            style={{
-                              padding: "3px 6px",
-                              borderRadius: "6px",
-                              fontSize: "11px",
-                              background:
-                                msg.feedback === -1 ? "rgba(255, 113, 108, 0.2)" : "transparent",
-                              color: msg.feedback === -1 ? "#FF716C" : "var(--text-muted)",
-                              cursor: "pointer",
-                            }}
-                          >
-                            👎
-                          </button>
+                          <ReactionBar
+                            selectedReaction={msg.reaction}
+                            onSelectReaction={(rid) => handleReaction(idx, rid)}
+                            size="sm"
+                          />
                         </div>
                       </div>
 

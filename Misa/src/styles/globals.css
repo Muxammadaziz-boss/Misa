@@ -1238,3 +1238,197 @@ button {
     transform: translateX(-50%) !important;
   }
 }
+
+
+/* ==========================================================================
+   MISA CHAT UI — PREMIUM MESSAGE REACTION BAR (Uiverse Mayurwaghgpr Adaptation)
+   Ultra Glass Design System
+   ========================================================================== */
+
+.misa-reaction-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: rgba(14, 10, 24, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(147, 3, 197, 0.22);
+  border-radius: 9999px;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+  position: relative;
+  z-index: 10;
+}
+
+.misa-reaction-bar:hover {
+  border-color: rgba(147, 3, 197, 0.4);
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.45),
+    0 0 15px rgba(147, 3, 197, 0.15);
+}
+
+.misa-reaction-bar--sm {
+  gap: 3px;
+  padding: 2px 4px;
+}
+
+.misa-reaction-bar--compact {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+.misa-reaction-bar.is-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Individual Reaction Button */
+.misa-reaction-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  transition:
+    transform 240ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+  outline: none;
+}
+
+.misa-reaction-bar--sm .misa-reaction-btn {
+  width: 26px;
+  height: 26px;
+}
+
+.misa-reaction-emoji {
+  font-size: 15px;
+  line-height: 1;
+  display: inline-block;
+  transform-origin: center;
+  transition: transform 200ms ease;
+  pointer-events: none;
+}
+
+.misa-reaction-bar--sm .misa-reaction-emoji {
+  font-size: 12px;
+}
+
+/* Hover and Focus States */
+.misa-reaction-btn:hover:not(:disabled),
+.misa-reaction-btn:focus-visible:not(:disabled) {
+  transform: translateY(-6px) scale(1.18);
+  background: rgba(147, 3, 197, 0.18);
+  border-color: rgba(147, 3, 197, 0.55);
+  box-shadow:
+    0 6px 14px rgba(0, 0, 0, 0.4),
+    0 0 12px rgba(147, 3, 197, 0.4);
+  z-index: 25;
+}
+
+.misa-reaction-btn:active:not(:disabled) {
+  transform: translateY(-2px) scale(1.08);
+  transition-duration: 80ms;
+}
+
+/* Selected Active State */
+.misa-reaction-btn.is-selected {
+  background: rgba(147, 3, 197, 0.28);
+  border-color: #9303C5;
+  box-shadow:
+    0 0 12px rgba(147, 3, 197, 0.5),
+    inset 0 0 6px rgba(147, 3, 197, 0.3);
+}
+
+.misa-reaction-btn.is-selected:hover:not(:disabled) {
+  transform: translateY(-6px) scale(1.18);
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.4),
+    0 0 16px rgba(147, 3, 197, 0.65);
+}
+
+/* Tooltip Above Reaction */
+.misa-reaction-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #FFFFFF;
+  white-space: nowrap;
+  background: rgba(8, 4, 16, 0.94);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(147, 3, 197, 0.45);
+  border-radius: 6px;
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.5),
+    0 0 8px rgba(147, 3, 197, 0.25);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 180ms ease,
+    transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 30;
+}
+
+/* Tooltip Downward Arrow */
+.misa-reaction-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 4px;
+  border-style: solid;
+  border-color: rgba(147, 3, 197, 0.5) transparent transparent transparent;
+}
+
+.misa-reaction-btn:hover:not(:disabled) .misa-reaction-tooltip,
+.misa-reaction-btn:focus-visible:not(:disabled) .misa-reaction-tooltip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Keyboard Focus Visible */
+.misa-reaction-btn:focus-visible {
+  outline: 2px solid #9303C5;
+  outline-offset: 2px;
+}
+
+/* Prefers Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .misa-reaction-bar,
+  .misa-reaction-btn,
+  .misa-reaction-emoji,
+  .misa-reaction-tooltip {
+    transition: none !important;
+    transform: none !important;
+  }
+  .misa-reaction-btn:hover:not(:disabled),
+  .misa-reaction-btn:active:not(:disabled),
+  .misa-reaction-btn:focus-visible:not(:disabled) {
+    transform: none !important;
+  }
+  .misa-reaction-btn:hover:not(:disabled) .misa-reaction-tooltip,
+  .misa-reaction-btn:focus-visible:not(:disabled) .misa-reaction-tooltip {
+    transform: translateX(-50%) !important;
+  }
+}
