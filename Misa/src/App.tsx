@@ -18,6 +18,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { UpdateModal } from "./components/UpdateModal";
 import { ContextMenu } from "./components/ContextMenu";
 import { MisaIntroSplash } from "./components/MisaIntroSplash";
+import { MisaLoader } from "./components/MisaLoader";
 import { backendService, MikasaAuthUser } from "./services/backendService";
 import { UpdateService, UpdateCheckResponse } from "./services/updateService";
 import { supabase, isSupabaseConfigured } from "./services/supabaseClient";
@@ -441,30 +442,14 @@ function App() {
       <div
         style={{
           display: "flex",
-          flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
           height: "100vh",
           width: "100vw",
           backgroundColor: "#02060E",
-          color: "#F5F0FF",
-          fontFamily: "var(--font-family)",
-          gap: "14px",
         }}
       >
-        <div
-          style={{
-            width: "40px",
-            height: "40px",
-            borderRadius: "50%",
-            border: "2.5px solid rgba(192, 76, 253, 0.2)",
-            borderTopColor: "#C04CFD",
-            animation: "orb-particle-spin 0.9s linear infinite",
-          }}
-        />
-        <div style={{ fontSize: "13.5px", color: "var(--text-secondary)", fontWeight: 500 }}>
-          Misa AI v9.4 ishga tushirilmoqda...
-        </div>
+        <MisaLoader variant="main" size="medium" text="Misa AI v9.4 ishga tushirilmoqda..." />
       </div>
     );
   }
@@ -482,11 +467,9 @@ function App() {
                 alignItems: "center",
                 justifyContent: "center",
                 background: "var(--bg-base, #0E1422)",
-                color: "var(--text-secondary, #94A3B8)",
-                fontSize: "13px",
               }}
             >
-              Yuklanmoqda...
+              <MisaLoader variant="main" size="small" text="Yuklanmoqda..." />
             </div>
           }
         >
@@ -524,12 +507,10 @@ function App() {
                 width: "100%",
                 alignItems: "center",
                 justifyContent: "center",
-                color: "var(--text-secondary, #94A3B8)",
-                fontSize: "13px",
                 padding: "40px",
               }}
             >
-              Sahifa yuklanmoqda...
+              <MisaLoader variant="inline" text="Sahifa yuklanmoqda..." />
             </div>
           }
         >

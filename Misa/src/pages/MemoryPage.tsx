@@ -15,6 +15,7 @@ import {
   SettingsIcon,
 } from "../components/icons/Icons";
 import { NeumorphicCard } from "../components/NeumorphicCard";
+import { MisaLoader } from "../components/MisaLoader";
 import {
   backendService,
   MemoryResponse,
@@ -918,15 +919,16 @@ export const MemoryPage: React.FC<MemoryPageProps> = () => {
         <>
           {loading ? (
             <div
-              className="misa-glass-card"
+              className="misa-neumorphic-card"
               style={{
                 padding: "48px",
                 borderRadius: "24px",
-                textAlign: "center",
-                color: "var(--text-secondary)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
               }}
             >
-              Xotiralar yuklanmoqda...
+              <MisaLoader variant="inline" size="large" text="Xotiralar yuklanmoqda..." />
             </div>
           ) : filteredCards.length === 0 ? (
             <div

@@ -2658,3 +2658,239 @@ html.theme-light {
     transform: none !important;
   }
 }
+
+
+/* ==========================================================================
+   MISA UI — PREMIUM ANIMATED LOADING SYSTEM
+   References: dexter-st (Main Loader) & pradip_1434 (Inline Loader)
+   Adaptive Misa Ultra Glass Palette (#02060E, #9303C5, #C77DFF, #6015A8, #32105C)
+   ========================================================================== */
+
+.misa-sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* ── COMPONENT A: MISA MAIN LOADER (dexter-st adaptation) ── */
+.misa-main-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: 24px;
+  position: relative;
+  user-select: none;
+}
+
+.misa-main-loader-core {
+  position: relative;
+  border-radius: 50%;
+  background: transparent;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    inset 0 0 35px #FFFFFF,
+    inset 20px 0 60px #C77DFF,
+    inset -20px 0 60px #9303C5,
+    inset 20px 0 110px #6015A8,
+    inset -20px 0 110px #32105C,
+    0 0 35px rgba(255, 255, 255, 0.22),
+    -10px 0 45px rgba(199, 125, 255, 0.45),
+    10px 0 45px rgba(147, 3, 197, 0.55);
+  animation: misaShadowRotate 4.2s linear infinite;
+  transition: width 0.3s ease, height 0.3s ease;
+}
+
+.misa-main-loader-core--medium {
+  width: 150px;
+  height: 150px;
+}
+
+.misa-main-loader-core--small {
+  width: 110px;
+  height: 110px;
+}
+
+.misa-main-loader-core--large {
+  width: 180px;
+  height: 180px;
+}
+
+.misa-main-loader-core::after {
+  content: "";
+  position: absolute;
+  width: 40%;
+  height: 40%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(199, 125, 255, 0.4) 0%, rgba(147, 3, 197, 0.15) 60%, transparent 100%);
+  filter: blur(8px);
+  pointer-events: none;
+}
+
+@keyframes misaShadowRotate {
+  0% {
+    transform: rotate(0deg);
+    box-shadow:
+      inset 0 0 35px #FFFFFF,
+      inset 20px 0 60px #C77DFF,
+      inset -20px 0 60px #9303C5,
+      inset 20px 0 110px #6015A8,
+      inset -20px 0 110px #32105C,
+      0 0 35px rgba(255, 255, 255, 0.22),
+      -10px 0 45px rgba(199, 125, 255, 0.45),
+      10px 0 45px rgba(147, 3, 197, 0.55);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 40px #FFFFFF,
+      inset -22px 0 65px #9303C5,
+      inset 22px 0 65px #C77DFF,
+      inset -22px 0 120px #32105C,
+      inset 22px 0 120px #6015A8,
+      0 0 40px rgba(255, 255, 255, 0.28),
+      12px 0 50px rgba(199, 125, 255, 0.55),
+      -12px 0 50px rgba(147, 3, 197, 0.65);
+  }
+  100% {
+    transform: rotate(360deg);
+    box-shadow:
+      inset 0 0 35px #FFFFFF,
+      inset 20px 0 60px #C77DFF,
+      inset -20px 0 60px #9303C5,
+      inset 20px 0 110px #6015A8,
+      inset -20px 0 110px #32105C,
+      0 0 35px rgba(255, 255, 255, 0.22),
+      -10px 0 45px rgba(199, 125, 255, 0.45),
+      10px 0 45px rgba(147, 3, 197, 0.55);
+  }
+}
+
+/* ── COMPONENT B: MISA INLINE LOADER (pradip_1434 adaptation) ── */
+.misa-inline-loader {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  vertical-align: middle;
+  user-select: none;
+}
+
+.misa-inline-spinner {
+  position: relative;
+  border-radius: 50%;
+  background: transparent;
+  flex-shrink: 0;
+  box-shadow:
+    inset 0 0 4px #FFFFFF,
+    inset 3px 0 6px #C77DFF,
+    inset -3px 0 6px #9303C5,
+    inset 3px 0 12px #6015A8,
+    inset -3px 0 12px #32105C,
+    0 0 8px rgba(147, 3, 197, 0.48);
+  animation: misaInlineSpin 1.6s linear infinite;
+}
+
+.misa-inline-spinner--medium {
+  width: 20px;
+  height: 20px;
+}
+
+.misa-inline-spinner--small {
+  width: 16px;
+  height: 16px;
+  box-shadow:
+    inset 0 0 3px #FFFFFF,
+    inset 2px 0 4px #C77DFF,
+    inset -2px 0 4px #9303C5,
+    inset 2px 0 8px #6015A8,
+    0 0 6px rgba(147, 3, 197, 0.4);
+}
+
+.misa-inline-spinner--large {
+  width: 26px;
+  height: 26px;
+  box-shadow:
+    inset 0 0 6px #FFFFFF,
+    inset 4px 0 8px #C77DFF,
+    inset -4px 0 8px #9303C5,
+    inset 4px 0 14px #6015A8,
+    inset -4px 0 14px #32105C,
+    0 0 10px rgba(147, 3, 197, 0.55);
+}
+
+@keyframes misaInlineSpin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── DYNAMIC SEQUENTIAL ANIMATED LETTERS ── */
+.misa-loader-text {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-display, "Space Grotesk", sans-serif);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary, #A99AB8);
+}
+
+.misa-main-loader .misa-loader-text {
+  font-size: 1rem;
+  letter-spacing: 0.06em;
+}
+
+.misa-inline-loader .misa-loader-text {
+  font-size: 0.84375rem;
+}
+
+.misa-loader-letter {
+  display: inline-block;
+  opacity: 0.35;
+  color: var(--text-secondary, #A99AB8);
+  animation: misaLetterShimmer 1.8s ease-in-out infinite;
+  animation-delay: calc(var(--letter-index, 0) * 0.075s);
+  white-space: pre;
+  will-change: transform, opacity, color;
+}
+
+@keyframes misaLetterShimmer {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(1) translateY(0);
+    color: var(--text-secondary, #A99AB8);
+    text-shadow: none;
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1.12) translateY(-1px);
+    color: #FFFFFF;
+    text-shadow: 0 0 10px rgba(199, 125, 255, 0.8), 0 0 20px rgba(147, 3, 197, 0.55);
+  }
+}
+
+/* ── REDUCED MOTION PREFERENCE ── */
+@media (prefers-reduced-motion: reduce) {
+  .misa-main-loader-core,
+  .misa-inline-spinner {
+    animation: none !important;
+  }
+
+  .misa-loader-letter {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    color: #FFFFFF !important;
+  }
+}

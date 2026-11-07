@@ -7,7 +7,9 @@ import { MisaAperture } from "../components/MisaAperture";
 import { MarkdownView } from "../components/MarkdownView";
 import { CopyButton } from "../components/CopyButton";
 import { ReactionBar } from "../components/ReactionBar";
-import { ExpandableButton } from "../components/ExpandableButton";
+import { ExpandableButton } from "../components/ExpandableButton";
+
+import { MisaLoader } from "../components/MisaLoader";
 import {
   ArrowUpIcon,
   SparklesIcon,
@@ -1558,37 +1560,32 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                 );
               })}
 
-              {/* Live Thinking / Agent Execution Card */}
-              {isLoading && (
-                <div style={{ display: "flex", alignItems: "center", gap: "12px", paddingLeft: "8px" }}>
-                  <div
-                    style={{
-                      width: "28px",
-                      height: "28px",
-                      borderRadius: "50%",
-                      background: "rgba(147, 3, 197, 0.22)",
-                      border: "1px solid rgba(192, 76, 253, 0.4)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: "8px",
-                        height: "8px",
-                        borderRadius: "50%",
-                        backgroundColor: "#C04CFD",
-                        animation: "pulse-slow 1s infinite",
-                      }}
-                    />
-                  </div>
-                  <span style={{ fontSize: "13px", color: "#E8B3FF", fontWeight: 500 }}>
-                    {activeAgentPlan
-                      ? `Avtonom reja bajarilmoqda: ${activeAgentPlan.goal}...`
-                      : "Misa javob tayyorlamoqda..."}
-                  </span>
-                </div>
+              {/* Live Thinking / Agent Execution Card */}
+
+              {isLoading && (
+
+                <div style={{ paddingLeft: "8px", paddingBottom: "6px" }}>
+
+                  <MisaLoader
+
+                    variant="inline"
+
+                    size="medium"
+
+                    text={
+
+                      activeAgentPlan
+
+                        ? `Avtonom reja bajarilmoqda: ${activeAgentPlan.goal}...`
+
+                        : "Misa javob tayyorlamoqda..."
+
+                    }
+
+                  />
+
+                </div>
+
               )}
 
               {/* Ready status indicator at bottom of chat */}
