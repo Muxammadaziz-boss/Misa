@@ -1,9 +1,10 @@
 import React from "react";
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary" | "glass" | "ghost";
+  variant?: "primary" | "secondary" | "glass" | "ghost" | "shine";
   size?: "sm" | "md" | "lg";
   icon?: React.ReactNode;
+  iconPosition?: "left" | "right";
   children: React.ReactNode;
 }
 
@@ -11,26 +12,30 @@ export const Button: React.FC<ButtonProps> = ({
   variant = "primary",
   size = "md",
   icon,
+  iconPosition = "left",
   children,
   className = "",
   style,
+  disabled,
   ...props
 }) => {
+  const isShineVariant = variant === "primary" || variant === "shine";
+
   const getPadding = () => {
     switch (size) {
-      case "sm": return "5px 12px";
-      case "lg": return "11px 24px";
+      case "sm": return "6px 14px";
+      case "lg": return "12px 26px";
       case "md":
-      default: return "8px 18px";
+      default: return "9px 20px";
     }
   };
 
   const getFontSize = () => {
     switch (size) {
-      case "sm": return "var(--font-size-caption)";
-      case "lg": return "var(--font-size-body)";
+      case "sm": return "var(--font-size-caption, 12.5px)";
+      case "lg": return "var(--font-size-body, 15px)";
       case "md":
-      default: return "var(--font-size-body)";
+      default: return "var(--font-size-body, 13.5px)";
     }
   };
 
@@ -55,20 +60,21 @@ export const Button: React.FC<ButtonProps> = ({
           border: "1px solid transparent",
           color: "var(--text-secondary)",
         };
+      case "shine":
       case "primary":
       default:
-        return {
-          background: "var(--primary)",
-          border: "1px solid var(--primary-glow)",
-          color: "#FFFFFF",
-          boxShadow: "0 2px 14px rgba(147, 3, 197, 0.35)",
-        };
+        return {};
     }
   };
 
+  const buttonClass = isShineVariant
+    ? `misa-shine-btn ${size === "sm" ? "misa-shine-sm" : size === "lg" ? "misa-shine-lg" : ""} ${className}`.trim()
+    : `misa-button btn-${variant} ${className}`.trim();
+
   return (
     <button
-      className={`misa-button btn-${variant} ${className}`}
+      className={buttonClass}
+      disabled={disabled}
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -77,35 +83,44 @@ export const Button: React.FC<ButtonProps> = ({
         padding: getPadding(),
         fontSize: getFontSize(),
         fontWeight: 600,
-        borderRadius: "var(--radius-pill)",
-        transition: "all 0.18s ease",
-        cursor: "pointer",
+        borderRadius: "9999px",
+        transition: "all 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+        cursor: disabled ? "not-allowed" : "pointer",
         ...getVariantStyles(),
         ...style,
       }}
       onMouseEnter={(e) => {
-        if (variant === "primary") {
-          e.currentTarget.style.backgroundColor = "var(--primary-hover)";
-        } else if (variant === "glass") {
-          e.currentTarget.style.backgroundColor = "var(--glass-bg-hover)";
-          e.currentTarget.style.borderColor = "var(--glass-border-hover)";
-        } else if (variant === "secondary") {
-          e.currentTarget.style.backgroundColor = "var(--surface-hover)";
-        } else if (variant === "ghost") {
-          e.currentTarget.style.backgroundColor = "var(--surface-hover)";
-          e.currentTarget.style.color = "var(--text-primary)";
+        if (!isShineVariant) {
+          if (variant === "glass") {
+            e.currentTarget.style.backgroundColor = "var(--glass-bg-hover)";
+            e.currentTarget.style.borderColor = "var(--glass-border-hover)";
+          } else if (variant === "secondary" || variant === "ghost") {
+            e.currentTarget.style.backgroundColor = "var(--surface-hover)";
+            if (variant === "ghost") e.currentTarget.style.color = "var(--text-primary)";
+          }
         }
       }}
       onMouseLeave={(e) => {
-        const reset = getVariantStyles();
-        if (reset.background) e.currentTarget.style.backgroundColor = reset.background as string;
-        if (reset.border) e.currentTarget.style.border = reset.border as string;
-        if (reset.color) e.currentTarget.style.color = reset.color as string;
+        if (!isShineVariant) {
+          const reset = getVariantStyles();
+          if (reset.background) e.currentTarget.style.backgroundColor = reset.background as string;
+          if (reset.border) e.currentTarget.style.border = reset.border as string;
+          if (reset.color) e.currentTarget.style.color = reset.color as string;
+        }
       }}
       {...props}
     >
-      {icon && <span style={{ display: "flex", alignItems: "center" }}>{icon}</span>}
-      <span>{children}</span>
+      {icon && iconPosition === "left" && (
+        <span className={isShineVariant ? "misa-shine-icon" : undefined} style={{ display: "flex", alignItems: "center" }}>
+          {icon}
+        </span>
+      )}
+      <span className={isShineVariant ? "misa-shine-label" : undefined}>{children}</span>
+      {icon && iconPosition === "right" && (
+        <span className={isShineVariant ? "misa-shine-icon" : undefined} style={{ display: "flex", alignItems: "center" }}>
+          {icon}
+        </span>
+      )}
     </button>
   );
 };

@@ -479,19 +479,16 @@ export const ServerDiagnosticModal: React.FC<ServerDiagnosticModalProps> = ({
             <button
               onClick={() => executeCheck()}
               disabled={isChecking}
+              className="misa-shine-btn"
               style={{
-                padding: "8px 18px",
-                borderRadius: "8px",
-                background: "linear-gradient(135deg, #C04CFD, #7928CA)",
-                border: "none",
-                color: "#FFF",
-                fontWeight: 600,
+                padding: "8px 20px",
                 fontSize: "13px",
                 cursor: isChecking ? "wait" : "pointer",
-                opacity: isChecking ? 0.7 : 1,
               }}
             >
-              {isChecking ? "Tekshirilmoqda..." : "Qayta tekshirish"}
+              <span className="misa-shine-label">
+                {isChecking ? "Tekshirilmoqda..." : "Qayta tekshirish"}
+              </span>
             </button>
             <button
               onClick={onClose}

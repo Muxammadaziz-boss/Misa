@@ -643,23 +643,17 @@ export const ChatPage: React.FC<ChatPageProps> = ({
           <button
             type="button"
             onClick={handleCreateNewSession}
-            className="misa-btn-violet"
+            className="misa-shine-btn misa-shine-full"
             style={{
-              width: "100%",
               padding: "11px 16px",
-              borderRadius: "9999px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
               fontSize: "13.5px",
               fontWeight: 600,
               cursor: "pointer",
               flexShrink: 0,
             }}
           >
-            <span style={{ fontSize: "16px", lineHeight: 1 }}>+</span>
-            <span>Yangi suhbat</span>
+            <span className="misa-shine-icon" style={{ fontSize: "16px", lineHeight: 1 }}>+</span>
+            <span className="misa-shine-label">Yangi suhbat</span>
           </button>
 
           {/* Quick Workspace Mode Navigation */}

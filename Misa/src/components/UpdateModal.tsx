@@ -469,19 +469,16 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
             <button
               onClick={handleStartUpdate}
               disabled={isProcessing}
+              className="misa-shine-btn misa-shine-emerald"
               style={{
-                padding: "8px 20px",
-                borderRadius: 8,
-                background: "linear-gradient(135deg, #10B981, #059669)",
-                border: "none",
-                color: "#FFFFFF",
+                padding: "8px 22px",
                 fontSize: 13,
-                fontWeight: 600,
                 cursor: isProcessing ? "not-allowed" : "pointer",
-                boxShadow: "0 4px 12px rgba(16, 185, 129, 0.3)",
               }}
             >
-              {isProcessing ? "Yuklanmoqda..." : "Yangilash"}
+              <span className="misa-shine-label">
+                {isProcessing ? "Yuklanmoqda..." : "Yangilash"}
+              </span>
             </button>
           )}
 

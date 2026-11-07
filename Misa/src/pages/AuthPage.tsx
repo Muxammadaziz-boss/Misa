@@ -1999,32 +1999,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               <button
                 type="submit"
                 disabled={otpVerifying || otpCode.length < 6}
+                className="misa-shine-btn misa-shine-full"
                 style={{
                   marginTop: "6px",
-                  padding: "13px 20px",
-                  background: "linear-gradient(135deg, #9303C5 0%, #C04CFD 60%, #7C3AED 100%)",
-                  border: "none",
-                  borderRadius: "12px",
-                  color: "#FFFFFF",
-                  fontSize: "14.5px",
-                  fontWeight: 700,
                   cursor: otpVerifying || otpCode.length < 6 ? "default" : "pointer",
-                  boxShadow: "0 4px 22px rgba(147, 3, 197, 0.45)",
-                  transition: "all 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
-                  opacity: otpVerifying || otpCode.length < 6 ? 0.6 : 1,
-                }}
-                onMouseEnter={(e) => {
-                  if (!otpVerifying && otpCode.length === 6) {
-                    e.currentTarget.style.transform = "translateY(-1.5px)";
-                    e.currentTarget.style.boxShadow = "0 6px 26px rgba(192, 76, 253, 0.58)";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "0 4px 22px rgba(147, 3, 197, 0.45)";
                 }}
               >
-                {otpVerifying ? "Tekshirilmoqda..." : "🚀 Tizimga kirish"}
+                <span className="misa-shine-icon" aria-hidden="true">🚀</span>
+                <span className="misa-shine-label">
+                  {otpVerifying ? "Tekshirilmoqda..." : "Tizimga kirish"}
+                </span>
               </button>
 
               {/* Action Links */}
@@ -2294,32 +2278,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                     <button
                       type="submit"
                       disabled={loading || oauthLoading}
+                      className="misa-shine-btn misa-shine-full"
                       style={{
-                        marginTop: "4px",
-                        padding: "13px 20px",
-                        background: "linear-gradient(135deg, #9303C5 0%, #C04CFD 60%, #7C3AED 100%)",
-                        border: "none",
-                        borderRadius: "12px",
-                        color: "#FFFFFF",
-                        fontSize: "14.5px",
-                        fontWeight: 700,
+                        marginTop: "8px",
                         cursor: loading || oauthLoading ? "default" : "pointer",
-                        boxShadow: "0 4px 22px rgba(147, 3, 197, 0.45)",
-                        transition: "all 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
-                        opacity: loading || oauthLoading ? 0.7 : 1,
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!loading && !oauthLoading) {
-                          e.currentTarget.style.transform = "translateY(-1.5px)";
-                          e.currentTarget.style.boxShadow = "0 6px 26px rgba(192, 76, 253, 0.58)";
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = "translateY(0)";
-                        e.currentTarget.style.boxShadow = "0 4px 22px rgba(147, 3, 197, 0.45)";
                       }}
                     >
-                      {loading ? "Kirilmoqda..." : "Tizimga kirish"}
+                      <span className="misa-shine-label">
+                        {loading ? "Kirilmoqda..." : "Tizimga kirish"}
+                      </span>
                     </button>
 
                     <div style={{ textAlign: "center", marginTop: "2px" }}>
@@ -2375,32 +2342,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                     <button
                       type="submit"
                       disabled={otpSending || loading}
+                      className="misa-shine-btn misa-shine-full"
                       style={{
-                        marginTop: "4px",
-                        padding: "13px 20px",
-                        background: "linear-gradient(135deg, #9303C5 0%, #C04CFD 60%, #7C3AED 100%)",
-                        border: "none",
-                        borderRadius: "12px",
-                        color: "#FFFFFF",
-                        fontSize: "14.5px",
-                        fontWeight: 700,
+                        marginTop: "6px",
                         cursor: otpSending || loading ? "default" : "pointer",
-                        boxShadow: "0 4px 22px rgba(147, 3, 197, 0.45)",
-                        transition: "all 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
-                        opacity: otpSending || loading ? 0.7 : 1,
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!otpSending && !loading) {
-                          e.currentTarget.style.transform = "translateY(-1.5px)";
-                          e.currentTarget.style.boxShadow = "0 6px 26px rgba(192, 76, 253, 0.58)";
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = "translateY(0)";
-                        e.currentTarget.style.boxShadow = "0 4px 22px rgba(147, 3, 197, 0.45)";
                       }}
                     >
-                      {otpSending ? "Yuborilmoqda..." : "✉️ Tasdiqlash kodini yuborish"}
+                      <span className="misa-shine-icon" aria-hidden="true">✉️</span>
+                      <span className="misa-shine-label">
+                        {otpSending ? "Yuborilmoqda..." : "Tasdiqlash kodini yuborish"}
+                      </span>
                     </button>
 
                     <div style={{ textAlign: "center", marginTop: "2px" }}>
@@ -2580,32 +2531,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                 <button
                   type="submit"
                   disabled={loading || oauthLoading}
+                  className="misa-shine-btn misa-shine-full"
                   style={{
                     marginTop: "8px",
-                    padding: "13px 20px",
-                    background: "linear-gradient(135deg, #9303C5 0%, #C04CFD 60%, #7C3AED 100%)",
-                    border: "none",
-                    borderRadius: "12px",
-                    color: "#FFFFFF",
-                    fontSize: "14.5px",
-                    fontWeight: 700,
                     cursor: loading || oauthLoading ? "default" : "pointer",
-                    boxShadow: "0 4px 22px rgba(147, 3, 197, 0.45)",
-                    transition: "all 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
-                    opacity: loading || oauthLoading ? 0.7 : 1,
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!loading && !oauthLoading) {
-                      e.currentTarget.style.transform = "translateY(-1.5px)";
-                      e.currentTarget.style.boxShadow = "0 6px 26px rgba(192, 76, 253, 0.58)";
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = "translateY(0)";
-                    e.currentTarget.style.boxShadow = "0 4px 22px rgba(147, 3, 197, 0.45)";
                   }}
                 >
-                  {loading ? "Yaratilmoqda..." : "Hisob yaratish"}
+                  <span className="misa-shine-label">
+                    {loading ? "Yaratilmoqda..." : "Hisob yaratish"}
+                  </span>
                 </button>
               </form>
             )}
@@ -2640,22 +2574,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                 <button
                   type="submit"
                   disabled={loading}
+                  className="misa-shine-btn misa-shine-full misa-shine-emerald"
                   style={{
                     marginTop: "4px",
-                    padding: "13px 20px",
-                    background: "linear-gradient(135deg, #059669 0%, #10B981 100%)",
-                    border: "none",
-                    borderRadius: "12px",
-                    color: "#FFFFFF",
-                    fontSize: "14px",
-                    fontWeight: 700,
                     cursor: loading ? "default" : "pointer",
-                    boxShadow: "0 4px 20px rgba(16, 185, 129, 0.35)",
-                    transition: "all 0.2s ease",
-                    opacity: loading ? 0.7 : 1,
                   }}
                 >
-                  {loading ? "Yuborilmoqda..." : "Tiklash havolasini yuborish"}
+                  <span className="misa-shine-label">
+                    {loading ? "Yuborilmoqda..." : "Tiklash havolasini yuborish"}
+                  </span>
                 </button>
 
                 <div style={{ display: "flex", justifyContent: "center", marginTop: "8px" }}>
@@ -2765,22 +2692,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                 <button
                   type="submit"
                   disabled={loading}
+                  className="misa-shine-btn misa-shine-full"
                   style={{
                     marginTop: "6px",
-                    padding: "13px 20px",
-                    background: "linear-gradient(135deg, #9303C5 0%, #C04CFD 60%, #7C3AED 100%)",
-                    border: "none",
-                    borderRadius: "12px",
-                    color: "#FFFFFF",
-                    fontSize: "14.5px",
-                    fontWeight: 700,
                     cursor: loading ? "default" : "pointer",
-                    boxShadow: "0 4px 22px rgba(147, 3, 197, 0.45)",
-                    transition: "all 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
-                    opacity: loading ? 0.7 : 1,
                   }}
                 >
-                  {loading ? "Parol saqlanmoqda..." : "Yangi parolni saqlash"}
+                  <span className="misa-shine-label">
+                    {loading ? "Parol saqlanmoqda..." : "Yangi parolni saqlash"}
+                  </span>
                 </button>
 
                 <div style={{ display: "flex", justifyContent: "center", marginTop: "4px" }}>
@@ -2829,22 +2749,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                 <button
                   type="submit"
                   disabled={loading}
+                  className="misa-shine-btn misa-shine-full misa-shine-emerald"
                   style={{
                     marginTop: "4px",
-                    padding: "13px 20px",
-                    background: "linear-gradient(135deg, #059669 0%, #10B981 100%)",
-                    border: "none",
-                    borderRadius: "12px",
-                    color: "#FFFFFF",
-                    fontSize: "14px",
-                    fontWeight: 700,
                     cursor: loading ? "default" : "pointer",
-                    boxShadow: "0 4px 20px rgba(16, 185, 129, 0.35)",
-                    transition: "all 0.2s ease",
-                    opacity: loading ? 0.7 : 1,
                   }}
                 >
-                  {loading ? "Tasdiqlanmoqda..." : "Emailni tasdiqlash"}
+                  <span className="misa-shine-label">
+                    {loading ? "Tasdiqlanmoqda..." : "Emailni tasdiqlash"}
+                  </span>
                 </button>
 
                 <button
