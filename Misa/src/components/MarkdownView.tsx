@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { CopyIcon, CheckIcon } from "./icons/Icons";
+import React from "react";
+import { CopyButton } from "./CopyButton";
 
 interface MarkdownViewProps {
   content: string;
@@ -136,15 +136,7 @@ interface CodeBlockProps {
 }
 
 const CodeBlock: React.FC<CodeBlockProps> = ({ language, code }) => {
-  const [copied, setCopied] = useState(false);
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {}
-  };
 
   return (
     <div
@@ -171,26 +163,15 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, code }) => {
         }}
       >
         <span>{language}</span>
-        <button
-          onClick={handleCopy}
+        <CopyButton
+          text={code}
+          size={26}
+          defaultTooltip="Copy"
+          successTooltip="Copied!"
+          errorTooltip="Failed!"
           title="Kodni nusxalash"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "5px",
-            background: "transparent",
-            border: "none",
-            color: copied ? "#10B981" : "var(--text-muted, #94A3B8)",
-            cursor: "pointer",
-            fontSize: "11px",
-            padding: "2px 6px",
-            borderRadius: "4px",
-            transition: "all 0.15s ease",
-          }}
-        >
-          {copied ? <CheckIcon size={12} color="#10B981" /> : <CopyIcon size={12} color="currentColor" />}
-          <span>{copied ? "Nusxalandi" : "Nusxa"}</span>
-        </button>
+          ariaLabel="Kodni nusxalash"
+        />
       </div>
 
       <pre

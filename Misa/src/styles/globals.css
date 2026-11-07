@@ -306,6 +306,189 @@ h1, h2, h3, h4, .font-headline {
     0 0 18px rgba(192, 76, 253, 0.4) !important;
 }
 
+/* ── Premium Neumorphic Ultra Glass Copy Button (Uiverse Galahhad Pattern adapted for Misa) ── */
+.misa-copy-btn {
+  --btn-size: 36px;
+  --btn-bg: rgba(20, 25, 35, 0.78);
+  --btn-hover-bg: rgba(36, 22, 54, 0.92);
+  --btn-border: rgba(192, 76, 253, 0.22);
+  --btn-border-hover: rgba(192, 76, 253, 0.55);
+  --btn-icon-default: #A99AB8;
+  --btn-icon-hover: #C04CFD;
+  --btn-icon-success: #4EDEA3;
+  --tooltip-bg: rgba(14, 10, 24, 0.95);
+  --tooltip-border: rgba(192, 76, 253, 0.35);
+  --tooltip-text: #F5F0FF;
+
+  position: relative !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: var(--btn-size) !important;
+  height: var(--btn-size) !important;
+  min-width: var(--btn-size) !important;
+  min-height: var(--btn-size) !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 10px !important;
+  background: var(--btn-bg) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  border: 1px solid var(--btn-border) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35) !important;
+  color: var(--btn-icon-default) !important;
+  cursor: pointer !important;
+  outline: none !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  overflow: visible !important;
+}
+
+.misa-copy-btn:hover {
+  background: var(--btn-hover-bg) !important;
+  border-color: var(--btn-border-hover) !important;
+  color: var(--btn-icon-hover) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), 0 0 12px rgba(147, 3, 197, 0.25) !important;
+  transform: translateY(-1px) !important;
+}
+
+.misa-copy-btn:active {
+  transform: translateY(0) scale(0.92) !important;
+}
+
+.misa-copy-btn:focus-visible {
+  outline: 2px solid #9303C5 !important;
+  outline-offset: 2px !important;
+}
+
+/* Success State */
+.misa-copy-btn.is-success {
+  border-color: rgba(78, 222, 163, 0.6) !important;
+  color: var(--btn-icon-success) !important;
+  box-shadow:
+    0 0 14px rgba(147, 3, 197, 0.4),
+    inset 0 0 8px rgba(78, 222, 163, 0.2) !important;
+}
+
+/* Error State */
+.misa-copy-btn.is-error {
+  border-color: rgba(239, 68, 68, 0.65) !important;
+  color: #EF4444 !important;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.35) !important;
+}
+
+/* Icon Box & Transition */
+.misa-copy-icon-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+
+.misa-copy-icon-default,
+.misa-copy-icon-success {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.misa-copy-icon-default {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.misa-copy-btn.is-success .misa-copy-icon-default {
+  opacity: 0;
+  transform: scale(0.4) rotate(-15deg);
+}
+
+.misa-copy-icon-success {
+  opacity: 0;
+  transform: scale(0.4) rotate(15deg);
+}
+
+.misa-copy-btn.is-success .misa-copy-icon-success {
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+}
+
+/* Tooltip Box */
+.misa-copy-tooltip {
+  position: absolute;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: var(--tooltip-bg);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--tooltip-border);
+  border-radius: 7px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  color: var(--tooltip-text);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.8), 0 0 12px rgba(147, 3, 197, 0.25);
+  opacity: 0;
+  visibility: hidden;
+  z-index: 120;
+  transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+              visibility 0.18s;
+}
+
+/* Tooltip Arrow */
+.misa-copy-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 4px;
+  border-style: solid;
+  border-color: rgba(14, 10, 24, 0.95) transparent transparent transparent;
+}
+
+.misa-copy-tooltip::before {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 5px;
+  border-style: solid;
+  border-color: rgba(192, 76, 253, 0.35) transparent transparent transparent;
+  z-index: -1;
+}
+
+/* Show Tooltip on Hover, Focus-Visible, or when Active */
+.misa-copy-btn:hover .misa-copy-tooltip,
+.misa-copy-btn:focus-visible .misa-copy-tooltip,
+.misa-copy-btn.show-tooltip .misa-copy-tooltip {
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: translateX(-50%) translateY(0) !important;
+}
+
+.misa-copy-btn.is-success .misa-copy-tooltip {
+  color: #4EDEA3 !important;
+  border-color: rgba(78, 222, 163, 0.45) !important;
+}
+
+.misa-copy-btn.is-error .misa-copy-tooltip {
+  color: #EF4444 !important;
+  border-color: rgba(239, 68, 68, 0.5) !important;
+}
+
 /* ── OAuth Glass Buttons (Google, GitHub, Telegram) ── */
 .misa-social-btn {
   display: inline-flex !important;

@@ -5,12 +5,11 @@ import React, { useState, useEffect, useRef } from "react";
 import { APP_VERSION_NAME } from "../version";
 import { MisaAperture } from "../components/MisaAperture";
 import { MarkdownView } from "../components/MarkdownView";
+import { CopyButton } from "../components/CopyButton";
 import {
   ArrowUpIcon,
   SparklesIcon,
   VolumeIcon,
-  CopyIcon,
-  CheckIcon,
   RefreshIcon,
   SearchIcon,
   SettingsIcon,
@@ -85,7 +84,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [_voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [backendStatus, setBackendStatus] = useState<BackendStatus>({ status: "connecting" });
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
   const [sidebarTab, setSidebarTab] = useState<"chats" | "images">("chats");
   const [composerMode, setComposerMode] = useState<ComposerMode>("chat");
@@ -536,12 +534,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({
       e.preventDefault();
       handleSend();
     }
-  };
-
-  const handleCopy = (id: string, text: string) => {
-    navigator.clipboard?.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 1800);
   };
 
   const handleFeedback = async (msgIndex: number, rating: 1 | -1) => {
@@ -1206,6 +1198,16 @@ export const ChatPage: React.FC<ChatPageProps> = ({
                       <span style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: 500 }}>
                         Siz • {msg.timestamp}
                       </span>
+                      <CopyButton
+                        text={msg.text}
+                        size={26}
+                        defaultTooltip="Copy"
+                        successTooltip="Copied!"
+                        errorTooltip="Failed!"
+                        title="Xabaringizdan nusxa olish"
+                        ariaLabel="Foydalanuvchi xabaridan nusxa olish"
+                        style={{ opacity: 0.75 }}
+                      />
                     </div>
                     <div
                       style={{
@@ -1361,31 +1363,15 @@ export const ChatPage: React.FC<ChatPageProps> = ({
 
                         {/* Message Actions */}
                         <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(msg.id, msg.text)}
-                            title="Nusxa olish"
-                            style={{
-                              padding: "5px 8px",
-                              borderRadius: "8px",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "4px",
-                              fontSize: "11px",
-                              color: copiedId === msg.id ? "#4EDEA3" : "var(--text-secondary)",
-                              background: "rgba(255, 255, 255, 0.03)",
-                              cursor: "pointer",
-                            }}
-                          >
-                            {copiedId === msg.id ? (
-                              <>
-                                <CheckIcon size={12} color="#4EDEA3" />
-                                <span>Nusxalandi</span>
-                              </>
-                            ) : (
-                              <CopyIcon size={12} color="currentColor" />
-                            )}
-                          </button>
+                          <CopyButton
+                            text={msg.text}
+                            size={34}
+                            defaultTooltip="Copy"
+                            successTooltip="Copied!"
+                            errorTooltip="Failed!"
+                            title="Xabardan nusxa olish"
+                            ariaLabel="Xabardan nusxa olish"
+                          />
 
                           <button
                             type="button"
