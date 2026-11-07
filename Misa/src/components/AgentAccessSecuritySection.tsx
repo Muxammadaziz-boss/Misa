@@ -3,6 +3,7 @@
 // User-Controlled Agent Authority UI: Device Selection, Warning Modal, Re-Auth, Final Confirmation & Overrides
 
 import React, { useState, useEffect } from "react";
+import { GlassCheckbox } from "./GlassCheckbox";
 import {
   backendService,
   AgentAccessStatus,
@@ -625,26 +626,12 @@ export const AgentAccessSecuritySection: React.FC = () => {
               {warningData.warning_text}
             </div>
 
-            <label
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 10,
-                fontSize: 13,
-                color: "#F8FAFC",
-                cursor: "pointer",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={warningAcknowledged}
-                onChange={(e) => setWarningAcknowledged(e.target.checked)}
-                style={{ marginTop: 3 }}
-              />
-              <span>
-                Men ushbu xavfsizlik ogohlantirishini o'qidim va Full Agent Access berish oqibatlarini tushundim.
-              </span>
-            </label>
+            <GlassCheckbox
+              checked={warningAcknowledged}
+              onChange={(checked) => setWarningAcknowledged(checked)}
+              label="Men ushbu xavfsizlik ogohlantirishini o'qidim va Full Agent Access berish oqibatlarini tushundim."
+              size="md"
+            />
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
               <button

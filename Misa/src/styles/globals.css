@@ -1673,3 +1673,205 @@ button {
     transform: none !important;
   }
 }
+
+
+/* ==========================================================================
+   MISA UI REDESIGN — PREMIUM GLASS CHECKBOX (Uiverse Shammy2002 Adaptation)
+   Ultra Glass Design System
+   ========================================================================== */
+
+.misa-glass-checkbox-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  font-family: inherit;
+  transition: opacity 0.2s ease;
+}
+
+.misa-glass-checkbox-wrapper.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.misa-glass-checkbox-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Visually Hidden Semantic Native Input */
+.misa-glass-checkbox-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.misa-glass-checkbox-input:disabled {
+  cursor: not-allowed;
+}
+
+/* Custom Glass Box (Rounded Square with ~38% Border Radius) */
+.misa-glass-checkbox-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: rgba(14, 10, 24, 0.72);
+  backdrop-filter: blur(8px) saturate(180%);
+  -webkit-backdrop-filter: blur(8px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.4),
+    inset 0 1px 1px rgba(255, 255, 255, 0.08);
+  transition:
+    background 220ms ease,
+    border-color 220ms ease,
+    box-shadow 220ms ease,
+    transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Sizes */
+.misa-glass-checkbox--md .misa-glass-checkbox-box {
+  width: 24px;
+  height: 24px;
+  border-radius: 9px;
+}
+
+.misa-glass-checkbox--sm .misa-glass-checkbox-box {
+  width: 20px;
+  height: 20px;
+  border-radius: 7.5px;
+}
+
+.misa-glass-checkbox--lg .misa-glass-checkbox-box {
+  width: 28px;
+  height: 28px;
+  border-radius: 10.5px;
+}
+
+/* Hover State */
+.misa-glass-checkbox-wrapper:hover:not(.is-disabled) .misa-glass-checkbox-box {
+  border-color: rgba(147, 3, 197, 0.55);
+  background: rgba(22, 14, 34, 0.82);
+  transform: translateY(-1px);
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.45),
+    0 0 10px rgba(147, 3, 197, 0.22);
+}
+
+/* Active Press State */
+.misa-glass-checkbox-wrapper:active:not(.is-disabled) .misa-glass-checkbox-box {
+  transform: scale(0.93);
+}
+
+/* Focus Visible */
+.misa-glass-checkbox-input:focus-visible + .misa-glass-checkbox-box {
+  outline: 2px solid #9303C5;
+  outline-offset: 2px;
+}
+
+/* Checked State */
+.misa-glass-checkbox-wrapper.is-checked .misa-glass-checkbox-box,
+.misa-glass-checkbox-input:checked + .misa-glass-checkbox-box {
+  background: linear-gradient(135deg, #9303C5 0%, #68028D 100%);
+  border-color: rgba(216, 114, 255, 0.75);
+  box-shadow:
+    0 0 14px rgba(147, 3, 197, 0.55),
+    0 4px 12px rgba(0, 0, 0, 0.45),
+    inset 0 1px 1px rgba(255, 255, 255, 0.3);
+  transform: scale(1.03);
+}
+
+.misa-glass-checkbox-wrapper.is-checked:hover:not(.is-disabled) .misa-glass-checkbox-box {
+  box-shadow:
+    0 0 18px rgba(147, 3, 197, 0.7),
+    0 6px 16px rgba(0, 0, 0, 0.5);
+  transform: translateY(-1px) scale(1.04);
+}
+
+/* Animated Checkmark SVG */
+.misa-glass-checkbox-check {
+  width: 65%;
+  height: 65%;
+  stroke: #FFFFFF;
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  opacity: 0;
+  transform: scale(0.65);
+  transition:
+    stroke-dashoffset 240ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 180ms ease,
+    transform 240ms cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+
+.misa-glass-checkbox-wrapper.is-checked .misa-glass-checkbox-check,
+.misa-glass-checkbox-input:checked + .misa-glass-checkbox-box .misa-glass-checkbox-check {
+  stroke-dashoffset: 0;
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Error State */
+.misa-glass-checkbox-wrapper.has-error .misa-glass-checkbox-box {
+  border-color: #EF4444 !important;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.4) !important;
+}
+
+/* Label Group */
+.misa-glass-checkbox-label-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.misa-glass-checkbox-label {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #F5F0FF;
+  line-height: 1.4;
+  transition: color 180ms ease;
+}
+
+.misa-glass-checkbox-wrapper:hover:not(.is-disabled) .misa-glass-checkbox-label {
+  color: #FFFFFF;
+}
+
+.misa-glass-checkbox-description {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.misa-glass-checkbox-error {
+  font-size: 11px;
+  color: #EF4444;
+  font-weight: 500;
+}
+
+/* Prefers Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .misa-glass-checkbox-box,
+  .misa-glass-checkbox-check {
+    transition: none !important;
+    transform: none !important;
+  }
+  .misa-glass-checkbox-check {
+    stroke-dashoffset: 0 !important;
+  }
+}

@@ -7,6 +7,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { APP_VERSION_NAME } from "../version";
 import { Avatar } from "../components/Avatar";
 import { ExpandableButton } from "../components/ExpandableButton";
+import { GlassCheckbox } from "../components/GlassCheckbox";
 import {
   UserIcon,
   SettingsIcon,
@@ -2104,31 +2105,13 @@ export const AccountPage: React.FC<AccountPageProps> = ({
                   border: "1px solid rgba(255, 255, 255, 0.07)",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <input
-                    type="checkbox"
-                    id="micLoopbackToggle"
-                    checked={micLoopbackEnabled}
-                    onChange={handleToggleLoopback}
-                    style={{
-                      width: "16px",
-                      height: "16px",
-                      accentColor: "#9303C5",
-                      cursor: "pointer",
-                    }}
-                  />
-                  <label
-                    htmlFor="micLoopbackToggle"
-                    style={{
-                      fontSize: "12.5px",
-                      fontWeight: 600,
-                      color: "#FFFFFF",
-                      cursor: "pointer",
-                    }}
-                  >
-                    O'z ovozingizni eshitish (Loopback)
-                  </label>
-                </div>
+                <GlassCheckbox
+                  id="micLoopbackToggle"
+                  checked={micLoopbackEnabled}
+                  onChange={handleToggleLoopback}
+                  label="O'z ovozingizni eshitish (Loopback)"
+                  size="sm"
+                />
                 <div style={{ fontSize: "11px", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: "5px" }}>
                   <span>🎧</span>
                   <span>Eshitish vositasidan (naushnik) foydalaning — dinamik aks-sado berishi mumkin.</span>
