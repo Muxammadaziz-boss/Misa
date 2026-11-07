@@ -1034,3 +1034,207 @@ button {
     display: none !important;
   }
 }
+
+
+/* ========== Misa Premium Circular Social Auth Buttons (david-mohseni reference) ========== */
+@keyframes misaSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.misa-social-circle-group {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 20px !important;
+  width: 100% !important;
+  padding: 8px 0 !important;
+  box-sizing: border-box !important;
+  position: relative !important;
+  z-index: 10 !important;
+}
+
+.misa-social-circle-btn {
+  --social-size: 52px;
+  --social-bg: rgba(20, 25, 35, 0.75);
+  --social-border: rgba(255, 255, 255, 0.14);
+
+  position: relative !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: var(--social-size) !important;
+  height: var(--social-size) !important;
+  min-width: var(--social-size) !important;
+  min-height: var(--social-size) !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 50% !important;
+  background: var(--social-bg) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  border: 1.5px solid var(--social-border) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+  cursor: pointer !important;
+  outline: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  transition:
+    transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.3s ease,
+    background 0.3s ease !important;
+  overflow: visible !important;
+  box-sizing: border-box !important;
+}
+
+/* Inner Icon container */
+.misa-social-circle-btn .misa-social-circle-icon {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  pointer-events: none !important;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+/* Tooltip (david-mohseni reference) */
+.misa-social-circle-btn .misa-social-circle-tooltip {
+  position: absolute !important;
+  bottom: calc(100% + 11px) !important;
+  left: 50% !important;
+  transform: translateX(-50%) translateY(6px) scale(0.95) !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  background: rgba(14, 10, 24, 0.95) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  color: #FFFFFF !important;
+  padding: 5px 11px !important;
+  border-radius: 8px !important;
+  font-size: 11.5px !important;
+  font-weight: 500 !important;
+  font-family: inherit !important;
+  letter-spacing: 0.2px !important;
+  white-space: nowrap !important;
+  border: 1px solid rgba(192, 76, 253, 0.35) !important;
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.7),
+    0 0 12px rgba(147, 3, 197, 0.25) !important;
+  transition:
+    opacity 0.22s ease,
+    transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    visibility 0.22s ease !important;
+  z-index: 120 !important;
+}
+
+/* Triangular arrow pointing down */
+.misa-social-circle-btn .misa-social-circle-tooltip::after {
+  content: "" !important;
+  position: absolute !important;
+  bottom: -4px !important;
+  left: 50% !important;
+  width: 7px !important;
+  height: 7px !important;
+  background: rgba(14, 10, 24, 0.95) !important;
+  border-right: 1px solid rgba(192, 76, 253, 0.35) !important;
+  border-bottom: 1px solid rgba(192, 76, 253, 0.35) !important;
+  transform: translateX(-50%) rotate(45deg) !important;
+}
+
+/* Hover & Focus Visible States */
+.misa-social-circle-btn:hover:not(:disabled),
+.misa-social-circle-btn:focus-visible:not(:disabled) {
+  transform: translateY(-4px) scale(1.08) !important;
+  outline: none !important;
+}
+
+.misa-social-circle-btn:hover:not(:disabled) .misa-social-circle-tooltip,
+.misa-social-circle-btn:focus-visible:not(:disabled) .misa-social-circle-tooltip {
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: translateX(-50%) translateY(0) scale(1) !important;
+}
+
+/* Active State */
+.misa-social-circle-btn:active:not(:disabled) {
+  transform: translateY(-1px) scale(0.96) !important;
+}
+
+/* Focus Visible */
+.misa-social-circle-btn:focus-visible {
+  outline: 2px solid #C04CFD !important;
+  outline-offset: 3px !important;
+}
+
+/* Disabled State */
+.misa-social-circle-btn:disabled,
+.misa-social-circle-btn.is-disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+  transform: none !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Google-specific styling */
+.misa-social-circle-google:hover:not(:disabled) {
+  background: rgba(30, 36, 52, 0.88) !important;
+  border-color: rgba(66, 133, 244, 0.6) !important;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.6),
+    0 0 18px rgba(66, 133, 244, 0.38),
+    0 0 10px rgba(234, 67, 53, 0.25) !important;
+}
+
+.misa-social-circle-google:hover:not(:disabled) .misa-social-circle-tooltip {
+  border-color: rgba(66, 133, 244, 0.5) !important;
+}
+
+/* GitHub-specific styling */
+.misa-social-circle-github:hover:not(:disabled) {
+  background: rgba(36, 32, 48, 0.9) !important;
+  border-color: rgba(255, 255, 255, 0.55) !important;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.65),
+    0 0 16px rgba(192, 76, 253, 0.35),
+    0 0 12px rgba(255, 255, 255, 0.2) !important;
+}
+
+.misa-social-circle-github:hover:not(:disabled) .misa-social-circle-tooltip {
+  border-color: rgba(255, 255, 255, 0.4) !important;
+}
+
+/* Telegram-specific styling */
+.misa-social-circle-telegram:hover:not(:disabled) {
+  background: rgba(14, 38, 56, 0.9) !important;
+  border-color: rgba(34, 158, 217, 0.68) !important;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.6),
+    0 0 20px rgba(34, 158, 217, 0.45) !important;
+}
+
+.misa-social-circle-telegram:hover:not(:disabled) .misa-social-circle-tooltip {
+  border-color: rgba(34, 158, 217, 0.55) !important;
+}
+
+/* Prefers Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .misa-social-circle-btn,
+  .misa-social-circle-btn .misa-social-circle-icon,
+  .misa-social-circle-btn .misa-social-circle-tooltip {
+    transition: none !important;
+    transform: none !important;
+  }
+  .misa-social-circle-btn:hover:not(:disabled),
+  .misa-social-circle-btn:active:not(:disabled) {
+    transform: none !important;
+  }
+  .misa-social-circle-btn:hover:not(:disabled) .misa-social-circle-tooltip {
+    transform: translateX(-50%) !important;
+  }
+}

@@ -29,6 +29,7 @@ import {
 import { MisaLogo } from "../components/MisaLogo";
 import { WindowControls } from "../components/WindowControls";
 import { ServerDiagnosticModal } from "../components/ServerDiagnosticModal";
+import { SocialAuthButtons } from "../components/SocialAuthButtons";
 
 interface AuthPageProps {
   onAuthSuccess: (user: MikasaAuthUser) => void;
@@ -2067,52 +2068,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
           <>
             {/* ═══ SOCIAL LOGINS (Google, GitHub, Telegram) ═══ */}
             <div style={{ marginBottom: "18px", width: "100%", boxSizing: "border-box" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "10px", width: "100%", boxSizing: "border-box" }}>
-                {/* Google */}
-                <button
-                  type="button"
-                  role="button"
-                  aria-label="Google orqali kirish"
-                  onClick={() => handleOAuthSignIn("google")}
-                  disabled={loading || oauthLoading || oauthWaiting}
-                  className="misa-social-btn"
-                  title="Google orqali kirish"
-                  style={{ minWidth: 0, width: "100%" }}
-                >
-                  <GoogleIcon size={18} />
-                  <span>Google</span>
-                </button>
-
-                {/* GitHub */}
-                <button
-                  type="button"
-                  role="button"
-                  aria-label="GitHub orqali kirish"
-                  onClick={() => handleOAuthSignIn("github")}
-                  disabled={loading || oauthLoading || oauthWaiting}
-                  className="misa-social-btn"
-                  title="GitHub orqali kirish"
-                  style={{ minWidth: 0, width: "100%" }}
-                >
-                  <GithubIcon size={18} color="#FFFFFF" />
-                  <span>GitHub</span>
-                </button>
-
-                {/* Telegram */}
-                <button
-                  type="button"
-                  role="button"
-                  aria-label="Telegram orqali kirish"
-                  onClick={handleOpenTelegramLogin}
-                  disabled={loading || oauthLoading || oauthWaiting}
-                  className="misa-social-btn"
-                  title="Telegram orqali kirish"
-                  style={{ minWidth: 0, width: "100%" }}
-                >
-                  <TelegramColorIcon size={18} />
-                  <span>Telegram</span>
-                </button>
-              </div>
+              <SocialAuthButtons
+                onGoogleSignIn={() => handleOAuthSignIn("google")}
+                onGithubSignIn={() => handleOAuthSignIn("github")}
+                onTelegramSignIn={handleOpenTelegramLogin}
+                disabled={loading || oauthLoading || oauthWaiting}
+                loadingProvider={oauthWaiting ? oauthProvider : null}
+              />
 
               {/* Glowing Divider */}
               <div
