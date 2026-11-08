@@ -2,7 +2,7 @@
   "app": "Misa AI",
   "version": "9.4.0",
   "version_name": "v9.4",
-  "release_date": "2026-11-08T17:20:16.350Z",
+  "release_date": "2026-11-08T18:24:47.271Z",
   "files": [
     {
       "name": "Misa.exe",
@@ -42,9 +42,9 @@
     },
     {
       "name": "Misa-AI-v9.4-Portable.zip",
-      "size_bytes": 334295308,
-      "size_mb": 318.81,
-      "sha256": "2867e3c29132107787fa448f8b3cc644c627488c725b1f5669da867169a80624"
+      "size_bytes": 458994714,
+      "size_mb": 437.73,
+      "sha256": "2c03c6cd6ca2b61966c8c61fc28ee62270275bd9b64ec0bf343a930bed0a3117"
     }
   ],
   "backend": {

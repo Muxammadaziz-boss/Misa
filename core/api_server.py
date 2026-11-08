@@ -66,6 +66,9 @@ _main_loop = None
 def get_app_version() -> str:
     """Tizim versiyasini xavfsiz olish."""
     try:
+        from core.version import APP_VERSION
+        if APP_VERSION:
+            return str(APP_VERSION).strip()
         from core.v8.device import get_current_app_version
         return get_current_app_version()
     except Exception:

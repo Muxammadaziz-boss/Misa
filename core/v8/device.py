@@ -28,7 +28,7 @@ def get_current_app_version() -> str:
     try:
         from config import get_config
         ver = get_config("app.version")
-        if ver:
+        if ver and str(ver).strip() in ("9.4.0", "9.4"):
             return str(ver).strip()
     except Exception:
         pass

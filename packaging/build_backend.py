@@ -59,6 +59,7 @@ def build():
         "--hidden-import=psutil",
         "--hidden-import=requests",
         "--hidden-import=tzdata",
+        "--hidden-import=core.version",
         "--hidden-import=core.v8.update_service",
         "--hidden-import=core.v8.account_auth",
         "--hidden-import=core.v8.device_auth",
@@ -181,7 +182,7 @@ def build():
     shutil.copytree(built_dir, tauri_backend_dir)
     logger.info(f"✔ Deployed backend to Tauri resources: {tauri_backend_dir}")
 
-    # Destination 2: release/v9.2 & v9.3/backend/ (for release distribution)
+    # Destination 2: release/v9.2, v9.3, v9.4/backend/ and v9.4/portable/backend/ (for release distribution)
     for rel_ver in ["v9.2", "v9.3", "v9.4"]:
         rel_dir = root_dir / "release" / rel_ver
         if rel_dir.exists():
@@ -190,6 +191,14 @@ def build():
                 shutil.rmtree(release_backend_dir, ignore_errors=True)
             shutil.copytree(built_dir, release_backend_dir)
             logger.info(f"✔ Deployed backend to Release ({rel_ver}): {release_backend_dir}")
+
+            # Also deploy to portable distribution folder if present
+            portable_backend_dir = rel_dir / "portable" / "backend"
+            if (rel_dir / "portable").exists():
+                if portable_backend_dir.exists():
+                    shutil.rmtree(portable_backend_dir, ignore_errors=True)
+                shutil.copytree(built_dir, portable_backend_dir)
+                logger.info(f"✔ Deployed backend to Portable Release ({rel_ver}): {portable_backend_dir}")
 
     logger.info("==================================================")
     logger.info("✨ Production Backend Bundling Complete!")

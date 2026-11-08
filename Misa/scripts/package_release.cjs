@@ -137,13 +137,9 @@ if (fs.existsSync(dllTarget)) {
 
 // 4.2 Copy Bundled Backend Runtime (if exists)
 const backendSrcCandidates = [
-  path.join(projectRoot, "dist/misa_backend"),
   path.join(projectRoot, "dist/backend_build/misa_backend"),
   path.resolve(__dirname, "../src-tauri/backend"),
   path.join(releaseVersionDir, "backend"),
-  path.join(projectRoot, "release", "v9.0.1", "backend"),
-  path.join(projectRoot, "dist/backend_build/mikasa_backend"),
-  path.join(projectRoot, "release", "v8.0.0", "backend"),
 ];
 let backendSourceDir = null;
 for (const cand of backendSrcCandidates) {
