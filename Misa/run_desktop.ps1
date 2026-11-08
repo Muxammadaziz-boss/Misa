@@ -123,15 +123,15 @@ if (-not $isHealthy) {
 # 3. Launch native desktop Tauri UI (No browser fallback)
 Write-Host "[3/3] Misa AI Desktop oynasi ochilmoqda..." -ForegroundColor Cyan
 
-$nativeExe = "..\release\v9.2\Misa-AI-v9.2.exe"
+$nativeExe = "..\release\v9.4\Misa.exe"
 if (-not (Test-Path $nativeExe)) {
-    $nativeExe = "..\release\v9.0.2\Misa-AI-v9.0.2.exe"
+    $nativeExe = "..\release\v9.4\portable\Misa.exe"
 }
 if (-not (Test-Path $nativeExe)) {
-    $nativeExe = "..\release\v9.0.1\Misa-AI-v9.0.1.exe"
+    $nativeExe = "..\release\v9.3\Misa.exe"
 }
 if (-not (Test-Path $nativeExe)) {
-    $nativeExe = "..\release\v9.0.0\Misa-AI-v9.0.0.exe"
+    $nativeExe = "..\release\v9.2\Misa-AI-v9.2.exe"
 }
 if (-not (Test-Path $nativeExe)) {
     $nativeExe = "src-tauri\target\release\misa-ai.exe"
