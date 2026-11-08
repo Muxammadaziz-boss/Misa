@@ -36,7 +36,7 @@ BASE_DIR = get_base_dir()
 DEFAULT_MODEL_DIR = os.path.join(BASE_DIR, "models", "wake_word")
 DEFAULT_PRIMARY_PHRASE = "Misa"
 DEFAULT_MODEL_FILENAME = "salom_misa.onnx"
-DEFAULT_ALTERNATIVE_PHRASES = ["Salom Misa", "Hey Misa", "Mikasa"]
+DEFAULT_ALTERNATIVE_PHRASES = ["Misa", "Salom Misa", "Hey Misa", "Mikasa"]
 
 
 class OpenWakeWordEngine:
@@ -468,6 +468,7 @@ class WakeWordDetector:
         return {
             "phrase": self.phrase,
             "alternative_phrases": self.alternative_phrases,
+            "primary_phrase": self.phrase,
             "active_engine": self.get_active_engine_name(),
             "is_trained_model": is_trained,
             "engine_type": "neural_network" if is_trained else "heuristic_spectral_analyzer",
@@ -497,6 +498,11 @@ class WakeWordDetector:
                 "last_score": self.acoustic_detector.last_wake_score,
                 "threshold": self.acoustic_detector.last_threshold,
             },
+            "models_required": [
+                os.path.join(getattr(self.oww_engine, "model_dir", DEFAULT_MODEL_DIR) or DEFAULT_MODEL_DIR, "melspectrogram.onnx"),
+                os.path.join(getattr(self.oww_engine, "model_dir", DEFAULT_MODEL_DIR) or DEFAULT_MODEL_DIR, "embedding_model.onnx"),
+                os.path.join(getattr(self.oww_engine, "model_dir", DEFAULT_MODEL_DIR) or DEFAULT_MODEL_DIR, DEFAULT_MODEL_FILENAME)
+            ],
             "security": {
                 "offline_guarantee": True,
                 "zero_network_leaks": True,

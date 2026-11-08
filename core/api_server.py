@@ -7910,8 +7910,9 @@ def run_server(host=None, port=None):
                 service.add_transcript_callback(lambda txt, sender: sync_broadcast("voice_transcript", {"text": txt, "sender": sender}, _main_loop))
                 service.add_response_callback(lambda resp: sync_broadcast("ai_response", {"text": resp, "mode": "voice"}, _main_loop))
                 service.add_audio_level_callback(lambda lvl: sync_broadcast("audio_level", {"level": lvl}, _main_loop))
+                service.add_wake_callback(lambda data: sync_broadcast("wake_word_detected", data, _main_loop))
 
-                service.start(mode="listening")
+                service.start(mode="idle")
                 logger.info("[VOICE] ConversationalVoiceService avtomatik ishga tushirildi (Boot auto-listen)")
             except Exception as ve:
                 logger.error(f"[VOICE] ConversationalVoiceService avtomatik start xatosi: {ve}")

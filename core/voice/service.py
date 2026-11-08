@@ -80,7 +80,8 @@ class ConversationalVoiceService:
         # Interruption va playback nazorati
         self._active_cancel_token: Optional[CancellationToken] = None
         self._listening_deadline: float = 0.0
-        self.barge_in.on_interrupted = self.handle_interruption
+        self.barge_in.on_interrupted = self.handle_interruption
+        self._last_wake_handled_time: float = 0.0
 
     
     def is_misa_invocation(self, text: str) -> bool:
@@ -345,7 +346,7 @@ class ConversationalVoiceService:
                         if self.state == VoiceServiceState.IDLE:
                             self.wake_detector.update_ambient_noise(rms)
                             if self.wake_detector.process_frame(flat_chunk):
-                                self._on_wake_detected()
+                                # on_wake_detected callback has already dispatched the single idempotent wake event
                                 continue
                             
                             # Dual Wake-Word Pipeline: Fondagi VAD orqali nutq aniqlansa, STT orqali 'Misa' ni tekshirish
@@ -399,7 +400,13 @@ class ConversationalVoiceService:
                 time.sleep(1.5)
 
     def _on_wake_detected(self, event_data: Optional[Dict[str, Any]] = None) -> None:
-        """'Salom Misa' kalit so'zi aniqlanganda darhol bajariladigan jarayon"""
+        """'Misa' kalit so'zi aniqlanganda darhol bajariladigan jarayon (Idempotent single dispatch)"""
+        now = time.time()
+        with self._lock:
+            if self.state in (VoiceServiceState.WAKE_DETECTED, VoiceServiceState.ACKNOWLEDGING) or (now - getattr(self, "_last_wake_handled_time", 0.0) < 1.5):
+                logger.debug("[VOICE] Duplicate wake callback ignored (idempotent guard)")
+                return
+            self._last_wake_handled_time = now
         detected_phrase = (event_data or {}).get("phrase", getattr(self.wake_detector, "phrase", "Salom Misa"))
         engine_name = (event_data or {}).get("engine", self.wake_detector.get_active_engine_name())
         score = (event_data or {}).get("score", getattr(self.wake_detector, "last_wake_score", 1.0))
@@ -464,20 +471,20 @@ class ConversationalVoiceService:
         transcript = self.stt_manager.transcribe(audio_data, sample_rate=self.sample_rate, language="uz-UZ")
         if not transcript:
             logger.info("STT: Nutq tushunarsiz yoki bo'sh")
-            if self.is_secretary_mode:
-                self._listening_deadline = time.time() + 3600.0
-                self._set_state(VoiceServiceState.LISTENING)
-            else:
-                self.session.close_follow_up()
-                self._set_state(VoiceServiceState.IDLE)
+            retry_msg = "Kechirasiz, qayta ayta olasizmi?"
+            self._emit_response(retry_msg)
+            self._emit_transcript("", sender="user")
+            self._speak_and_listen_follow_up(retry_msg)
             return
 
         clean_text = transcript.strip()
         self._emit_transcript(clean_text, sender="user")
         logger.info(f"Foydalanuvchi nutqi: '{clean_text}'")
 
-        # 2. Kotiba rejimi: Agar matnda 'Misa' chaqiruvi bo'lmasa, jim tinglashda davom etiladi
-        if self.is_secretary_mode and not self.is_misa_invocation(clean_text):
+        # 2. Kotiba rejimi: Agar foydalanuvchi allaqachon uyg'ongan (follow-up/acknowledging oynasida) bo'lsa,
+        # komanda ichida 'Misa' so'zini qayta aytish majburiy emas.
+        is_active_window = self.session.is_in_follow_up_window() or (time.time() < getattr(self, "_listening_deadline", 0.0))
+        if self.is_secretary_mode and not is_active_window and not self.is_misa_invocation(clean_text):
             logger.info(f"[VOICE] Kotiba rejimi: 'Misa' chaqirilmadi ('{clean_text}'). Jim tinglashda davom etmoqda...")
             self._listening_deadline = time.time() + 3600.0
             self._set_state(VoiceServiceState.LISTENING)
