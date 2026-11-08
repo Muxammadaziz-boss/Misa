@@ -36,6 +36,10 @@ if %errorlevel% neq 0 (
     )
 )
 
+REM 3. Portativ foydalanuvchi ma'lumotlari (Session va Login doimiyligi)
+if not exist "%~dp0data\webview2" mkdir "%~dp0data\webview2" 2>nul
+if not defined WEBVIEW2_USER_DATA_FOLDER set "WEBVIEW2_USER_DATA_FOLDER=%~dp0data\webview2"
+
 attrib +r "%~dp0" >nul 2>&1
 attrib +h +s "%~dp0desktop.ini" >nul 2>&1
 echo [OK] Misa AI v9.4 ishga tushirilmoqda...

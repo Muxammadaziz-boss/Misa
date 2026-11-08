@@ -269,6 +269,10 @@ if %errorlevel% neq 0 (
     )
 )
 
+REM 3. Portativ foydalanuvchi ma'lumotlari (Session va Login doimiyligi)
+if not exist "%~dp0data\\webview2" mkdir "%~dp0data\\webview2" 2>nul
+if not defined WEBVIEW2_USER_DATA_FOLDER set "WEBVIEW2_USER_DATA_FOLDER=%~dp0data\\webview2"
+
 attrib +r "%~dp0" >nul 2>&1
 attrib +h +s "%~dp0desktop.ini" >nul 2>&1
 echo [OK] Misa AI ${versionName} ishga tushirilmoqda...
@@ -351,6 +355,25 @@ for (const vid of introMp4Candidates) {
   } else if (fs.existsSync(releaseVid)) {
     fs.copyFileSync(releaseVid, portableVid);
     console.log(`✔ Intro Splash Video (${vid}) portativ papkaga nusxalandi`);
+  }
+}
+
+// 7.2.0 Portativ ma'lumotlar va sessiyalar katalogi (Doimiy login uchun)
+const workspaceDataDir = path.join(projectRoot, "data");
+const portableDataDir = path.join(portableDir, "data");
+if (!fs.existsSync(portableDataDir)) {
+  fs.mkdirSync(portableDataDir, { recursive: true });
+}
+const portableWv2Data = path.join(portableDataDir, "webview2");
+if (!fs.existsSync(portableWv2Data)) {
+  fs.mkdirSync(portableWv2Data, { recursive: true });
+}
+if (fs.existsSync(workspaceDataDir)) {
+  const cfgSrc = path.join(workspaceDataDir, "config.json");
+  const cfgDest = path.join(portableDataDir, "config.json");
+  if (fs.existsSync(cfgSrc) && !fs.existsSync(cfgDest)) {
+    fs.copyFileSync(cfgSrc, cfgDest);
+    console.log(`✔ Foydalanuvchi sozlamalari (config.json) portativ papkaga nusxalandi`);
   }
 }
 

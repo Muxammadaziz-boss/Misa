@@ -32,13 +32,17 @@ export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
     if (videoRef.current) {
       try {
         videoRef.current.pause();
-        videoRef.current.removeAttribute("src");
-        videoRef.current.load();
       } catch {}
     }
 
     if (instant) {
       setIsFading(true);
+      if (videoRef.current) {
+        try {
+          videoRef.current.removeAttribute("src");
+          videoRef.current.load();
+        } catch {}
+      }
       onFinish();
       return;
     }
@@ -50,8 +54,14 @@ export const MisaIntroSplash: React.FC<MisaIntroSplashProps> = ({
     setTimeout(() => {
       setIsFading(true);
       setTimeout(() => {
+        if (videoRef.current) {
+          try {
+            videoRef.current.removeAttribute("src");
+            videoRef.current.load();
+          } catch {}
+        }
         onFinish();
-      }, 280);
+      }, 350);
     }, remaining);
   }, [minDurationMs, onFinish]);
 

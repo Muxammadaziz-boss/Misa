@@ -4228,10 +4228,21 @@ class BackendService {
         });
       } catch {}
       this.setAuthToken(null);
+      try {
+        localStorage.removeItem("misa_user_data");
+        localStorage.removeItem("misa_auth_token");
+        localStorage.removeItem("misa_session_token");
+        localStorage.removeItem("misa_linked_telegram");
+      } catch {}
       this.notifyAuthChange(null);
       return { ok: true, message: "Muvaffaqiyatli chiqildi" };
     } catch (err: any) {
       this.setAuthToken(null);
+      try {
+        localStorage.removeItem("misa_user_data");
+        localStorage.removeItem("misa_auth_token");
+        localStorage.removeItem("misa_session_token");
+      } catch {}
       this.notifyAuthChange(null);
       return { ok: false, error: formatAuthError(err) };
     }
@@ -4629,10 +4640,55 @@ class BackendService {
   // ========== Misa v9.0 Convenience & Unified Methods ==========
 
   public async getCurrentAuthUser(): Promise<MikasaAuthUser | null> {
+    // 1. Avval mahalliy saqlangan foydalanuvchi ma'lumotlarini tiklash (Portativ va tezkor kirish)
+    try {
+      const stored = localStorage.getItem("misa_user_data");
+      if (stored) {
+        const u = JSON.parse(stored);
+        if (u && (u.username || u.name)) {
+          return u;
+        }
+      }
+    } catch {}
+
+    // 2. Supabase faol sessiyasini tekshirish
+    if (isSupabaseConfigured) {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session?.user) {
+          const user: MikasaAuthUser = {
+            id: session.user.id,
+            username:
+              session.user.user_metadata?.full_name ||
+              session.user.user_metadata?.name ||
+              session.user.email?.split("@")[0] ||
+              "User",
+            email: session.user.email || "",
+            is_active: true,
+            is_verified: true,
+            created_at: Date.now() / 1000,
+            avatar_url:
+              session.user.user_metadata?.avatar_url ||
+              session.user.user_metadata?.picture ||
+              undefined,
+            provider: session.user.app_metadata?.provider || "supabase",
+          };
+          try {
+            localStorage.setItem("misa_user_data", JSON.stringify(user));
+            localStorage.setItem("misa_user_name", user.username);
+          } catch {}
+          return user;
+        }
+      } catch {}
+    }
+
+    // 3. Backend /api/account dan mahalliy profilni olish
     try {
       const acc = await this.getAccount();
-      if (acc && acc.ok && acc.name) {
-        return {
+      if (acc && acc.name && acc.name.trim() && acc.name !== "Ustoz") {
+        const user: MikasaAuthUser = {
           id: "local_user",
           username: acc.name,
           email: acc.email || "",
@@ -4641,11 +4697,35 @@ class BackendService {
           created_at: Date.now() / 1000,
           provider: "local",
         };
+        try {
+          localStorage.setItem("misa_user_data", JSON.stringify(user));
+          localStorage.setItem("misa_user_name", user.username);
+        } catch {}
+        return user;
       }
-      return null;
-    } catch {
-      return null;
-    }
+    } catch {}
+
+    // 4. Keshdagi foydalanuvchi ismi bo'yicha zaxira
+    try {
+      const cachedName = localStorage.getItem("misa_user_name");
+      if (cachedName && cachedName.trim() && cachedName !== "Ustoz") {
+        const user: MikasaAuthUser = {
+          id: "local_user",
+          username: cachedName,
+          email: "",
+          is_active: true,
+          is_verified: true,
+          created_at: Date.now() / 1000,
+          provider: "local",
+        };
+        try {
+          localStorage.setItem("misa_user_data", JSON.stringify(user));
+        } catch {}
+        return user;
+      }
+    } catch {}
+
+    return null;
   }
 
   public async sendMessage(

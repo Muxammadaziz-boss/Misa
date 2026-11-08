@@ -1242,6 +1242,23 @@ pub fn run() {
         if std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").is_err() {
             std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--autoplay-policy=no-user-gesture-required");
         }
+
+        // Portativ rejim: Agar dastur yonida 'data' yoki 'backend' papkasi mavjud bo'lsa,
+        // WEBVIEW2_USER_DATA_FOLDER ni 'data/webview2' ga yo'naltirish orqali foydalanuvchi sessiyasi va loginini doimiy saqlash
+        if std::env::var("WEBVIEW2_USER_DATA_FOLDER").is_err() {
+            if let Ok(exe_path) = std::env::current_exe() {
+                if let Some(exe_dir) = exe_path.parent() {
+                    if exe_dir.join("backend").exists() || exe_dir.join("data").exists() {
+                        let local_data = exe_dir.join("data").join("webview2");
+                        let _ = std::fs::create_dir_all(&local_data);
+                        if local_data.exists() {
+                            std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", &local_data);
+                            println!("[MISA] WebView2 Portativ User Data Folder: {:?}", local_data);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     let exe_path = std::env::current_exe()

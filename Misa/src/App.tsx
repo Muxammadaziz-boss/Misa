@@ -112,8 +112,29 @@ function App() {
 
   // Intro Splash & Auth State
   const [introActive, setIntroActive] = useState<boolean>(true);
-  const [authChecking, setAuthChecking] = useState<boolean>(true);
-  const [currentUser, setCurrentUser] = useState<MisaAuthUser | null>(null);
+  const [_authChecking, setAuthChecking] = useState<boolean>(true);
+  const [currentUser, setCurrentUser] = useState<MisaAuthUser | null>(() => {
+    try {
+      const stored = localStorage.getItem("misa_user_data");
+      if (stored) {
+        const u = JSON.parse(stored);
+        if (u && (u.username || u.name)) return u;
+      }
+      const cachedName = localStorage.getItem("misa_user_name");
+      if (cachedName && cachedName.trim() && cachedName !== "Ustoz") {
+        return {
+          id: "local_user",
+          username: cachedName,
+          email: "",
+          is_active: true,
+          is_verified: true,
+          created_at: Date.now() / 1000,
+          provider: "local",
+        };
+      }
+    } catch {}
+    return null;
+  });
   const [userName, setUserName] = useState<string>(() => {
     return localStorage.getItem("misa_user_name") || "Ustoz";
   });
@@ -216,14 +237,24 @@ function App() {
           setCurrentUser(user);
           if (user.username) {
             setUserName(user.username);
-            localStorage.setItem("misa_user_name", user.username);
+            try {
+              localStorage.setItem("misa_user_name", user.username);
+              localStorage.setItem("misa_user_data", JSON.stringify(user));
+            } catch {}
           }
         } else {
-          setCurrentUser(null);
+          // Faqat mahalliy keshda ham foydalanuvchi yo'q bo'lsa null qilinadi
+          const cached = localStorage.getItem("misa_user_data");
+          if (!cached) {
+            setCurrentUser(null);
+          }
         }
       } catch {
         if (mounted) {
-          setCurrentUser(null);
+          const cached = localStorage.getItem("misa_user_data");
+          if (!cached) {
+            setCurrentUser(null);
+          }
         }
       } finally {
         if (mounted) {
@@ -239,6 +270,10 @@ function App() {
       setCurrentUser(user);
       if (user?.username) {
         setUserName(user.username);
+        try {
+          localStorage.setItem("misa_user_name", user.username);
+          localStorage.setItem("misa_user_data", JSON.stringify(user));
+        } catch {}
       }
     });
 
@@ -417,6 +452,10 @@ function App() {
             currentUser={currentUser}
             onLogout={() => {
               setCurrentUser(null);
+              try {
+                localStorage.removeItem("misa_user_data");
+                localStorage.removeItem("misa_user_name");
+              } catch {}
             }}
             onOpenUpdateModal={handleOpenUpdateModal}
           />
@@ -433,70 +472,61 @@ function App() {
     }
   };
 
-  if (introActive) {
-    return <MisaIntroSplash onFinish={() => setIntroActive(false)} />;
-  }
-
-  if (authChecking) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          height: "100vh",
-          width: "100vw",
-          backgroundColor: "#02060E",
-        }}
-      >
-        <MisaLoader variant="main" size="medium" text="Misa AI v9.4 ishga tushirilmoqda..." />
-      </div>
-    );
-  }
-
   if (!currentUser) {
     return (
-      <ErrorBoundary onReset={() => setCurrentUser(null)}>
-        <Suspense
-          fallback={
-            <div
-              style={{
-                display: "flex",
-                height: "100vh",
-                width: "100vw",
-                alignItems: "center",
-                justifyContent: "center",
-                background: "var(--bg-base, #0E1422)",
+      <>
+        {introActive && (
+          <MisaIntroSplash onFinish={() => setIntroActive(false)} />
+        )}
+        <ErrorBoundary onReset={() => setCurrentUser(null)}>
+          <Suspense
+            fallback={
+              <div
+                style={{
+                  display: "flex",
+                  height: "100vh",
+                  width: "100vw",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "#02060E",
+                }}
+              >
+                <MisaLoader variant="main" size="small" text="Yuklanmoqda..." />
+              </div>
+            }
+          >
+            <AuthPage
+              onAuthSuccess={(user) => {
+                setCurrentUser(user);
+                if (user.username) {
+                  setUserName(user.username);
+                  try {
+                    localStorage.setItem("misa_user_name", user.username);
+                    localStorage.setItem("misa_user_data", JSON.stringify(user));
+                  } catch {}
+                }
               }}
-            >
-              <MisaLoader variant="main" size="small" text="Yuklanmoqda..." />
-            </div>
-          }
-        >
-          <AuthPage
-            onAuthSuccess={(user) => {
-              setCurrentUser(user);
-              if (user.username) {
-                setUserName(user.username);
-                localStorage.setItem("misa_user_name", user.username);
-              }
-            }}
-          />
-        </Suspense>
-        <ContextMenu />
-      </ErrorBoundary>
+            />
+          </Suspense>
+          <ContextMenu />
+        </ErrorBoundary>
+      </>
     );
   }
 
   return (
-    <AppShell
-      activePath={activePath}
-      onNavigate={handleNavigate}
-      onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-      userName={userName}
-      avatarStyle={avatarStyle}
-      avatarUrl={currentUser?.avatar_url}
-    >
+    <>
+      {introActive && (
+        <MisaIntroSplash onFinish={() => setIntroActive(false)} />
+      )}
+      <AppShell
+        activePath={activePath}
+        onNavigate={handleNavigate}
+        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        userName={userName}
+        avatarStyle={avatarStyle}
+        avatarUrl={currentUser?.avatar_url}
+      >
       <ErrorBoundary key={activePath} onReset={() => handleNavigate("/")}>
         <Suspense
           fallback={
@@ -533,6 +563,7 @@ function App() {
         onAskMisa={handleStartChatWithQuery}
       />
     </AppShell>
+    </>
   );
 }
 
